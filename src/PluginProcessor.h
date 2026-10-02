@@ -1,6 +1,10 @@
 #pragma once
 
+#include <array>
+
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#include "dsp/ProcessorChain.h"
 
 class AbaloneW5AudioProcessor : public juce::AudioProcessor
 {
@@ -34,6 +38,17 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    juce::AudioProcessorValueTreeState& getApvts () { return apvts; }
+
+    // Max chain peak since the last call (resets on read). The editor LED
+    // timer polls this on the message thread; the atomics are lock-free.
+    float getSignalPeak ();
+
 private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout ();
+
+    juce::AudioProcessorValueTreeState apvts;
+    std::array<ProcessorChain, 2> chains;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessor)
 };

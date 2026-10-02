@@ -41,6 +41,8 @@ add_dsp_test(HighCutTest tests/HighCutTest.cpp)
 
 add_dsp_test(ColorStageTest tests/ColorStageTest.cpp)
 
+add_dsp_test(ChainTest tests/ChainTest.cpp)
+
 include(FetchContent)
 FetchContent_Declare(
     JUCE
@@ -62,6 +64,20 @@ target_sources(AbaloneW5 PRIVATE
     src/PluginEditor.cpp
 )
 
+# UI skins: only the single-frame on/off PNGs are embedded (toggles + LED).
+# knob_boost/knob_tone.png are single 224x224 frames, not vertical filmstrips,
+# so the rotary sliders stay stock; u5_front.png is a layout reference in
+# docs/refs/ and is not embedded.
+juce_add_binary_data(AbaloneW5Assets
+    HEADER_NAME BinaryData.h
+    NAMESPACE BinaryData
+    SOURCES
+        ui/button_on.png
+        ui/button_off.png
+        ui/led_on.png
+        ui/led_off.png
+)
+
 target_compile_definitions(AbaloneW5
     PUBLIC
         JUCE_WEB_BROWSER=0
@@ -71,6 +87,7 @@ target_compile_definitions(AbaloneW5
 
 target_link_libraries(AbaloneW5
     PRIVATE
+        AbaloneW5Assets
         juce::juce_audio_utils
     PUBLIC
         juce::juce_recommended_config_flags
