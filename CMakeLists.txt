@@ -11,6 +11,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Static MSVC runtime (/MT Release, /MTd Debug) so Sonar loads with no extra DLLs.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+enable_testing()
+
+add_executable(ToneTargetsTest tests/ToneTargetsTest.cpp)
+target_include_directories(ToneTargetsTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME ToneTargetsTest COMMAND ToneTargetsTest)
+
 include(FetchContent)
 FetchContent_Declare(
     JUCE
