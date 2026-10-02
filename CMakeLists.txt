@@ -17,6 +17,10 @@ add_executable(ToneTargetsTest tests/ToneTargetsTest.cpp)
 target_include_directories(ToneTargetsTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME ToneTargetsTest COMMAND ToneTargetsTest)
 
+add_executable(GainStageTest tests/GainStageTest.cpp)
+target_include_directories(GainStageTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME GainStageTest COMMAND GainStageTest)
+
 include(FetchContent)
 FetchContent_Declare(
     JUCE
