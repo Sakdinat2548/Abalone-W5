@@ -132,7 +132,9 @@ private:
 
     juce::Slider boostSlider;
     juce::Slider toneSlider;   // manual: values 1-6, never engages (see note above).
-    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob at the ex-AVALON spot.
+    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob in the clear
+                               // silver band right of the TONE dial (see CSV trim_dial).
+    juce::Label trimReadout;   // in-code dB readout directly below the trim knob.
     juce::ToggleButton highcutButton;
     juce::ToggleButton toneEngageButton; // attached to `toneIn`.
     juce::ToggleButton activeButton;     // attached to `active` (power switch).
@@ -143,6 +145,12 @@ private:
     PngToggleLookAndFeel toggleLookAndFeel;
     juce::Image ledOnImage;
     juce::Image ledOffImage;
+
+    // Trajan-class header face: Cinzel (OFL, embedded as BinaryData) for the
+    // in-code ABALONE wordmark + TRIM dB readout. Single typeface built once
+    // at construction; system-font fallback if the embed ever fails to parse.
+    juce::Font headerFont;
+    juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from
     // ui/component_positions.csv (embedded as BinaryData) at construction.
@@ -155,6 +163,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
 
     bool ledOn = false;
+    juce::String lastTrimText;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)
 };

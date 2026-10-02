@@ -10,6 +10,16 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
+// Trajan-class plate face: single Cinzel typeface (OFL, embedded as
+// BinaryData). Falls back to the default system font (never blank) if the
+// embed ever fails to parse. Built once per font at editor construction.
+juce::Font makePlateFont (float height)
+{
+    if (auto face = juce::Typeface::createSystemTypefaceFor (BinaryData::Cinzel_ttf, BinaryData::Cinzel_ttfSize))
+        return juce::Font (juce::FontOptions (face).withHeight (height));
+    return juce::Font (juce::FontOptions (height));
+}
+
 // Parses the embedded ui/component_positions.csv into name -> ratio rect.
 // Runs once on the message thread at construction; no audio-thread use.
 std::map<juce::String, juce::Rectangle<float>> parseLayoutCsv (const char* data, int size)
@@ -46,13 +56,15 @@ juce::Rectangle<int> scaledRect (const std::map<juce::String, juce::Rectangle<fl
 }
 
 // Engraved-plate lettering (two-pass: pale groove highlight below, dark face
-// on top) for the in-code ABALONE wordmark. No vendored font: the JUCE
-// default sans at wide tracking reads as an engraved badge on the brushed
-// plate, and keeps BinaryData to plate/knob art only.
-void drawEngravedCentred (juce::Graphics& g, const juce::String& text, float cx, float cyMid, float fontSize,
+// on top) for the in-code ABALONE wordmark. The face is Cinzel (OFL
+// Trajan-class serif vendored via BinaryData — matches the hardware's
+// engraved caps); the caller passes the editor's true horizontal center so
+// the wordmark is optically centered across the full panel via the measured
+// text width (no hardcoded x that can drift with letterforms).
+void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce::String& text, float cx, float cyMid,
                           float trackingPx)
 {
-    const juce::Font font = juce::Font{juce::FontOptions (fontSize)}.boldened();
+    const float fontSize = font.getHeight();
     float total = 0.0f;
     for (int i = 0; i < text.length(); ++i)
         total += juce::GlyphArrangement::getStringWidth (font, text.substring (i, i + 1));
@@ -76,7 +88,7 @@ void drawEngravedCentred (juce::Graphics& g, const juce::String& text, float cx,
 } // namespace
 
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (31.0f)), readoutFont (makePlateFont (11.0f))
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
@@ -153,6 +165,15 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     outputSlider.setLookAndFeel (&trimDialLookAndFeel);
     addAndMakeVisible (outputSlider);
 
+    // In-code dB readout directly below the trim knob, following the output
+    // param (set in resized(); text refreshed in timerCallback). Cinzel at a
+    // subordinate size, non-interactive.
+    trimReadout.setInterceptsMouseClicks (false, false);
+    trimReadout.setJustificationType (juce::Justification::centred);
+    trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xff2e3234));
+    trimReadout.setFont (readoutFont);
+    addAndMakeVisible (trimReadout);
+
     highcutButton.setLookAndFeel (&toggleLookAndFeel);
     highcutButton.setClickingTogglesState (true);
     addAndMakeVisible (highcutButton);
@@ -203,6 +224,14 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     }
 
     setSize (kEditorWidth, kEditorHeight);
+
+    // Initial readout text (the timer refreshes it; this covers first paint).
+    if (auto* outParam = apvts.getParameter ("output"))
+    {
+        lastTrimText = outParam->getCurrentValueAsText() + " dB";
+        trimReadout.setText (lastTrimText, juce::dontSendNotification);
+    }
+
     startTimerHz (30);
 }
 
@@ -225,13 +254,13 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     else
         g.fillAll (juce::Colour (0xff1a1c20));
 
-    // ABALONE wordmark, engraved style, where AVALON sat (top-center band;
-    // shifted left of the old center: TRIM took the band's right end).
-    // Texture (950,189) -> screen; ~64px texture cap-height. The editor is
-    // aspect-locked to the texture, so texture ratios map 1:1.
-    const float sx = static_cast<float> (getWidth()) / 2136.0f;
+    // ABALONE wordmark, engraved style, optically centered across the full
+    // panel: cx is the editor's true horizontal center and the draw routine
+    // centers via the measured Cinzel text width. Texture y=189 is the
+    // band where AVALON sat. The editor is aspect-locked to the texture,
+    // so texture ratios map 1:1.
     const float sy = static_cast<float> (getHeight()) / 970.0f;
-    drawEngravedCentred (g, "ABALONE", 950.0f * sx, 189.0f * sy, 31.0f, 4.0f);
+    drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 189.0f * sy, 6.0f);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()
@@ -240,7 +269,11 @@ void AbaloneW5AudioProcessorEditor::resized ()
     const int h = getHeight();
     boostSlider.setBounds (scaledRect (layoutRatios, "boost_dial", w, h));
     toneSlider.setBounds (scaledRect (layoutRatios, "tone_dial", w, h));
-    outputSlider.setBounds (scaledRect (layoutRatios, "trim_dial", w, h));
+    const auto trimBounds = scaledRect (layoutRatios, "trim_dial", w, h);
+    outputSlider.setBounds (trimBounds);
+    // Readout sits directly below the trim knob, wider than the knob so the
+    // "-30.0 dB" string fits; fixed-size editor so px constants are stable.
+    trimReadout.setBounds (trimBounds.getX() - 24, trimBounds.getBottom() + 2, trimBounds.getWidth() + 48, 14);
     highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h));
     speakerImage.setBounds (scaledRect (layoutRatios, "speaker_button", w, h));
     toneEngageButton.setBounds (scaledRect (layoutRatios, "tone_button", w, h));
@@ -267,5 +300,16 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
         const int toneIndex = static_cast<int> (param->getValue() * 6.0f + 0.5f);
         if (toneIndex != 0 && !toneSlider.isMouseButtonDown() && static_cast<int> (toneSlider.getValue()) != toneIndex)
             toneSlider.setValue (static_cast<double> (toneIndex), juce::dontSendNotification);
+    }
+
+    // TRIM dB readout follows the output param (repaint only on change).
+    if (auto* outParam = processor.getApvts().getParameter ("output"))
+    {
+        const juce::String text = outParam->getCurrentValueAsText() + " dB";
+        if (text != lastTrimText)
+        {
+            lastTrimText = text;
+            trimReadout.setText (text, juce::dontSendNotification);
+        }
     }
 }

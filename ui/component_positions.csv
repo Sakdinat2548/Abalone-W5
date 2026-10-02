@@ -19,4 +19,4 @@ tone_button,0.836142,0.770103,0.050562,0.061856,red TONE button bottom-right dri
 active_button,0.746721,0.770103,0.050562,0.061856,red ACTIVE button bottom-right-middle drives active param (power switch; THRU = internal bypass)
 signal_led,0.319288,0.770103,0.022472,0.049485,live SIGNAL LED at -2dBFS threshold
 power_led,0.676966,0.767010,0.022472,0.049485,blue POWER LED always on
-trim_dial,0.606273,0.192784,0.033708,0.074227,cut-only OUTPUT TRIM mini-knob at ex-AVALON-logo spot right side (tone art scaled down + bolder trim pointer) values -30..0dB needle_start_deg=225 sweep_deg=270 (no printed scale)
+trim_dial,0.915263,0.461856,0.056180,0.123711,cut-only OUTPUT TRIM mini-knob in the clear silver band RIGHT of the TONE dial at dial-center height (120px texture frame; tone art scaled down + bolder trim pointer) values -30..0dB needle_start_deg=225 sweep_deg=270 (no printed scale); dB readout label drawn below in-code
