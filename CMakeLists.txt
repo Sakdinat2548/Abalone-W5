@@ -17,6 +17,12 @@ add_executable(ToneTargetsTest tests/ToneTargetsTest.cpp)
 target_include_directories(ToneTargetsTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME ToneTargetsTest COMMAND ToneTargetsTest)
 
+add_executable(ToneBankTest tests/ToneBankTest.cpp)
+target_include_directories(ToneBankTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(ToneBankTest PRIVATE
+    TONE_CSV_PATH="${CMAKE_CURRENT_SOURCE_DIR}/analysis/u5_tone_curves_digitized.csv")
+add_test(NAME ToneBankTest COMMAND ToneBankTest)
+
 add_executable(GainStageTest tests/GainStageTest.cpp)
 target_include_directories(GainStageTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME GainStageTest COMMAND GainStageTest)
