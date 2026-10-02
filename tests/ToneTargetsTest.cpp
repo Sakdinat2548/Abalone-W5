@@ -3,19 +3,21 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <optional>
+#include <vector>
 
 namespace
 {
 
-const ToneTarget* findPoint (int tone, float freqHz)
+std::optional<ToneTarget> findPoint (int tone, float freqHz)
 {
     for (const ToneTarget& t : getToneTargets())
     {
         if (t.tone == tone && std::fabs (t.freqHz - freqHz) < 0.001f)
-            return &t;
+            return t;
     }
 
-    return nullptr;
+    return std::nullopt;
 }
 
 void checkOracleShape ()
@@ -40,17 +42,17 @@ void checkOracleShape ()
 
 void checkTone3Scoop ()
 {
-    const ToneTarget* mid = findPoint (3, 400.0f);
-    const ToneTarget* high = findPoint (3, 10000.0f);
-    assert (mid != nullptr && high != nullptr);
+    const std::optional<ToneTarget> mid = findPoint (3, 400.0f);
+    const std::optional<ToneTarget> high = findPoint (3, 10000.0f);
+    assert (mid.has_value() && high.has_value());
     assert (mid->db < -2.0f);
     assert (high->db > -1.0f);
 }
 
 void checkTone2Notch ()
 {
-    const ToneTarget* notch = findPoint (2, 700.0f);
-    assert (notch != nullptr);
+    const std::optional<ToneTarget> notch = findPoint (2, 700.0f);
+    assert (notch.has_value());
     assert (notch->db < -12.0f);
 }
 
