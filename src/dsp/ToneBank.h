@@ -2,16 +2,29 @@
 
 #include <cmath>
 
-// Tone-bank biquads, Abalone W5 v1 user blend (Task 15): 90% Task-4
-// manual-chart fit + 10% Task-12 measured-IR fit per stage-parameter
-// (T6 at 95/5 — its IR shape diverges most from the chart, so it keeps the
-// lightest IR dose). Chart is the binding oracle again (±1dB); IR deltas are
-// reported, not gated (user trusts the captures only lightly — see
-// analysis/IR_VALIDATION.md). Either-oracle worsts vs chart oracles:
-// T1 0.44dB, T2 0.77dB, T3 0.31dB, T4 0.67dB, T5 0.32dB, T6 0.37dB
-// (all within the +/-1dB gate). Param-blend verified against true dB-domain
-// blends (worst 0.38dB on T4 — stage roles moved most there, weight keeps it
-// near-chart). Poles re-checked < 1 at 44.1k + 48k after blending.
+// Tone-bank biquads, Abalone W5 v1 user blend (Task 15) + Task-17 low-end
+// refit: 90% Task-4 manual-chart fit + 10% Task-12 measured-IR fit per
+// stage-parameter (T6 at 95/5 — its IR shape diverges most from the chart,
+// so it keeps the lightest IR dose). Chart is the binding oracle again
+// (±1dB); IR deltas are reported, not gated (user trusts the captures only
+// lightly — see analysis/IR_VALIDATION.md). Either-oracle worsts vs chart
+// oracles (Task-17 numbers): T1 0.32dB, T2 0.78dB, T3 0.30dB, T4 0.67dB,
+// T5 0.17dB, T6 0.37dB (all within the +/-1dB gate). Param-blend verified
+// against true dB-domain blends (worst 0.38dB on T4 — stage roles moved
+// most there, weight keeps it near-chart). Poles re-checked < 1 at
+// 44.1k + 48k after blending and again after the Task-17 refit.
+//
+// Task 17 (Rulings B+C): low-end tracks the DIGITIZED CSV 100% over
+// [40,200] Hz — every tone within ±0.3 dB at every CSV point there, except
+// T2 at ±0.5 dB (0.38 worst: crossover-boundary + notch-skirt tension,
+// accepted as physics). The 10–40 Hz CSV band is EXCLUDED from all gates:
+// T1/T3/T4 read identical within ≤0.11 dB there despite different
+// low-end circuits (digitization floor — common-mode ink/frame-edge
+// artifact), and the 5 Hz DC-blocker owns sub-40 behavior by design.
+// T3/T4/T6 already passed ±0.3 over [40,200] with Task-15 numbers
+// (0.28/0.28/0.29) — held unchanged. T1/T2/T5 refit numbers-only (no new
+// sections, no role changes): low-band worsts T1 0.20 / T2 0.38 / T5 0.08;
+// above-crossover drift vs Task-15 ≤ 0.27 dB in-band (no blend regression).
 //
 // Chain position: Tone (bypass + 1-6 biquad presets, Task 7 adds the 10ms
 // xfade around setTone). Bypass (tone 0) is bit-transparent passthrough.
@@ -25,31 +38,33 @@
 // why the blend was checked against the true dB-domain blend
 // (w*chart(f) + (1-w)*IR(f)): worst deviation 0.38 dB on T4 at ~10.4 kHz,
 // 0.24-0.33 dB on T1/T2, <=0.12 dB elsewhere. No section added or removed
-// (3 per tone). Chart either-oracle worsts (binding gate): T1 0.44 dB,
-// T2 0.77 dB, T3 0.31 dB, T4 0.67 dB, T5 0.32 dB, T6 0.37 dB.
+// (3 per tone; Task-17 refit changed numbers only). Chart either-oracle
+// worsts (binding gate): T1 0.32 dB, T2 0.78 dB, T3 0.30 dB, T4 0.67 dB,
+// T5 0.17 dB, T6 0.37 dB.
 //
 //   tone  stage  type       f0       Q      gain
-//   1     0      highpass   21.7     0.966    --
-//   1     1      peak       803.1    0.20     -6.88
+//   1     0      highpass   36.1     1.052    --
+//   1     1      peak       777.1    0.173    -6.64
 //   1     2      highshelf  12417.8  1.223   +1.19
-//   2     0      peak       677.9    0.727  -20.97
-//   2     1      lowshelf   93.9     1.504   +0.68
-//   2     2      highshelf  3218.5   0.23    +2.30
+//   2     0      peak       681.2    0.687  -21.03
+//   2     1      lowshelf   87.2     1.646   +0.85
+//   2     2      highshelf  3129.2   0.173    +2.65
 //   3     0      peak       582.2    0.394    -3.58
 //   3     1      peak       3167.6   0.44     -2.30
 //   3     2      lowshelf   76.8     0.995   +0.90
 //   4     0      lowshelf   719.2    0.388   +1.48
 //   4     1      peak       5865.2   0.964    -4.17
 //   4     2      highshelf  11127.8  1.326   +1.03
-//   5     0      highpass   32.8     0.305    --
-//   5     1      lowshelf   126.4    0.734    -3.68
+//   5     0      highpass   33.7     0.305    --
+//   5     1      lowshelf   133.2    0.738    -3.74
 //   5     2      highshelf  321.1    0.684   +2.69
 //   6     0      lowshelf   77.0     0.525  -16.11
 //   6     1      highshelf  292.2    0.699   +2.24
 //   6     2      highshelf  10768.2  0.824    -2.63
 //
-// Shape notes: T2's notch tip lands at -6.88dB @ 676Hz (1 kHz-normalized),
-// vs measured -6.84dB @ 661Hz — depth character kept from the IR side.
+// Shape notes: T2's notch tip lands at -6.46dB @ 678Hz (1 kHz-normalized),
+// vs measured -6.84dB @ 661Hz — depth character eased 0.4dB by the Task-17
+// low-end refit (high-shelf lift); chart gate still holds (0.78dB).
 // T4's dip (-4.74dB @ 5922Hz normalized) is formed jointly by the peak and
 // the high shelf; its binding worst (0.67dB) sits at the 1kHz header point,
 // where the chart and IR oracles themselves disagree. T6 keeps the chart's
@@ -191,17 +206,17 @@ private:
         switch (tone * 10 + stage)
         {
         case 10:
-            return {Type::HighPass, 21.7, 0.966, 0.0};
+            return {Type::HighPass, 36.1, 1.052, 0.0};
         case 11:
-            return {Type::Peak, 803.1, 0.2, -6.88};
+            return {Type::Peak, 777.1, 0.173, -6.64};
         case 12:
             return {Type::HighShelf, 12417.8, 1.223, 1.19};
         case 20:
-            return {Type::Peak, 677.9, 0.727, -20.97};
+            return {Type::Peak, 681.2, 0.687, -21.03};
         case 21:
-            return {Type::LowShelf, 93.9, 1.504, 0.68};
+            return {Type::LowShelf, 87.2, 1.646, 0.85};
         case 22:
-            return {Type::HighShelf, 3218.5, 0.23, 2.3};
+            return {Type::HighShelf, 3129.2, 0.173, 2.65};
         case 30:
             return {Type::Peak, 582.2, 0.394, -3.58};
         case 31:
@@ -215,9 +230,9 @@ private:
         case 42:
             return {Type::HighShelf, 11127.8, 1.326, 1.03};
         case 50:
-            return {Type::HighPass, 32.8, 0.305, 0.0};
+            return {Type::HighPass, 33.7, 0.305, 0.0};
         case 51:
-            return {Type::LowShelf, 126.4, 0.734, -3.68};
+            return {Type::LowShelf, 133.2, 0.738, -3.74};
         case 52:
             return {Type::HighShelf, 321.1, 0.684, 2.69};
         case 60:

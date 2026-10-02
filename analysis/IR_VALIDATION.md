@@ -1,6 +1,15 @@
-# IR validation (Tasks 8 + 12 + 15) — method, status, and measured results
+# IR validation (Tasks 8 + 12 + 15 + 17) — method, status, measured results
 
-## Status: Task 15 user blend COMPLETE — chart binding again, IR advisory
+## Status history
+
+### Task 17 low-end refit COMPLETE — chart binding, low end to CSV
+
+Task 17 refit T1/T2/T5 numbers-only to the digitized CSV over [40,200] Hz
+(±0.3 dB, T2 ±0.5 dB per Rulings B+C — see §9); T3/T4/T6 held at Task-15
+numbers. Full-band chart gate stays GREEN. §7 tables below are Task-15
+history (the blend endpoint this refit preserves above crossover).
+
+### Task 15 user blend COMPLETE — chart binding again, IR advisory
 
 User taste ruling (Task 15): the tone bank is now a **90% Task-4 manual-chart
 fit + 10% Task-12 measured-IR fit per stage-parameter blend (T6 at 95/5 —
@@ -329,6 +338,55 @@ Blend vs the 14-spot measured-shape table (`kIrSpots`, 1 kHz-normalized):
 These exceed ±1 dB exactly where the chart and the hardware disagree
 (T4/T6 high end, T5 low end) — the blend follows the chart there by design.
 `docs/tone-curves.png` regenerated from the final blended numbers.
+
+## 9. Task 17 low-end refit — CSV tracking over [40,200] Hz (Rulings B+C)
+
+**Ruling B (region).** The low-end gate covers **[40,200] Hz**, not
+[10,200]. Round-1 optimizer evidence (6-seed Nelder-Mead, all stages free:
+bests T1 0.88 / T2 1.16 / T3 2.66 / T4 3.82 / T5 0.98 / T6 1.68 dB —
+failing by 3–13×, not edge distance) plus the analytic DC-value proof
+(no-HP tones T2/T3/T4: model(DC) = shelf gain cannot satisfy both the DC
+read and the 27–118 Hz rises) showed the [10,200] gate infeasible
+numbers-only. Measurement reason to exclude 10–40 Hz: T1/T3/T4 CSV traces
+are identical within ≤0.11 dB at every CSV point 10–26 Hz despite three
+different low-end circuits (common-mode ink/frame-edge artifact, not
+device response); T5/T6 foot slopes (~4.8 dB/oct) are incompatible with
+any biquad HP (12 dB/oct asymptote). The 10–40 band is chart-noise floor;
+the 5 Hz DC-blocker owns sub-40 behavior by design. Bass fundamentals
+start at 41 Hz (low E). No contradiction persists inside [40,200] — no
+escalation was needed.
+
+**Ruling C (T2 gate).** T2 gets **±0.5 dB** over [40,200] (boundary tension
+at ~196 Hz: crossover proximity + notch skirt; 0.37 achievable vs 0.3
+asked — physics accepted, reality gated).
+
+**Fit (numbers-only; no new sections, no role changes).** Nelder-Mead,
+genuinely randomized multi-start (8 seeds), penalties only beyond the true
+gates (dense ≤ 1.0, header either-oracle ≤ 1.0, drift-vs-Task-15 ≤ 0.3,
+analytic pole check at 44.1k + 48k):
+
+| Tone | Change (T1/T2/T5 only) | Low-band worst [40,200] | Gate | Drift vs Task-15 |
+|------|------------------------|-------------------------|------|------------------|
+| 1 | HP 21.7/0.966 → 36.1/1.052; peak 803.1/0.20/−6.88 → 777.1/0.173/−6.64 | 0.20 dB @ 126 Hz | ±0.3 PASS | 0.25 |
+| 2 | peak 677.9/0.727/−20.97 → 681.2/0.687/−21.03; LS 93.9/1.504/+0.68 → 87.2/1.646/+0.85; HS 3218.5/0.23/+2.30 → 3129.2/0.173/+2.65 | 0.38 dB @ 71 Hz | ±0.5 PASS | 0.26 in-band |
+| 3 | held | 0.28 dB @ 67 Hz | ±0.3 PASS | 0 |
+| 4 | held | 0.28 dB @ 196 Hz | ±0.3 PASS | 0 |
+| 5 | HP 32.8/0.305 → 33.7/0.305; LS 126.4/0.734/−3.68 → 133.2/0.738/−3.74 | 0.08 dB @ 40 Hz | ±0.3 PASS | 0.13 |
+| 6 | held | 0.29 dB @ 59 Hz | ±0.3 PASS | 0 |
+
+Rejoin is smooth: above-crossover drift ≤ 0.27 dB in-band on all tones,
+and the full-band chart gate (dense ≤ 1.0 + header either-oracle ≤ 1.0)
+stays GREEN — either-oracle worsts T1 0.32 / T2 0.78 / T3 0.30 / T4 0.67 /
+T5 0.17 / T6 0.37 dB; dense worsts T1 0.57 / T2 0.97 / T3 0.33 / T4 0.71 /
+T5 0.18 / T6 0.56 dB (T2's 0.97 improves on the Task-15 0.98).
+
+**Honest costs.** T2's notch tip eases 0.4 dB (now −6.46 dB @ 678 Hz
+1 kHz-normalized vs measured −6.84 @ 661 Hz — the high-shelf lift that
+fixes the low end); T1's drift sits at 0.25 (0.05 margin, deterministic).
+T2's dense 0.97 margin (0.03) is thin but strictly better than Task-15's
+0.98. `docs/tone-curves.png` regenerated from the final numbers.
+Gated in `tests/ToneBankTest.cpp` (`checkLowEndCsv`); port re-verified
+(`--verify-port` GREEN against the new C++ refs).
 
 ## 8. Zoom leg — PENDING (user-side, ear A/B cannot be automated)
 

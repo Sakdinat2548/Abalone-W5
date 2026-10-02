@@ -182,10 +182,11 @@ void checkIRShapes ()
 // outlier. No physical filter can sit within +/-1dB of both oracles where
 // they differ by up to 3.5dB, so each header point passes when it lands
 // within +/-1dB of EITHER oracle. Task 8 IR comparison adjudicates.
-// Binding gate (Task 15): the manual chart is binding again — every tone
-// within +/-1dB of EITHER chart oracle (eye-read header or digitized CSV)
-// at every 40Hz-15kHz header point, Task-4 style. The Task-15 blend worsts:
-// T1 0.44 / T2 0.77 / T3 0.31 / T4 0.67 / T5 0.32 / T6 0.37 dB.
+// Binding gate (Task 15, numbers refit by Task 17): the manual chart is
+// binding again — every tone within +/-1dB of EITHER chart oracle (eye-read
+// header or digitized CSV) at every 40Hz-15kHz header point, Task-4 style.
+// Either-oracle worsts (Task-17 numbers): T1 0.32 / T2 0.78 / T3 0.30 /
+// T4 0.67 / T5 0.17 / T6 0.37 dB.
 void checkHeaderOracle (const DenseCurve& csv)
 {
     // GATED since Task 15 (was report-only under Task 12): the fits track
@@ -218,8 +219,9 @@ void checkDenseCsv (const DenseCurve& csv)
 {
     // GATED since Task 15 (was report-only under Task 12): the blend sits
     // within +/-1dB of the digitized chart on the full dense grid too
-    // (blend worsts T1-T6: 0.54/0.98/0.33/0.71/0.35/0.56 dB — T2's 0.98 dB
-    // at ~576 Hz is the thinnest margin, recorded honestly).
+    // (Task-17 worsts T1-T6: 0.57/0.97/0.33/0.71/0.18/0.56 dB — T2's 0.97 dB
+    // at ~956 Hz is the thinnest margin, recorded honestly; it improves on
+    // the Task-15 0.98 dB worst).
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -244,6 +246,45 @@ void checkDenseCsv (const DenseCurve& csv)
         }
         REQUIRE (count > 50);
         std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts)\n", tone, worst, worstFreq, count);
+    }
+}
+
+void checkLowEndCsv (const DenseCurve& csv)
+{
+    // GATED since Task 17 (Rulings B+C): the low end tracks the DIGITIZED
+    // CSV 100% over [40,200] Hz — every tone within +/-0.3dB at every CSV
+    // point in-band, except T2 at +/-0.5dB (crossover-boundary + notch-skirt
+    // tension at ~196Hz, accepted as physics). The 10-40Hz CSV band is
+    // EXCLUDED: T1/T3/T4 read identical within <=0.11dB there despite
+    // different low-end circuits (digitization floor), and the 5Hz
+    // DC-blocker owns sub-40 behavior by design. T3/T4/T6 hold their
+    // Task-15 numbers (already passing); T1/T2/T5 were refit numbers-only.
+    for (int tone = 1; tone <= 6; ++tone)
+    {
+        ToneBank bank;
+        bank.setSampleRate (48000.0);
+        bank.setTone (tone);
+        const float gate = (tone == 2) ? 0.5f : 0.3f;
+        float worst = 0.0f;
+        float worstFreq = 0.0f;
+        int count = 0;
+        for (size_t i = 0; i < csv.freqHz.size(); ++i)
+        {
+            const float f = csv.freqHz[i];
+            if (f < 40.0f || f > 200.0f)
+                continue;
+            ++count;
+            const float d = std::fabs (bank.magnitudeAt (f) - csv.db[tone][i]);
+            if (d > worst)
+            {
+                worst = d;
+                worstFreq = f;
+            }
+            REQUIRE (d <= gate);
+        }
+        REQUIRE (count > 10);
+        std::printf ("tone %d low-end-CSV worst %+.3fdB at %.1fHz (%d pts, gate %.1f)\n", tone, worst, worstFreq, count,
+                     gate);
     }
 }
 
@@ -358,6 +399,7 @@ int main ()
     checkIRShapes();
     checkHeaderOracle (csv);
     checkDenseCsv (csv);
+    checkLowEndCsv (csv);
     checkTone2NotchDepth();
     checkTone4DipPresent();
     checkProcessSampleAgreement();
