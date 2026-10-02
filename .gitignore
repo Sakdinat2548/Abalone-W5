@@ -1,4 +1,5 @@
 build/
+build-ide/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

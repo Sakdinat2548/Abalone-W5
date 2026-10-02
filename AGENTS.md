@@ -22,6 +22,22 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 - `docs/` refs. Root: `.clang-format` `.clang-tidy` `.clangd` `CMakeLists.txt`.
 - VST3 Windows only; 44.1k + 48k must pass.
 
+## IDE (clangd) setup — one-time
+
+- The VS generator in `build/` never emits `compile_commands.json`, so clangd
+  uses a secondary Ninja+MSVC scratch dir `build-ide/` (gitignored, never commit).
+- One-time setup (from repo root, `cmd`, NOT a MinGW shell — JUCE hard-rejects
+  MinGW gcc on PATH, so force `CC=cl`/`CXX=cl`):
+  `call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 && set CC=cl && set CXX=cl && C:\msys64\ucrt64\bin\cmake.exe -B build-ide -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=C:\msys64\ucrt64\bin\ninja.exe`
+  (note: `VsDevCmd.bat` is directly under `Common7\Tools\`, no `vsdevcmd\` subdir).
+- `.clangd` points at `build-ide` and adds MSVC 14.29.30133 + WinSDK 10.0.19041.0
+  includes explicitly (clangd 22 auto-detection falls back to stale VS8/9/10
+  paths; use combined `-I<path>` form — split `-isystem <path>` breaks its
+  `--driver-mode=cl` arg parsing). Refresh versions after toolchain updates.
+- Verify: `C:\msys64\ucrt64\bin\clangd.exe --check=src\PluginProcessor.cpp`
+  must end `All checks completed, 0 errors`. Zed cannot be driven headlessly;
+  MSYS2 clangd 22 `--check` is the accepted proxy.
+
 ## DSP chain (fixed order)
 
 `Boost -> DC-block -> Tone -> Color -> HighCut -> Trim + LED`
