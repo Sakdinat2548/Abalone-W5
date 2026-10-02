@@ -27,8 +27,10 @@ class AbaloneW5AudioProcessor;
 //   DSP, chain states frozen, buffer untouched; a brief relay-style settle
 //   transient is possible on re-engage. Old states load as active. SPEAKER
 //   is hardware-only: it renders as a permanent OFF image and is
-//   non-interactive. ACTIVE off also veils the panel (DimOverlay) and kills
-//   the POWER LED; the SIGNAL LED follows the input peak while bypassed.
+//   non-interactive. ACTIVE off veils the panel (DimOverlay); the POWER
+//   LED is a mains lamp — always lit while the plugin is open, painted
+//   above the veil so it stays bright; the SIGNAL LED follows the input
+//   peak while bypassed.
 // - Photo knob bodies (knob_*_no_pointer.png) are NEVER rotated: baked
 //   off-axis highlights + edge dial-numeral fragments would swing. Bodies
 //   are drawn static and circular-clipped; value is shown by the extracted
@@ -106,10 +108,11 @@ struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
 };
 
 // Lights-off overlay: ACTIVE off darkens the whole panel with a translucent
-// fill. A topmost non-interactive child (added last, full panel bounds), so
-// it dims every LED/knob beneath it and never blocks drags; visibility flips
-// instantly on re-engage from the existing 30Hz timer (no new threads, no
-// fade animation). POWER is separately driven dark while inactive.
+// fill. Ordered BELOW the POWER LED (which stays bright as the mains lamp)
+// but above every other control, so it dims knobs/buttons/SIGNAL while
+// POWER shines through. Non-interactive so drags pass through; visibility
+// flips instantly on re-engage from the existing 30Hz timer (no new threads,
+// no fade animation). POWER's image is set once and never driven dark.
 struct DimOverlay : public juce::Component
 {
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0x99000000)); }

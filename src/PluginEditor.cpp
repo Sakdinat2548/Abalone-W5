@@ -204,18 +204,18 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     signalLedImage.setImage (ledOffImage);
     addAndMakeVisible (signalLedImage);
 
-    // Blue POWER LED: on while ACTIVE is engaged, dark when bypassed (the
-    // timer below drives it from the `active` param; initial state synced
-    // here so the first paint is correct).
-    powerLedImage.setImage (ledOnImage);
-    addAndMakeVisible (powerLedImage);
-
-    // Lights-off veil: topmost child (paints over LEDs/knobs), visible only
-    // while ACTIVE is off. Non-interactive so knob drags pass straight
-    // through to the controls beneath.
+    // Lights-off veil: ordered below the POWER LED (which stays bright as
+    // the mains lamp) but above every other control. Non-interactive so
+    // knob drags pass straight through to the controls beneath.
     dimOverlay.setInterceptsMouseClicks (false, false);
     dimOverlay.setVisible (false);
     addAndMakeVisible (dimOverlay);
+
+    // Blue POWER LED: mains lamp, ALWAYS lit while the plugin is open,
+    // independent of ACTIVE. Added after the veil so it paints above it
+    // and stays bright while everything else dims.
+    powerLedImage.setImage (ledOnImage);
+    addAndMakeVisible (powerLedImage);
 
     auto& apvts = processor.getApvts();
     boostAttachment =
@@ -241,13 +241,13 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 
     setSize (kEditorWidth, kEditorHeight);
 
-    // Initial POWER + veil state from the `active` param (the timer keeps
-    // both live; this covers the first paint).
+    // Initial veil state from the `active` param (the timer keeps it live;
+    // this covers the first paint). POWER is a mains lamp — always on.
+    powerOn = true;
+    powerLedImage.setImage (ledOnImage);
     if (auto* activeParam = apvts.getParameter ("active"))
     {
-        powerOn = activeParam->getValue() > 0.5f;
-        powerLedImage.setImage (powerOn ? ledOnImage : ledOffImage);
-        dimVisible = !powerOn;
+        dimVisible = activeParam->getValue() <= 0.5f;
         dimOverlay.setVisible (dimVisible);
     }
 
@@ -322,18 +322,12 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
         signalLedImage.setImage (ledOn ? ledOnImage : ledOffImage);
     }
 
-    // POWER follows ACTIVE (dark while bypassed); the lights-off veil covers
-    // the panel in the same state and lifts instantly on re-engage. Both are
+    // Lights-off veil follows ACTIVE (lifts instantly on re-engage),
     // driven here on the existing 30Hz timer — no new threads, no fading.
+    // POWER is a mains lamp and is never driven dark.
     if (auto* activeParam = processor.getApvts().getParameter ("active"))
     {
-        const bool engaged = activeParam->getValue() > 0.5f;
-        if (engaged != powerOn)
-        {
-            powerOn = engaged;
-            powerLedImage.setImage (powerOn ? ledOnImage : ledOffImage);
-        }
-        const bool shouldDim = !engaged;
+        const bool shouldDim = activeParam->getValue() <= 0.5f;
         if (shouldDim != dimVisible)
         {
             dimVisible = shouldDim;
