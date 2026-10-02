@@ -64,29 +64,36 @@ SELFTEST_TOL_DB = 0.05  # end-to-end (time-domain synth IR -> FFT -> analytic)
 # ----------------------------------------------------------------------------
 # Section 1: Python port of src/dsp/ToneBank.h + src/dsp/HighCut.h.
 # (tone, stage) -> (type, f0 Hz, Q, gain dB); HP stages have no gain.
-# Verbatim from the header comment table (Task-20 full-band fit to the
-# digitized CSV: T1/T2/T4/T6 refit numbers-only, T3/T5 held at Task-17).
+# Verbatim from the header comment table (Fix Round 1: T2 gains a fourth
+# section for the twin-peak V; T5/T6 refit for the 10 Hz anchors; T1/T3/T4
+# verified-kept from the stalled pass after independent re-evaluation).
 # ----------------------------------------------------------------------------
 TONE_PARAMS = {
-    10: ("hp", 36.7, 1.049, 0.0),
-    11: ("pk", 754.0, 0.183, -6.93),
-    12: ("hs", 11936.7, 1.776, 0.82),
-    20: ("pk", 680.0, 0.703, -21.19),
-    21: ("ls", 87.1, 1.920, 0.72),
-    22: ("hs", 3930.3, 0.116, 2.56),
-    30: ("pk", 582.2, 0.394, -3.58),
-    31: ("pk", 3167.6, 0.44, -2.3),
-    32: ("ls", 76.8, 0.995, 0.9),
-    40: ("ls", 2662.6, 0.351, 1.53),
-    41: ("pk", 6027.8, 0.695, -4.93),
-    42: ("hs", 15623.1, 0.518, 4.60),
-    50: ("hp", 33.7, 0.305, 0.0),
-    51: ("ls", 133.2, 0.738, -3.74),
-    52: ("hs", 321.1, 0.684, 2.69),
-    60: ("ls", 72.7, 0.494, -16.89),
-    61: ("hs", 262.6, 0.610, 2.70),
-    62: ("hs", 13548.8, 0.576, -4.58),
+    10: ("hp", 14.859, 1.5, 0.0),
+    11: ("pk", 841.567, 0.2023, -7.075),
+    12: ("hs", 11368.945, 1.9757, 0.834),
+    20: ("pk", 609.991, 0.4306, -10.957),
+    21: ("pk", 701.712, 1.5656, -9.772),
+    22: ("ls", 75.194, 1.6679, 0.711),
+    23: ("hs", 11366.908, 0.5996, 1.988),
+    30: ("pk", 867.763, 0.2315, -3.783),
+    31: ("pk", 4568.537, 0.8532, -1.318),
+    32: ("ls", 31.232, 1.4505, -2.972),
+    40: ("ls", 25.902, 0.9582, -3.724),
+    41: ("pk", 5814.022, 0.5672, -6.841),
+    42: ("hs", 126.355, 0.1035, 2.537),
+    50: ("hp", 9.921, 0.1829, 0.0),
+    51: ("ls", 105.024, 0.6028, -8.549),
+    52: ("hs", 329.849, 0.7836, 2.753),
+    60: ("ls", 51.684, 0.4564, -21.776),
+    61: ("hs", 240.601, 0.8648, 2.282),
+    62: ("hs", 15009.860, 0.6405, -4.631),
 }
+
+
+def num_sections(tone):
+    """Section budget 3x5 + 4x1 — mirrors ToneBank::numSections."""
+    return 4 if tone == 2 else 3
 
 
 def rbj_cook(typ, f0, q, gain_db, fs):
@@ -129,7 +136,7 @@ def tone_magnitude_at(tone, freq_hz, fs=48000.0):
     w = 2.0 * math.pi * freq_hz / fs
     cos_w, sin_w = math.cos(w), math.sin(w)
     real, imag = 1.0, 0.0
-    for s in range(3):
+    for s in range(num_sections (tone)):
         b0, b1, b2, a1, a2 = rbj_cook(*TONE_PARAMS[tone * 10 + s], fs)
         cos2 = 2.0 * cos_w * cos_w - 1.0
         bz_r = b0 + b1 * cos_w + b2 * cos2
@@ -174,9 +181,9 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # same algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires
 # each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
 # Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal
-# (Task-20 numbers).
+# (Fix Round 1 numbers).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 0.26, 2: 0.71, 3: 0.30, 4: 0.32, 5: 0.17, 6: 0.14}
+CXX_EITHER_REF_DB = {1: 0.53, 2: 0.44, 3: 0.18, 4: 0.43, 5: 0.23, 6: 0.30}
 PORT_VERIFY_TOL_DB = 0.05
 
 
@@ -369,7 +376,7 @@ def synth_ir(tone, fs, highcut, seconds=1.5):
     x = np.zeros(n, dtype=np.float32)
     x[0] = np.float32(1.0)
     if tone != 0:
-        for s in range(3):
+        for s in range(num_sections (tone)):
             b0, b1, b2, a1, a2 = rbj_cook(*TONE_PARAMS[tone * 10 + s], fs)
             x = dfii_filter(x, b0, b1, b2, a1, a2).astype(np.float32)
     if highcut:

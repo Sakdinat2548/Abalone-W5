@@ -1,6 +1,71 @@
-# IR validation (Tasks 8 + 12 + 15 + 17 + 20) — method, status, measured results
+# IR validation (Tasks 8 + 12 + 15 + 17 + 20 + Fix Round 1) — method, status, measured results
 
 ## Status history
+
+### Fix Round 1 (T2 fourth section + absolute 10 Hz anchors) COMPLETE
+
+Authoritative user eye-reads supersede the CSV below 40 Hz: absolute 10 Hz
+anchors T1 −3 / T2 −0.25 / T3 −3 / T4 −3 / T5 −22 / T6 −22 dB (gates T1–T4
+±1.0, T5/T6 ±2.0 — looser by design, their HP skirts are near-vertical there).
+The 10–40 Hz CSV band stays excluded (Ruling B); the anchors replace it as
+ground truth. Anchors apply to the ABSOLUTE response — `magnitudeAt` includes
+each tone's full cascade and ToneBank has no overall-gain stage, so the test
+compares unnormalized (documented in `checkAbsoluteAnchors`). Hierarchy:
+**CSV binding 40 Hz–15 kHz; six 10 Hz anchors binding; eye-read header and IR
+shapes advisory**. T2 gains ONE section (twin-peak V: 610/0.43/−10.96 +
+702/1.57/−9.77); all other tones numbers-only, same types. Section budget:
+3×5 + 4×1.
+
+| Tone | Dense 40–15k (gate) | Low-end 40–200 (gate) | 10 Hz abs / delta (gate) | Rate 44.1/48k (gate) |
+|------|---------------------|----------------------|--------------------------|---------------------|
+| 1 | 0.55 @ 55 Hz (±0.6 DEVIATION) | 0.55 @ 55 Hz (±0.6 DEVIATION) | −3.84 / 0.84 (±1.0) PASS | 0.030 (±0.1) PASS |
+| 2 | 0.48 @ 86 Hz (±0.5) PASS | 0.48 @ 86 Hz (±0.5) PASS | +0.70 / 0.95 (±1.0) PASS | 0.065 (±0.1) PASS |
+| 3 | 0.19 @ 173 Hz (±0.5) PASS | 0.19 @ 173 Hz (±0.3) PASS | −3.22 / 0.22 (±1.0) PASS | 0.039 (±0.1) PASS |
+| 4 | 0.44 @ 10 kHz (±0.5) PASS | 0.28 @ 81 Hz (±0.3) PASS | −3.40 / 0.40 (±1.0) PASS | 0.243 (±0.3 DEVIATION) |
+| 5 | 0.32 @ 477 Hz (±0.5) PASS | 0.23 @ 40 Hz (±0.3) PASS | −23.20 / 1.21 (±2.0) PASS | 0.001 (±0.1) PASS |
+| 6 | 0.40 @ 12.8 kHz (±0.5) PASS | 0.28 @ 173 Hz (±0.3) PASS | −20.50 / 1.50 (±2.0) PASS | 0.094 (±0.1) PASS |
+
+(C++ `ToneBankTest` actuals at 48 kHz; rate on the seven C++ probes.)
+
+No-regression vs Task 20 (before → after; gates kept unless deviation noted):
+dense T1 0.28 → 0.55 (DEVIATION, anchor-forced — see below), T2 0.88 →
+0.48 (deviation RESOLVED by 4th section), T3 0.33 → 0.19, T4 0.34 → 0.44
+(stays in gate), T5 0.18 → 0.32 (stays in gate), T6 0.13 → 0.40 (stays in
+gate); low-end T1 0.19 → 0.55 (DEVIATION, anchor-forced), T2 0.50 → 0.48,
+T3 0.29 → 0.19, T4 0.22 → 0.28, T5 0.08 → 0.23, T6 0.13 → 0.28 (all stay in
+gate); chart either-oracle (advisory, ±1.0) 0.26/0.71/0.30/0.32/0.17/0.14 →
+0.53/0.44/0.18/0.43/0.23/0.30 (all pass); port GREEN (worst diff 0.005 dB);
+user-complaint directions held (T1 scoop depth now within 0.55 dB at the
+anchor-constrained foot, T3 dip present, T3/T4 non-twins — verified on the
+regen plot vs `u5_tone_fit_check.png`).
+
+**T1 recorded deviation** (dense gate 0.6, low-end gate 0.6 — anchor wins per
+tie-break): the −3 dB anchor pins the highpass at ~14.9 Hz while the CSV foot
+sits at +0.64 dB @ 40 Hz; an anchor-pinned highpass is ~0 dB at 40 Hz, so the
+closed-form floor is ~= 0.55 dB over 40–60 Hz. Four independent optimizer runs
+(varied bounds/seeds/anchor pressure, widened peak-f0 and highshelf-corner
+ranges) stall at dense/low 0.55–0.70 — structural, not optimizer weakness.
+Wart recorded: the HP knee (Q 1.5) carries a +3.8 dB hump at ~18 Hz; it is
+load-bearing for the 40 Hz foot (a hump-free knee costs dense 0.70), lives in
+the excluded 10–40 Hz band, and the anchor still passes. Ruling options: 4th
+section on T1, accepted deviation, or anchor relaxation.
+
+**T4 recorded deviation** (rate gate 0.3 for T4): the anchor forces a
+lowshelf-down arrangement (LS ~26 Hz, HS ~126 Hz rebuilding the mid shelf)
+with a deeper peak (−6.84) for the dip; the steep recovery slope then warps
+0.243 dB between 44.1k/48k at the 15 kHz probe (0.13 at 10 kHz) — a
+per-section diagnostic pins the warp entirely in the peak, and rate-weighted
+refits from both the Task-20 and stalled seeds floor at 0.24. Inaudible
+(0.24 dB @ 15 kHz across rates); ruling options: 4th section for the top
+octave, accepted deviation, or anchor relaxation.
+
+Thin margins (deterministic float32-vs-float64 ~1e-6 class, recorded not
+chased — same acceptance as Task 20's T2-low 0.496/0.5): T2 anchor 0.95/1.0
++ low 0.48/0.5 (structurally coupled through the lowshelf), T6 rate
+0.094/0.1, T5 pole radius 0.99975 (< 1, float32 cook in the loop).
+Fine-grid audit (800-pt vs log-interp CSV): all tones gap-free (fine worst
+within 0.02 of on-grid); 15–20 kHz top cap ≤ 1.0 dB holds (T6 +0.95 worst,
+report-only).
 
 ### Task 20 full-band fit to the digitized CSV COMPLETE — CSV binding ±0.5 dB
 
