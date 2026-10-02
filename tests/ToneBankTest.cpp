@@ -109,6 +109,70 @@ float sineRmsDb (ToneBank& bank, double sampleRate, double freqHz)
     return 20.0f * static_cast<float> (std::log10 (std::sqrt (sumOut / sumIn)));
 }
 
+// Measured IR shapes (Task 12, binding oracle): Welch cross-spectral
+// relative shapes of AVALON_TONEn.wav vs AVALON_TONE0.wav (highcut-off
+// captures only, per user Ruling A), 1 kHz-normalized, in dB. Recomputed
+// fresh from the WAVs 2026-10-02 (coherence >= 0.9997 in-band); do not
+// hand-edit — see analysis/IR_VALIDATION.md section 5 table (b).
+struct IrSpot
+{
+    int tone;
+    float freqHz;
+    float db;
+};
+
+constexpr IrSpot kIrSpots[] = {
+    {1, 40.0f, 6.60f},     {1, 63.0f, 6.37f},     {1, 100.0f, 5.38f},    {1, 150.0f, 3.99f},    {1, 250.0f, 2.05f},
+    {1, 400.0f, 0.71f},    {1, 630.0f, 0.05f},    {1, 1000.0f, 0.00f},   {1, 1600.0f, 0.59f},   {1, 2500.0f, 1.83f},
+    {1, 4000.0f, 3.76f},   {1, 6300.0f, 5.77f},   {1, 10000.0f, 7.39f},  {1, 15000.0f, 8.29f},  {2, 40.0f, 12.75f},
+    {2, 63.0f, 12.69f},    {2, 100.0f, 11.83f},   {2, 150.0f, 10.19f},   {2, 250.0f, 6.62f},    {2, 400.0f, 1.15f},
+    {2, 630.0f, -6.66f},   {2, 1000.0f, -0.00f},  {2, 1600.0f, 6.28f},   {2, 2500.0f, 10.24f},  {2, 4000.0f, 13.07f},
+    {2, 6300.0f, 14.72f},  {2, 10000.0f, 15.59f}, {2, 15000.0f, 15.95f}, {3, 40.0f, 3.69f},     {3, 63.0f, 3.44f},
+    {3, 100.0f, 2.43f},    {3, 150.0f, 1.45f},    {3, 250.0f, 0.60f},    {3, 400.0f, 0.20f},    {3, 630.0f, 0.04f},
+    {3, 1000.0f, -0.00f},  {3, 1600.0f, 0.05f},   {3, 2500.0f, 0.23f},   {3, 4000.0f, 0.62f},   {3, 6300.0f, 1.28f},
+    {3, 10000.0f, 2.11f},  {3, 15000.0f, 2.74f},  {4, 40.0f, -0.58f},    {4, 63.0f, -0.12f},    {4, 100.0f, 0.09f},
+    {4, 150.0f, 0.16f},    {4, 250.0f, 0.19f},    {4, 400.0f, 0.18f},    {4, 630.0f, 0.13f},    {4, 1000.0f, -0.00f},
+    {4, 1600.0f, -0.33f},  {4, 2500.0f, -1.06f},  {4, 4000.0f, -2.56f},  {4, 6300.0f, -4.35f},  {4, 10000.0f, -3.91f},
+    {4, 15000.0f, -1.93f}, {5, 40.0f, -13.41f},   {5, 63.0f, -9.74f},    {5, 100.0f, -6.36f},   {5, 150.0f, -3.90f},
+    {5, 250.0f, -1.77f},   {5, 400.0f, -0.70f},   {5, 630.0f, -0.22f},   {5, 1000.0f, -0.00f},  {5, 1600.0f, 0.09f},
+    {5, 2500.0f, 0.13f},   {5, 4000.0f, 0.14f},   {5, 6300.0f, 0.15f},   {5, 10000.0f, 0.15f},  {5, 15000.0f, 0.15f},
+    {6, 40.0f, -12.20f},   {6, 63.0f, -8.62f},    {6, 100.0f, -5.38f},   {6, 150.0f, -3.17f},   {6, 250.0f, -1.34f},
+    {6, 400.0f, -0.49f},   {6, 630.0f, -0.13f},   {6, 1000.0f, 0.00f},   {6, 1600.0f, -0.02f},  {6, 2500.0f, -0.20f},
+    {6, 4000.0f, -0.69f},  {6, 6300.0f, -1.69f},  {6, 10000.0f, -3.51f}, {6, 15000.0f, -5.85f},
+};
+
+// Binding gate (Task 12): every tone within +/-1dB of the MEASURED shape,
+// 40Hz-15kHz, 1kHz-normalized. T2's notch tip is asserted for depth
+// character (-6.85dB @ ~660Hz measured) via the 630Hz spot, not single-bin.
+void checkIRShapes ()
+{
+    for (int tone = 1; tone <= 6; ++tone)
+    {
+        ToneBank bank;
+        bank.setSampleRate (48000.0);
+        bank.setTone (tone);
+        const float norm = bank.magnitudeAt (1000.0f);
+        float worst = 0.0f;
+        float worstFreq = 0.0f;
+        int count = 0;
+        for (const IrSpot& s : kIrSpots)
+        {
+            if (s.tone != tone)
+                continue;
+            ++count;
+            const float d = std::fabs ((bank.magnitudeAt (s.freqHz) - norm) - s.db);
+            if (d > worst)
+            {
+                worst = d;
+                worstFreq = s.freqHz;
+            }
+            REQUIRE (d <= 1.0f);
+        }
+        REQUIRE (count == 14);
+        std::printf ("tone %d IR-shape worst %+.3fdB at %.0fHz (%d pts)\n", tone, worst, worstFreq, count);
+    }
+}
+
 // Oracle-consistency table (measured 2026-10-02): the Task 2 eye-read header
 // and the machine-digitized CSV disagree by >1dB at 14 points, e.g. T2@400Hz
 // (header -8.5dB vs CSV -12.0dB) and T5@400Hz (-0.5dB vs +1.4dB). The
@@ -119,6 +183,11 @@ float sineRmsDb (ToneBank& bank, double sampleRate, double freqHz)
 // within +/-1dB of EITHER oracle. Task 8 IR comparison adjudicates.
 void checkHeaderOracle (const DenseCurve& csv)
 {
+    // REPORT-ONLY since Task 12: the fits track the measured IR shapes, which
+    // supersede both the eye-read header and the digitized CSV where they
+    // conflict (see IR_VALIDATION.md). Kept (ungated) because
+    // analysis/ir_check.py --verify-port compares its Python port against
+    // these printed C++ either-oracle values.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -129,21 +198,22 @@ void checkHeaderOracle (const DenseCurve& csv)
         {
             if (t.tone != tone)
                 continue;
-            REQUIRE (t.freqHz >= 40.0f && t.freqHz <= 15000.0f);
             const float m = bank.magnitudeAt (t.freqHz);
             const float dHeader = std::fabs (m - t.db);
             const float dCsv = std::fabs (m - denseAt (csv, tone, t.freqHz));
             const float dEither = dHeader < dCsv ? dHeader : dCsv;
             if (dEither > worstEither)
                 worstEither = dEither;
-            REQUIRE (dEither <= 1.0f);
         }
-        std::printf ("tone %d header-oracle worst either-oracle delta %+.3fdB\n", tone, worstEither);
+        std::printf ("tone %d header-oracle worst either-oracle delta %+.3fdB (report only)\n", tone, worstEither);
     }
 }
 
 void checkDenseCsv (const DenseCurve& csv)
 {
+    // REPORT-ONLY since Task 12: the fits track the measured IR shapes, which
+    // supersede the digitized manual chart where they conflict. Kept
+    // (ungated) to record the chart divergence honestly.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -164,10 +234,10 @@ void checkDenseCsv (const DenseCurve& csv)
                 worst = d;
                 worstFreq = f;
             }
-            REQUIRE (d <= 1.0f);
         }
         REQUIRE (count > 50);
-        std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts)\n", tone, worst, worstFreq, count);
+        std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts, report only)\n", tone, worst, worstFreq,
+                     count);
     }
 }
 
@@ -204,7 +274,7 @@ void checkTone2NotchDepth ()
     float deepFreq = 0.0f;
     for (int i = 0; i <= 200; ++i)
     {
-        const float f = 600.0f * static_cast<float> (std::pow (2.0, i / 200.0)); // 600..1200Hz
+        const float f = 500.0f * static_cast<float> (std::pow (2.0, i / 200.0)); // 500..1000Hz
         const float m = bank.magnitudeAt (f);
         if (m < deepest)
         {
@@ -212,14 +282,16 @@ void checkTone2NotchDepth ()
             deepFreq = f;
         }
     }
+    // Measured IR notch tip (1kHz-normalized): -6.84dB @ 661Hz; the absolute
+    // tip sits on the cascade's 1kHz level, so the gate stays well below it.
     std::printf ("tone 2 notch tip %+.2fdB at %.1fHz\n", deepest, deepFreq);
     REQUIRE (deepest < -12.0f);
 }
 
 void checkTone4DipPresent ()
 {
-    // Chart dip (~-3.5dB near 6kHz) falls between oracle points; assert the
-    // fitted shape carries a dip in 4-8kHz without pinning its exact tip.
+    // Measured IR dip (1kHz-normalized): -4.59dB @ ~7.6kHz; assert the fitted
+    // shape carries a dip in 4-8kHz without pinning its exact tip.
     ToneBank bank;
     bank.setSampleRate (48000.0);
     bank.setTone (4);
@@ -277,6 +349,7 @@ int main ()
     std::printf ("loaded %u dense CSV points from %s\n", (unsigned)csv.freqHz.size(), TONE_CSV_PATH);
 
     checkBypassFlat();
+    checkIRShapes();
     checkHeaderOracle (csv);
     checkDenseCsv (csv);
     checkTone2NotchDepth();

@@ -16,12 +16,14 @@ from src/dsp/ToneBank.h and src/dsp/HighCut.h. Equivalence is EXECUTED, not
 asserted: --verify-port (run on every invocation as part of the self-test
 section) recomputes the six per-tone either-oracle worst deltas
 (min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
-algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each to
-match the recorded C++ reference within 0.05 dB:
-  T1 0.47 / T2 0.75 / T3 0.27 / T4 0.48 / T5 0.11 / T6 0.30 dB.
-Actual port values (48 kHz): T1 0.4742 / T2 0.7506 / T3 0.2706 / T4 0.4835 /
-T5 0.1112 / T6 0.3005 dB (worst diff 0.0042 dB, far inside the 0.05 dB
-requirement).
+algorithm as tests/ToneBankTest.cpp checkHeaderOracle, report-only since
+Task 12) and requires each to match the recorded C++ reference within
+0.05 dB:
+  T1 1.62 / T2 1.98 / T3 0.45 / T4 3.94 / T5 2.91 / T6 7.05 dB.
+(The references are large because the Task 12 fits track the measured IR
+shapes, which supersede both the eye-read header and the digitized CSV
+where they conflict — see IR_VALIDATION.md. The check verifies port
+fidelity to C++, not fit quality.)
 
 Usage:
   python analysis/ir_check.py                  # self-test + real IRs if present
@@ -67,24 +69,24 @@ SELFTEST_TOL_DB = 0.05  # end-to-end (time-domain synth IR -> FFT -> analytic)
 # Verbatim from the header comment table.
 # ----------------------------------------------------------------------------
 TONE_PARAMS = {
-    10: ("hp", 22.0, 1.00, 0.0),
-    11: ("pk", 800.0, 0.20, -6.8),
-    12: ("hs", 13000.0, 1.30, 1.2),
-    20: ("pk", 680.0, 0.73, -21.0),
-    21: ("ls", 100.0, 1.60, 0.9),
-    22: ("hs", 3200.0, 0.20, 2.3),
-    30: ("pk", 600.0, 0.40, -3.7),
-    31: ("pk", 3200.0, 0.45, -2.3),
-    32: ("ls", 75.0, 1.00, 0.9),
-    40: ("ls", 794.0, 0.37, 1.8),
-    41: ("pk", 5715.0, 0.98, -4.2),
-    42: ("hs", 11576.0, 1.44, 1.4),
-    50: ("hp", 33.0, 0.30, 0.0),
-    51: ("ls", 130.0, 0.75, -3.7),
-    52: ("hs", 335.0, 0.70, 2.6),
-    60: ("ls", 78.0, 0.53, -15.8),
-    61: ("hs", 284.0, 0.72, 2.5),
-    62: ("hs", 10842.0, 0.83, -2.5),
+    10: ("hp", 19.4, 0.662, 0.0),
+    11: ("pk", 831.0, 0.20, -7.63),
+    12: ("hs", 7178.0, 0.530, 1.08),
+    20: ("pk", 659.0, 0.697, -20.67),
+    21: ("ls", 38.9, 0.637, -1.35),
+    22: ("hs", 3385.0, 0.498, 2.33),
+    30: ("pk", 422.0, 0.338, -2.48),
+    31: ("pk", 2876.0, 0.347, -2.26),
+    32: ("ls", 92.7, 0.947, 0.90),
+    40: ("ls", 46.3, 0.550, -1.40),
+    41: ("pk", 7217.0, 0.823, -3.91),
+    42: ("hs", 7094.0, 0.300, -2.31),
+    50: ("hp", 31.3, 0.355, 0.0),
+    51: ("ls", 93.7, 0.593, -3.45),
+    52: ("hs", 195.8, 0.537, 3.54),
+    60: ("ls", 58.2, 0.438, -22.05),
+    61: ("hs", 447.0, 0.300, -2.75),
+    62: ("hs", 9367.0, 0.705, -5.06),
 }
 
 
@@ -174,7 +176,7 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
 # Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal.
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 0.47, 2: 0.75, 3: 0.27, 4: 0.48, 5: 0.11, 6: 0.30}
+CXX_EITHER_REF_DB = {1: 1.62, 2: 1.98, 3: 0.45, 4: 3.94, 5: 2.91, 6: 7.05}
 PORT_VERIFY_TOL_DB = 0.05
 
 
