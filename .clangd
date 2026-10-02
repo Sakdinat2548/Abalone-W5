@@ -1,0 +1,5 @@
+# Abalone-U55 clangd: compilation database lives in build/.
+CompileFlags:
+  CompilationDatabase: build
+Index:
+  Background: Build

@@ -5,6 +5,9 @@ project(AbaloneU55 VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Export compile commands for clangd/clang-tidy.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Static MSVC runtime (/MT Release, /MTd Debug) so Sonar loads with no extra DLLs.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
