@@ -37,6 +37,8 @@ target_compile_definitions(ToneBankTest PRIVATE
 
 add_dsp_test(GainStageTest tests/GainStageTest.cpp)
 
+add_dsp_test(HighCutTest tests/HighCutTest.cpp)
+
 include(FetchContent)
 FetchContent_Declare(
     JUCE
