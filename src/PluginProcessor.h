@@ -65,10 +65,14 @@ private:
     // of the chains is never touched: bypass runs zero DSP, states frozen).
     void trackBypassPeak (const juce::AudioBuffer<float>& buffer, int activeChannels, int numSamples);
 
-    void pushChainParams (int boostStep, int tone, bool highcut, float trimDb, int activeChannels);
+    void pushChainParams (int boostStep, int tone, bool highcut, float trimDb, bool oversample, int activeChannels);
 
     juce::AudioProcessorValueTreeState apvts;
     std::array<ProcessorChain, 2> chains;
+    // Last latency reported via setLatencySamples (0 at 1x, the chain's
+    // exact 2x FIR delay when oversampled). Updated only on change: the
+    // toggle flips it in processBlock, the rate path in prepareToPlay.
+    int lastReportedLatency_ = 0;
     // Input-peak accumulator for the bypassed SIGNAL LED (reset-on-read).
     // Written on the audio thread, drained on the message thread.
     mutable std::atomic<float> bypassPeak_{0.0f};

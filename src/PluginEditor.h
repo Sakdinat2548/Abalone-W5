@@ -127,9 +127,19 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized () override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
 
 private:
     void timerCallback () override;
+
+    // ABALONE wordmark hit rect (paint-space): the centered header text
+    // plus padding. The header is a click target toggling the additive
+    // `oversample` Bool (2x on the ColorStage only, default off); cursor
+    // turns to a pointing hand over it. Engaged paints lit-red
+    // (button_on.png echo: red gradient + glow, never flat); the ACTIVE-off
+    // dim veil covers it like every other control except POWER.
+    juce::Rectangle<float> headerBounds () const;
 
     // -2dBFS signal-present threshold (spec: LED is signal-present, not clip).
     static constexpr float kLedThreshold = 0.79432823f; // 10^(-2/20).
@@ -192,6 +202,7 @@ private:
     bool ledOn = false;
     bool powerOn = true;
     bool dimVisible = false;
+    bool lastOsEngaged = false; // mirrors the `oversample` param (header red state).
     juce::String lastTrimText;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)

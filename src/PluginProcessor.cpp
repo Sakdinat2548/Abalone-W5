@@ -52,6 +52,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
     // flipping a preset param; host bypass is served by processBlockBypassed.
     params.push_back (std::make_unique<juce::AudioParameterBool> ("toneIn", "Tone In", true));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("active", "Active", true));
+    // Additive quality param (default false, so states saved before it
+    // existed load as 1x — the byte-identical default path). Driven by the
+    // ABALONE header click target in the editor; automation writes it
+    // directly. 2x wraps the ColorStage only (see ProcessorChain.h); the
+    // 2x FIR delay is reported via setLatencySamples on toggle + prepare.
+    params.push_back (std::make_unique<juce::AudioParameterBool> ("oversample", "Oversample", false));
     return {params.begin(), params.end()};
 }
 
@@ -72,6 +78,11 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
 {
     for (auto& chain : chains)
         chain.setSampleRate (sampleRate);
+    // Re-report after every rate change (the 1x/2x latency is
+    // rate-independent, but the host still needs a fresh value on
+    // re-prepare; the toggle path in processBlock covers switches).
+    lastReportedLatency_ = chains[0].getLatencySamples();
+    setLatencySamples (lastReportedLatency_);
 }
 
 void AbaloneW5AudioProcessor::releaseResources () {}
@@ -102,6 +113,7 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const bool highcut = apvts.getRawParameterValue ("highcut")->load() > 0.5f;
     const float trimDb = apvts.getRawParameterValue ("output")->load();
     const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
+    const bool oversample = apvts.getRawParameterValue ("oversample")->load() > 0.5f;
 
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
@@ -135,7 +147,18 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         return;
     }
 
-    pushChainParams (boostStep, tone, highcut, trimDb, monoDuplicate ? 1 : activeChannels);
+    pushChainParams (boostStep, tone, highcut, trimDb, oversample, monoDuplicate ? 1 : activeChannels);
+
+    // DAW compensation: the 2x FIR path adds the chain's exact group delay
+    // (0 at 1x). Reported on change only; the toggle flips it here, the
+    // rate path in prepareToPlay. Both chains share the same target, so
+    // chain[0] is the source of truth.
+    const int latency = chains[0].getLatencySamples();
+    if (latency != lastReportedLatency_)
+    {
+        lastReportedLatency_ = latency;
+        setLatencySamples (latency);
+    }
 
     if (monoDuplicate)
     {
@@ -162,7 +185,8 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         buffer.clear (ch, 0, numSamples);
 }
 
-void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool highcut, float trimDb, int activeChannels)
+void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool highcut, float trimDb, bool oversample,
+                                               int activeChannels)
 {
     for (int ch = 0; ch < activeChannels; ++ch)
     {
@@ -171,6 +195,7 @@ void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool hig
         chain.setTone (tone);
         chain.setHighcut (highcut);
         chain.setTrimDb (trimDb);
+        chain.setOversampled (oversample);
     }
 }
 

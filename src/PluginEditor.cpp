@@ -59,6 +59,17 @@ juce::Rectangle<int> scaledRect (const std::map<juce::String, juce::Rectangle<fl
                                  juce::roundToInt (r.getHeight() * static_cast<float> (h)));
 }
 
+// Measured width of the tracked-out header string (shared by the paint
+// routines and the click hit-test so the rect always matches the art).
+float headerTextWidth (const juce::Font& font, const juce::String& text, float trackingPx)
+{
+    float total = 0.0f;
+    for (int i = 0; i < text.length(); ++i)
+        total += juce::GlyphArrangement::getStringWidth (font, text.substring (i, i + 1));
+    total += trackingPx * static_cast<float> (juce::jmax (0, text.length() - 1));
+    return total;
+}
+
 // Engraved-plate lettering (two-pass: pale groove highlight below, dark face
 // on top) for the in-code ABALONE wordmark. The face is Cinzel Black 900
 // (OFL Trajan-class serif, vendored via BinaryData — stroke-matched to the
@@ -70,10 +81,7 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
                           float trackingPx)
 {
     const float fontSize = font.getHeight();
-    float total = 0.0f;
-    for (int i = 0; i < text.length(); ++i)
-        total += juce::GlyphArrangement::getStringWidth (font, text.substring (i, i + 1));
-    total += trackingPx * static_cast<float> (juce::jmax (0, text.length() - 1));
+    const float total = headerTextWidth (font, text, trackingPx);
 
     float x = cx - total * 0.5f;
     g.setFont (font);
@@ -86,6 +94,38 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
         g.drawText (ch, r.translated (0.0f, 1.0f), juce::Justification::centred, false);
         g.setColour (juce::Colour (0xff2e3234));
         g.drawText (ch, r, juce::Justification::centred, false);
+        x += w + trackingPx;
+    }
+}
+
+// Lit-header lettering for the oversample-engaged ABALONE wordmark: echoes
+// the lit red button face (button_on.png — warm salmon highlight over deep
+// red, sampled center-mean 240,151,138). Three passes per glyph, never a
+// flat fill: a translucent deep-red outer glow, a vertical gradient core
+// (bright top to deep bottom), and a pale 1px-up inner sheen.
+void drawHeaderLitCentred (juce::Graphics& g, const juce::Font& font, const juce::String& text, float cx, float cyMid,
+                           float trackingPx)
+{
+    const float fontSize = font.getHeight();
+    const float total = headerTextWidth (font, text, trackingPx);
+
+    float x = cx - total * 0.5f;
+    g.setFont (font);
+    for (int i = 0; i < text.length(); ++i)
+    {
+        const juce::String ch = text.substring (i, i + 1);
+        const float w = juce::GlyphArrangement::getStringWidth (font, ch);
+        const juce::Rectangle<float> r (x, cyMid - fontSize * 0.5f, w, fontSize);
+        g.setColour (juce::Colour (0x66c02718));
+        g.drawText (ch, r.translated (-1.5f, 0.0f), juce::Justification::centred, false);
+        g.drawText (ch, r.translated (1.5f, 0.0f), juce::Justification::centred, false);
+        g.drawText (ch, r.translated (0.0f, -1.5f), juce::Justification::centred, false);
+        g.drawText (ch, r.translated (0.0f, 1.5f), juce::Justification::centred, false);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff4705a), 0.0f, r.getY(), juce::Colour (0xff931c12),
+                                                 0.0f, r.getBottom(), false));
+        g.drawText (ch, r, juce::Justification::centred, false);
+        g.setColour (juce::Colour (0x55ffc9a8));
+        g.drawText (ch, r.translated (0.0f, -1.0f), juce::Justification::centred, false);
         x += w + trackingPx;
     }
 }
@@ -313,6 +353,11 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         dimOverlay.setVisible (dimVisible);
     }
 
+    // Initial header state from the `oversample` param (the timer keeps it
+    // live; this covers the first paint).
+    if (auto* osParam = apvts.getParameter ("oversample"))
+        lastOsEngaged = osParam->getValue() > 0.5f;
+
     // Initial readout text (the timer refreshes it; this covers first paint).
     if (auto* outParam = apvts.getParameter ("output"))
     {
@@ -351,7 +396,12 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     // measured cap at 32px is ~35px @2x = ~49px texture, matching the
     // hardware badge cap-height (50px) with matched stroke weight.
     const float sy = static_cast<float> (getHeight()) / 867.0f;
-    drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 98.5f * sy, 8.0f);
+    // Engaged (2x) paints the lit-red header; disengaged keeps the
+    // engraved plate look. The ACTIVE-off dim veil paints over both.
+    if (lastOsEngaged)
+        drawHeaderLitCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 98.5f * sy, 8.0f);
+    else
+        drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 98.5f * sy, 8.0f);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()
@@ -374,6 +424,35 @@ void AbaloneW5AudioProcessorEditor::resized ()
     dimOverlay.setBounds (0, 0, w, h);
 }
 
+// ABALONE header hit-test: the painted wordmark rect plus padding, using
+// the same metrics as the paint routines (texture y=98.5 cap-center, same
+// as paint; width from the measured tracked-out string).
+juce::Rectangle<float> AbaloneW5AudioProcessorEditor::headerBounds () const
+{
+    const float sy = static_cast<float> (getHeight()) / 867.0f;
+    const float cx = static_cast<float> (getWidth()) * 0.5f;
+    const float cyMid = 98.5f * sy;
+    const float w = headerTextWidth (headerFont, "ABALONE", 8.0f);
+    const float h = headerFont.getHeight();
+    constexpr float pad = 10.0f;
+    return juce::Rectangle<float> (cx - w * 0.5f - pad, cyMid - h * 0.5f - pad, w + 2.0f * pad, h + 2.0f * pad);
+}
+
+void AbaloneW5AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    // Header click toggles the additive `oversample` param (2x on the
+    // ColorStage only); automation writes the param directly.
+    if (headerBounds().contains (e.position))
+        if (auto* param = processor.getApvts().getParameter ("oversample"))
+            param->setValueNotifyingHost (param->getValue() > 0.5f ? 0.0f : 1.0f);
+}
+
+void AbaloneW5AudioProcessorEditor::mouseMove (const juce::MouseEvent& e)
+{
+    setMouseCursor (headerBounds().contains (e.position) ? juce::MouseCursor::PointingHandCursor
+                                                         : juce::MouseCursor::NormalCursor);
+}
+
 void AbaloneW5AudioProcessorEditor::timerCallback ()
 {
     const float peak = processor.getSignalPeak();
@@ -394,6 +473,18 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
         {
             dimVisible = shouldDim;
             dimOverlay.setVisible (dimVisible);
+        }
+    }
+
+    // Header red state follows the `oversample` param (click target,
+    // automation, presets); repaint only on change.
+    if (auto* osParam = processor.getApvts().getParameter ("oversample"))
+    {
+        const bool engaged = osParam->getValue() > 0.5f;
+        if (engaged != lastOsEngaged)
+        {
+            lastOsEngaged = engaged;
+            repaint();
         }
     }
 

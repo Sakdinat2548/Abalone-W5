@@ -220,6 +220,177 @@ void checkPeakTracker ()
     assert (after == 0.0f);
 }
 
+// (f) Oversample equivalence: 1kHz sine driven to +10dB peak at the color
+// stage (boost step 1 = +3dB, so the input peak is 10^(7/20) = 2.2387).
+// 1x-vs-2x fundamental must agree within +/-0.1dB (the tanh is gentle, so
+// 2x is future-proofing; the gate proves the resampler is transparent).
+// Correlation magnitude is phase-independent, so the 2x group delay does
+// not enter the comparison.
+float fundAmp (ProcessorChain& chain, double sampleRate, double freqHz, float amp)
+{
+    const int total = static_cast<int> (sampleRate * 2.0);
+    const int skip = static_cast<int> (sampleRate);
+    double re = 0.0;
+    double im = 0.0;
+    for (int n = 0; n < total; ++n)
+    {
+        const float x = amp * static_cast<float> (std::sin (2.0 * kPi * freqHz * static_cast<double> (n) / sampleRate));
+        const float y = chain.processSample (x);
+        if (n >= skip)
+        {
+            const double a = 2.0 * kPi * freqHz * static_cast<double> (n) / sampleRate;
+            re += static_cast<double> (y) * std::cos (a);
+            im += static_cast<double> (y) * std::sin (a);
+        }
+    }
+    const int measured = total - skip;
+    return static_cast<float> (2.0 * std::hypot (re, im) / static_cast<double> (measured));
+}
+
+void checkOsEquivalence ()
+{
+    const double sampleRate = 48000.0;
+    const float amp = std::pow (10.0f, 7.0f / 20.0f); // +7dB in, +3dB boost -> +10dB at color.
+
+    ProcessorChain oneX;
+    oneX.setSampleRate (sampleRate);
+    oneX.setBoostStep (1);
+    oneX.setTone (0);
+    oneX.setHighcut (false);
+    oneX.setTrimDb (0.0f);
+    oneX.setOversampled (false);
+    const float a1 = fundAmp (oneX, sampleRate, 1000.0, amp);
+
+    ProcessorChain twoX;
+    twoX.setSampleRate (sampleRate);
+    twoX.setBoostStep (1);
+    twoX.setTone (0);
+    twoX.setHighcut (false);
+    twoX.setTrimDb (0.0f);
+    twoX.setOversampled (true);
+    const float a2 = fundAmp (twoX, sampleRate, 1000.0, amp);
+
+    const float diffDb = 20.0f * std::log10 (a2 / a1);
+    std::printf ("os 1x-vs-2x fundamental @1kHz/+10dB: %+0.4fdB (expect 0 +/- 0.1)\n", diffDb);
+    std::fflush (stdout);
+    assert (std::fabs (diffDb) < 0.1f);
+}
+
+// (g) Latency truth: impulse through a tone-bypass/highcut-off chain; the
+// output peak index must equal the reported latency (0 at 1x, the FIR
+// group delay at 2x), at both rates. The default (untouched) chain must
+// report 1x / zero latency.
+void checkOsLatencyTruth ()
+{
+    {
+        ProcessorChain fresh;
+        std::printf ("os default: oversampled=%d latency=%d (expect 0 0)\n", static_cast<int> (fresh.isOversampled()),
+                     fresh.getLatencySamples());
+        assert (!fresh.isOversampled());
+        assert (fresh.getLatencySamples() == 0);
+    }
+
+    const double rates[2] = {48000.0, 44100.0};
+    for (int r = 0; r < 2; ++r)
+    {
+        const double sampleRate = rates[r];
+        for (int os = 0; os < 2; ++os)
+        {
+            ProcessorChain chain;
+            chain.setSampleRate (sampleRate);
+            chain.setBoostStep (1);
+            chain.setTone (0);
+            chain.setHighcut (false);
+            chain.setTrimDb (0.0f);
+            chain.setOversampled (os != 0);
+
+            // Flush past the entry blends (tone 10ms + os 5ms) with silence
+            // so the impulse below exercises the steady path only: without
+            // this the 5ms crossfade mixes the undelayed 1x path into the
+            // first 240 samples and the peak trivially sits at 0.
+            for (int n = 0; n < 4096; ++n)
+                chain.processSample (0.0f);
+
+            const int window = 256;
+            static float buf[256];
+            assert (window <= 256);
+            for (int n = 0; n < window; ++n)
+                buf[n] = chain.processSample (n == 0 ? 0.1f : 0.0f);
+
+            int peakIdx = 0;
+            float peakMag = 0.0f;
+            for (int n = 0; n < window; ++n)
+            {
+                const float m = std::fabs (buf[n]);
+                if (m > peakMag)
+                {
+                    peakMag = m;
+                    peakIdx = n;
+                }
+            }
+
+            const int reported = chain.getLatencySamples();
+            const int expected = (os != 0) ? ProcessorChain::kOsLatencySamples : 0;
+            std::printf ("os latency %s @ %.0fHz: peak at %d, reported %d (expect %d)\n", os != 0 ? "2x" : "1x",
+                         sampleRate, peakIdx, reported, expected);
+            std::fflush (stdout);
+            assert (reported == expected);
+            assert (peakIdx == reported);
+        }
+    }
+}
+
+// (h) Oversample-toggle no-click: steady 220Hz sine, flip 1x->2x then 2x->1x
+// mid-stream; no sample-to-sample jump above 0.3x local RMS in the 50ms
+// window after each flip (5ms equal-power xfade, same idiom as the tone
+// switch, so the same limit applies).
+void checkOsToggleOneFlip (bool toOversampled)
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    chain.setBoostStep (1);
+    chain.setTone (3);
+    chain.setHighcut (false);
+    chain.setTrimDb (0.0f);
+    chain.setOversampled (!toOversampled);
+    // Settle past the arming-blend transient so the measured flip starts
+    // from a steady path.
+    for (int i = 0; i < 48000; ++i)
+        chain.processSample (0.5f *
+                             static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (i) / 48000.0)));
+
+    float prev = chain.processSample (
+        0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (48000) / 48000.0)));
+
+    chain.setOversampled (toOversampled);
+
+    const int window = 2400; // 50ms @48k.
+    static float buf[2400];
+    float maxJump = 0.0f;
+    for (int i = 0; i < window; ++i)
+    {
+        const float x =
+            0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (48000 + 1 + i) / 48000.0));
+        buf[i] = chain.processSample (x);
+        const float jump = std::fabs (buf[i] - prev);
+        if (jump > maxJump)
+            maxJump = jump;
+        prev = buf[i];
+    }
+
+    const float localRms = rms (buf, 0, window);
+    std::printf ("os-toggle %s: maxJump %0.5f, localRMS %0.4f, limit %0.4f\n", toOversampled ? "1x->2x" : "2x->1x",
+                 maxJump, localRms, 0.3f * localRms);
+    std::fflush (stdout);
+    assert (maxJump < 0.3f * localRms);
+}
+
+void checkOsToggleNoClick ()
+{
+    checkOsToggleOneFlip (true);
+    checkOsToggleOneFlip (false);
+}
+
 } // namespace
 
 int main ()
@@ -229,6 +400,9 @@ int main ()
     checkBoostAndTrim();
     checkHighcutEndToEnd();
     checkPeakTracker();
+    checkOsEquivalence();
+    checkOsLatencyTruth();
+    checkOsToggleNoClick();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }
