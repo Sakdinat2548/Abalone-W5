@@ -1,19 +1,19 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
-AbaloneU55AudioProcessorEditor::AbaloneU55AudioProcessorEditor (AbaloneU55AudioProcessor& p) : AudioProcessorEditor (&p)
+AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p) : AudioProcessorEditor (&p)
 {
     setSize (400, 300);
 }
 
-AbaloneU55AudioProcessorEditor::~AbaloneU55AudioProcessorEditor () = default;
+AbaloneW5AudioProcessorEditor::~AbaloneW5AudioProcessorEditor () = default;
 
-void AbaloneU55AudioProcessorEditor::paint (juce::Graphics& g)
+void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
     g.setColour (juce::Colours::white);
     g.setFont (15.0f);
-    g.drawFittedText ("Abalone-U55", getLocalBounds(), juce::Justification::centred, 1);
+    g.drawFittedText ("Abalone W5", getLocalBounds(), juce::Justification::centred, 1);
 }
 
-void AbaloneU55AudioProcessorEditor::resized () {}
+void AbaloneW5AudioProcessorEditor::resized () {}

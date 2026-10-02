@@ -1,13 +1,13 @@
-# AGENTS.md — Abalone-U55 v1 (read first)
+# AGENTS.md — Abalone W5 v1 (read first)
 
 U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 
 ## Commands (verbatim)
 
 - Configure: `cmake -B build -G "Visual Studio 16 2019" -A x64`
-- Build: `cmake --build build --target AbaloneU55_VST3 --config Release`
+- Build: `cmake --build build --target AbaloneW5_VST3 --config Release`
 - Tests: `ctest --test-dir build --output-on-failure`
-- Format gate: `clang-format --dry-run --Werror src/*` clean every commit
+- Format gate: `clang-format --dry-run --Werror "src/*.cpp" "src/*.h"` clean every commit
 
 ## Toolchain
 
@@ -18,7 +18,7 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 ## Repo map
 
 - `src/` PluginProcessor/Editor; `src/dsp/` per-stage DSP (planned).
-- `tests/` per-stage gtest + oracle vs manual curves; `analysis/` IR FFT scripts.
+- `tests/` per-stage plain-CTest asserts + oracle vs manual curves; `analysis/` IR FFT scripts.
 - `docs/` refs. Root: `.clang-format` `.clang-tidy` `.clangd` `CMakeLists.txt`.
 - VST3 Windows only; 44.1k + 48k must pass.
 

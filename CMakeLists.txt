@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneU55 VERSION 1.0.0)
+project(AbaloneW5 VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,27 +19,27 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
-juce_add_plugin(AbaloneU55
+juce_add_plugin(AbaloneW5
     COMPANY_NAME "Abalone"
     PLUGIN_MANUFACTURER_CODE Abal
     PLUGIN_CODE Au55
     FORMATS VST3
-    PRODUCT_NAME "Abalone-U55"
+    PRODUCT_NAME "Abalone W5"
 )
 
-target_sources(AbaloneU55 PRIVATE
+target_sources(AbaloneW5 PRIVATE
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
 )
 
-target_compile_definitions(AbaloneU55
+target_compile_definitions(AbaloneW5
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
-target_link_libraries(AbaloneU55
+target_link_libraries(AbaloneW5
     PRIVATE
         juce::juce_audio_utils
     PUBLIC

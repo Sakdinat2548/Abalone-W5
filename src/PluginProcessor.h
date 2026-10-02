@@ -2,11 +2,11 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
-class AbaloneU55AudioProcessor : public juce::AudioProcessor
+class AbaloneW5AudioProcessor : public juce::AudioProcessor
 {
 public:
-    AbaloneU55AudioProcessor ();
-    ~AbaloneU55AudioProcessor () override;
+    AbaloneW5AudioProcessor ();
+    ~AbaloneW5AudioProcessor () override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources () override;
@@ -35,5 +35,5 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneU55AudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessor)
 };

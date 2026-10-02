@@ -1,32 +1,32 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-AbaloneU55AudioProcessor::AbaloneU55AudioProcessor ()
+AbaloneW5AudioProcessor::AbaloneW5AudioProcessor ()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
 }
 
-AbaloneU55AudioProcessor::~AbaloneU55AudioProcessor () = default;
+AbaloneW5AudioProcessor::~AbaloneW5AudioProcessor () = default;
 
-const juce::String AbaloneU55AudioProcessor::getName () const { return JucePlugin_Name; }
+const juce::String AbaloneW5AudioProcessor::getName () const { return JucePlugin_Name; }
 
-bool AbaloneU55AudioProcessor::acceptsMidi () const { return false; }
-bool AbaloneU55AudioProcessor::producesMidi () const { return false; }
-bool AbaloneU55AudioProcessor::isMidiEffect () const { return false; }
-double AbaloneU55AudioProcessor::getTailLengthSeconds () const { return 0.0; }
+bool AbaloneW5AudioProcessor::acceptsMidi () const { return false; }
+bool AbaloneW5AudioProcessor::producesMidi () const { return false; }
+bool AbaloneW5AudioProcessor::isMidiEffect () const { return false; }
+double AbaloneW5AudioProcessor::getTailLengthSeconds () const { return 0.0; }
 
-int AbaloneU55AudioProcessor::getNumPrograms () { return 1; }
-int AbaloneU55AudioProcessor::getCurrentProgram () { return 0; }
-void AbaloneU55AudioProcessor::setCurrentProgram (int) {}
-const juce::String AbaloneU55AudioProcessor::getProgramName (int) { return {}; }
-void AbaloneU55AudioProcessor::changeProgramName (int, const juce::String&) {}
+int AbaloneW5AudioProcessor::getNumPrograms () { return 1; }
+int AbaloneW5AudioProcessor::getCurrentProgram () { return 0; }
+void AbaloneW5AudioProcessor::setCurrentProgram (int) {}
+const juce::String AbaloneW5AudioProcessor::getProgramName (int) { return {}; }
+void AbaloneW5AudioProcessor::changeProgramName (int, const juce::String&) {}
 
-void AbaloneU55AudioProcessor::prepareToPlay (double, int) {}
-void AbaloneU55AudioProcessor::releaseResources () {}
+void AbaloneW5AudioProcessor::prepareToPlay (double, int) {}
+void AbaloneW5AudioProcessor::releaseResources () {}
 
-bool AbaloneU55AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool AbaloneW5AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
         layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
@@ -38,22 +38,22 @@ bool AbaloneU55AudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
     return true;
 }
 
-void AbaloneU55AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused (buffer);
     // Bypass-flat pass-through: no DSP yet (Task 7 wires the chain).
 }
 
-juce::AudioProcessorEditor* AbaloneU55AudioProcessor::createEditor ()
+juce::AudioProcessorEditor* AbaloneW5AudioProcessor::createEditor ()
 {
-    return new AbaloneU55AudioProcessorEditor (*this);
+    return new AbaloneW5AudioProcessorEditor (*this);
 }
 
-bool AbaloneU55AudioProcessor::hasEditor () const { return true; }
+bool AbaloneW5AudioProcessor::hasEditor () const { return true; }
 
-void AbaloneU55AudioProcessor::getStateInformation (juce::MemoryBlock&) {}
+void AbaloneW5AudioProcessor::getStateInformation (juce::MemoryBlock&) {}
 
-void AbaloneU55AudioProcessor::setStateInformation (const void*, int) {}
+void AbaloneW5AudioProcessor::setStateInformation (const void*, int) {}
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter () { return new AbaloneU55AudioProcessor(); }
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter () { return new AbaloneW5AudioProcessor(); }
