@@ -22,9 +22,9 @@ function(add_dsp_test name)
     # /U (MSVC) / -U (GNU/Clang) undefines the flag-injected NDEBUG for this
     # target only; it sorts after CMAKE_CXX_FLAGS_RELEASE on the command line.
     if (MSVC)
-        target_compile_options(${name} PRIVATE $<$<CONFIG:Release>:/UNDEBUG>)
+        target_compile_options(${name} PRIVATE $<$<NOT:$<CONFIG:Debug>>:/UNDEBUG>)
     else ()
-        target_compile_options(${name} PRIVATE $<$<CONFIG:Release>:-UNDEBUG>)
+        target_compile_options(${name} PRIVATE $<$<NOT:$<CONFIG:Debug>>:-UNDEBUG>)
     endif ()
     add_test(NAME ${name} COMMAND ${name})
 endfunction()

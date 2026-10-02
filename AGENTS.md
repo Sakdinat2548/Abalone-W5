@@ -7,7 +7,7 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 - Configure: `cmake -B build -G "Visual Studio 16 2019" -A x64`
 - Build: `cmake --build build --target AbaloneW5_VST3 --config Release`
 - Tests: `ctest --test-dir build --output-on-failure`
-- Format gate: `clang-format --dry-run --Werror "src/*.cpp" "src/*.h"` clean every commit
+- Format gate: `clang-format --dry-run --Werror "src/*.cpp" "src/*.h" "src/dsp/*.h" "tests/*.cpp"` clean every commit
 
 ## Toolchain
 
