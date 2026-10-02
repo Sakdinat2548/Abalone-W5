@@ -64,18 +64,30 @@ target_sources(AbaloneW5 PRIVATE
     src/PluginEditor.cpp
 )
 
-# UI skins: only the single-frame on/off PNGs are embedded (toggles + LED).
-# knob_boost/knob_tone.png are single 224x224 frames, not vertical filmstrips,
-# so the rotary sliders stay stock; u5_front.png is a layout reference in
-# docs/refs/ and is not embedded.
+# UI skins + layout data, embedded as BinaryData (decoded once on the message
+# thread in the editor constructor, never on the audio thread).
+# - u5_front_clean.png: user-cleaned U5 plate (knobs/buttons/LEDs removed, dial
+#   rings + numerals + labels intact, W5 mark) drawn 1:1 as the editor faceplate.
+# - knob_boost/tone_no_pointer.png: 224x224 photo knob bodies WITHOUT pointers.
+#   NEVER rotated (baked off-axis highlights + edge numeral fragments would
+#   swing): drawn static + circular-clipped, value shown by a drawn needle.
+# - button_on/off.png, led_on/off.png: single-frame toggle + LED skins.
+# - component_positions.csv: all live-element rects as texture ratios
+#   (Obsidian pattern — positions are data, not magic numbers; the editor parses
+#   this at construction). docs/refs/u5_front.png stays a layout reference only
+#   and is not embedded.
 juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
+        ui/u5_front_clean.png
+        ui/knob_boost_no_pointer.png
+        ui/knob_tone_no_pointer.png
         ui/button_on.png
         ui/button_off.png
         ui/led_on.png
         ui/led_off.png
+        ui/component_positions.csv
 )
 
 target_compile_definitions(AbaloneW5

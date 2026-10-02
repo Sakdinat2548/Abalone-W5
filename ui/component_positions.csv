@@ -1,0 +1,17 @@
+# Abalone W5 — hardware-look editor geometry.
+# All positions are ratios of the base texture size (ui/u5_front_clean.png, 2136x970).
+# cx,cy = element center (x/2136, y/970); w,h = element size (w/2136, h/970).
+# Dial w/h is the photo-knob frame side (square in texture pixels; the editor is
+# aspect-locked to the texture so it stays square on screen). Knob bodies are
+# NEVER rotated: the frame is drawn static and circular-clipped, a needle shows
+# value. Needle angles are clockwise-from-12 in texture space (y-down).
+# Measured from docs/refs/u5_front.png (knob/button/LED removal blobs) with ring
+# cross-checks on the cleaned plate; see task-10 report for method.
+name,cx,cy,w,h,note
+boost_dial,0.207397,0.464948,0.127341,0.280412,knob values 1-10 needle_start_deg=219 sweep_deg=271
+tone_dial,0.787453,0.461856,0.128277,0.282474,knob values 1-6 needle_start_deg=267 sweep_deg=186 engage_button=tone_button
+highcut_button,0.168070,0.769072,0.050562,0.061856,red HIGH CUT button bottom-left (SPEAKER slot stays empty)
+tone_button,0.836142,0.769072,0.050562,0.061856,red TONE button bottom-right (ACTIVE slot stays empty)
+signal_led,0.319288,0.770103,0.022472,0.049485,live SIGNAL LED at -2dBFS threshold
+power_led,0.676966,0.767010,0.022472,0.049485,blue POWER LED always on
+trim_dial,0.497191,0.898969,0.020600,0.045361,small OUTPUT TRIM under W5 oval (deliberate addition; hardware has none) values -12..+12dB needle_start_deg=225 sweep_deg=270
