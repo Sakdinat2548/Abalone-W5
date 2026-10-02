@@ -9,3 +9,6 @@ cmake_install.cmake
 *.o
 *.obj
 docs/refs/KurtJamesWernerDissertation-augmented.pdf
+# Task 8: local-only IR + capture dirs (T3K license / user recordings -- NEVER commit WAVs)
+analysis/ir_local/
+analysis/zoom_ref/
