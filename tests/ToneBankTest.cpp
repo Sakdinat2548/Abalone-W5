@@ -184,7 +184,8 @@ void checkIRShapes ()
 // within +/-1dB of EITHER oracle. Task 8 IR comparison adjudicates.
 // Binding gate (Task 20, numbers refit to the digitized CSV): the CSV binds
 // full-band — every tone within +/-0.5dB of the CSV at every 40Hz-15kHz CSV
-// point (Fix Round 1: T1 recorded deviation 0.55, dense gate 0.6 for T1 — see
+// point (Fix Round 2: T1 recorded deviation 0.97, dense gate 1.0 for T1; T3
+// 0.54, gate 0.6 — see
 // ToneBank.h). Either-oracle worsts are printed per run (the check passes
 // trivially: a +/-0.5dB CSV track is always within +/-1dB of (at least) the
 // CSV side); analysis/ir_check.py --verify-port compares its Python port
@@ -221,17 +222,19 @@ void checkDenseCsv (const DenseCurve& csv)
 {
     // GATED since Task 20 (was +/-1dB since Task 15): every tone within
     // +/-0.5dB of the digitized CSV over 40Hz-15kHz at every CSV point —
-    // EXCEPT T1, whose dense gate is +/-0.6dB (Fix Round 1 recorded deviation:
-    // the -3dB 10Hz anchor pins the highpass at ~15Hz while the CSV foot sits
-    // at +0.64dB @ 40Hz — closed-form floor ~= 0.55dB, four optimizer runs
-    // stall at 0.55-0.70; anchor wins per tie-break, see ToneBank.h).
-    // Fix-1 worsts T1-T6: 0.55/0.48/0.19/0.44/0.32/0.40 dB.
+    // EXCEPT T1, whose dense gate is +/-1.0dB, and T3 at +/-0.6dB (Fix
+    // Round 2 recorded deviations: the 20 Hz = 0 dB eye demand forces the
+    // low corners down while the 40-60 Hz CSV foot stays up — one knee
+    // cannot sit in two places; closed-form floors 0.97 (T1, peak frozen
+    // to protect the scoop) and 0.54 (T3); eye wins per tie-break, see
+    // ToneBank.h).
+    // Fix-2 worsts T1-T6: 0.97/0.48/0.54/0.48/0.32/0.46 dB.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
         bank.setSampleRate (48000.0);
         bank.setTone (tone);
-        const float gate = (tone == 1) ? 0.6f : 0.5f;
+        const float gate = (tone == 1) ? 1.0f : (tone == 3) ? 0.6f : 0.5f;
         float worst = 0.0f;
         float worstFreq = 0.0f;
         int count = 0;
@@ -263,15 +266,15 @@ void checkLowEndCsv (const DenseCurve& csv)
     // tension at ~196Hz, accepted as physics). The 10-40Hz CSV band is
     // EXCLUDED: T1/T3/T4 read identical within <=0.11dB there despite
     // different low-end circuits (digitization floor), and the 5Hz
-    // DC-blocker owns sub-40 behavior by design. Fix Round 1 recorded
-    // deviation: T1 lands 0.55 (gate 0.6 — anchor-forced, see checkDenseCsv
-    // note; anchor wins per tie-break).
+    // DC-blocker owns sub-40 behavior by design. Fix Round 2 recorded
+    // deviations: T1 lands 0.97 (gate 1.0) and T3 lands 0.54 (gate 0.6) —
+    // the 20 Hz eye price (see checkDenseCsv note; eye wins per tie-break).
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
         bank.setSampleRate (48000.0);
         bank.setTone (tone);
-        const float gate = (tone == 1) ? 0.6f : (tone == 2) ? 0.5f : 0.3f;
+        const float gate = (tone == 1) ? 1.0f : (tone == 3) ? 0.6f : (tone == 2) ? 0.5f : 0.3f;
         float worst = 0.0f;
         float worstFreq = 0.0f;
         int count = 0;
@@ -381,7 +384,7 @@ void checkRateInvariance ()
 {
     // 44.1k/48k agreement within 0.1dB at the seven probes — EXCEPT T4, whose
     // gate is 0.3dB (Fix Round 1 recorded deviation: the anchor-forced deep
-    // peak warps 0.243dB at the 15kHz probe, 0.13 at 10kHz — per-section
+    // peak warps 0.244dB at the 15kHz probe, 0.13 at 10kHz — per-section
     // diagnostic pins the peak; refits from both seeds floor at 0.24, so the
     // floor is structural; 0.24dB @ 15kHz across rates is inaudible).
     const float probes[7] = {40.0f, 100.0f, 400.0f, 1000.0f, 4000.0f, 10000.0f, 15000.0f};
@@ -408,8 +411,8 @@ void checkAbsoluteAnchors ()
     // T5 -22 / T6 -22 within +/-2.0dB (their HP skirts are near-vertical
     // there, so the gate is looser by design). Compared UNNORMALIZED:
     // ToneBank has no overall-gain stage, so magnitudeAt IS the absolute
-    // response — no harness normalization to mirror. Fix-1 deltas:
-    // 0.84/0.95/0.22/0.40/1.21/1.50 dB.
+    // response — no harness normalization to mirror. Fix-2 deltas:
+    // 0.80/0.95/0.80/0.15/1.21/1.04 dB.
     const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -22.0f};
     for (int tone = 1; tone <= 6; ++tone)
     {
@@ -422,6 +425,75 @@ void checkAbsoluteAnchors ()
         std::printf ("tone %d 10Hz absolute %+.3fdB vs anchor %+.2f (delta %.3f, gate %.1f)\n", tone, m, anchors[tone],
                      d, gate);
         REQUIRE (d <= gate);
+    }
+}
+
+void checkEyeLowEnd (const DenseCurve& csv)
+{
+    // GATED since Fix Round 2: the user's overlay read of the manual's left
+    // third (10-200 Hz). All magnitudeAt @ 48 kHz, deterministic.
+    // - T1 20 Hz on 0 dB (+/-0.5; HEAD +3.40) and the knee hump gone
+    //   (max over the 10-40 Hz CSV points <= +1.2 dB; HEAD +3.85).
+    // - T2: NO new gate — finding 2's curve is structurally unrenderable
+    //   numbers-only (see ToneBank.h T2 shortfall; numbers kept, anchor
+    //   +/-1.0 still guards 10 Hz). Gating the unreachable would red the
+    //   suite; the shortfall is recorded, not gated.
+    // - T3/T4 20 Hz on 0 dB (+/-0.5; HEAD -3.79/-2.43) with a monotonic
+    //   convex rise 10->15->20->30 (T4 also 30->40); the 0.02 dB positive
+    //   margin rejects flat/rounding ties, deterministic.
+    // - T6 10-20 Hz slope within 1.0 dB/oct of T5's slope (same steep HP
+    //   foot family; HEAD delta 3.21, now 0.74).
+    {
+        ToneBank t1;
+        t1.setSampleRate (48000.0);
+        t1.setTone (1);
+        const float t1_20 = t1.magnitudeAt (20.0f);
+        std::printf ("tone 1 20Hz %+.3fdB (eye 0 +/-0.5)\n", t1_20);
+        REQUIRE (std::fabs (t1_20) <= 0.5f);
+        float t1hump = -100.0f;
+        for (float f : csv.freqHz)
+        {
+            if (f < 10.0f || f > 40.0f)
+                continue;
+            const float m = t1.magnitudeAt (f);
+            if (m > t1hump)
+                t1hump = m;
+        }
+        std::printf ("tone 1 10-40Hz hump max %+.3fdB (eye <= +1.2)\n", t1hump);
+        REQUIRE (t1hump <= 1.2f);
+    }
+    for (int tone = 3; tone <= 4; ++tone)
+    {
+        ToneBank bank;
+        bank.setSampleRate (48000.0);
+        bank.setTone (tone);
+        const float m10 = bank.magnitudeAt (10.0f);
+        const float m15 = bank.magnitudeAt (15.0f);
+        const float m20 = bank.magnitudeAt (20.0f);
+        const float m30 = bank.magnitudeAt (30.0f);
+        std::printf ("tone %d 10/15/20/30Hz %+.3f/%+.3f/%+.3f/%+.3fdB\n", tone, m10, m15, m20, m30);
+        REQUIRE (std::fabs (m20) <= 0.5f);
+        REQUIRE (m15 - m10 > 0.02f);
+        REQUIRE (m20 - m15 > 0.02f);
+        REQUIRE (m30 - m20 > 0.02f);
+        if (tone == 4)
+        {
+            const float m40 = bank.magnitudeAt (40.0f);
+            std::printf ("tone 4 40Hz %+.3fdB\n", m40);
+            REQUIRE (m40 - m30 > 0.02f);
+        }
+    }
+    {
+        ToneBank t5;
+        t5.setSampleRate (48000.0);
+        t5.setTone (5);
+        ToneBank t6;
+        t6.setSampleRate (48000.0);
+        t6.setTone (6);
+        const float s5 = t5.magnitudeAt (20.0f) - t5.magnitudeAt (10.0f);
+        const float s6 = t6.magnitudeAt (20.0f) - t6.magnitudeAt (10.0f);
+        std::printf ("t5 slope %+.3f t6 slope %+.3f delta %.3f (eye <= 1.0)\n", s5, s6, std::fabs (s6 - s5));
+        REQUIRE (std::fabs (s6 - s5) <= 1.0f);
     }
 }
 
@@ -439,6 +511,7 @@ int main ()
     checkDenseCsv (csv);
     checkLowEndCsv (csv);
     checkAbsoluteAnchors();
+    checkEyeLowEnd (csv);
     checkTone2NotchDepth();
     checkTone4DipPresent();
     checkProcessSampleAgreement();

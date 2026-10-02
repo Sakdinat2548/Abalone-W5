@@ -1,6 +1,78 @@
-# IR validation (Tasks 8 + 12 + 15 + 17 + 20 + Fix Round 1) — method, status, measured results
+# IR validation (Tasks 8 + 12 + 15 + 17 + 20 + Fix Rounds 1–2) — method, status, measured results
 
 ## Status history
+
+### Fix Round 2 (low-end eye corrections) COMPLETE except T2-curve ruling
+
+The user's overlay read of the manual's left third (10–200 Hz) retargets the
+low end below 40 Hz, where the CSV is excluded (Ruling B) and only the six
+10 Hz anchors bound. T5 is the untouched reference (numbers byte-identical —
+no T2-style drift). T2 keeps HEAD numbers byte-identical too: finding 2's
+curve is structurally unrenderable numbers-only (recorded shortfall below),
+so there was no gate-safe move; the anchor gate (±1.0) still guards its
+10 Hz point.
+
+| Tone | Dense 40–15k (gate) | Low-end 40–200 (gate) | 10 Hz abs / delta (gate) | 20 Hz eye / slope (gate) |
+|------|---------------------|----------------------|--------------------------|--------------------------|
+| 1 | 0.965 @ 49 Hz (±1.0 DEVIATION) | 0.965 @ 49 Hz (±1.0 DEVIATION) | −3.81 / 0.81 (±1.0) PASS | +0.31 @ 20 Hz (±0.5) PASS; hump max +0.32 (±1.2 hump cap) |
+| 2 | 0.481 @ 86 Hz (±0.5) PASS | 0.481 @ 86 Hz (±0.5) PASS | +0.70 / 0.95 (±1.0) PASS | curve SHORTFALL (see below — not gated) |
+| 3 | 0.540 @ 49 Hz (±0.6 DEVIATION) | 0.540 @ 49 Hz (±0.6 DEVIATION) | −3.77 / 0.77 (±1.0) PASS | +0.27 @ 20 Hz (±0.5) PASS; monotonic 10-15-20-30 |
+| 4 | 0.480 @ 5.3 kHz (±0.5) PASS | 0.282 @ 81 Hz (±0.3) PASS | −2.79 / 0.21 (±1.0) PASS | −0.01 @ 20 Hz (±0.5) PASS; monotonic 10-40 |
+| 5 | 0.319 @ 477 Hz (±0.5) PASS | 0.227 @ 40 Hz (±0.3) PASS | −23.21 / 1.21 (±2.0) PASS | slope ref +5.80 dB/oct (untouched) |
+| 6 | 0.460 @ 12.8 kHz (±0.5) PASS | 0.261 @ 196 Hz (±0.3) PASS | −23.06 / 1.06 (±2.0) PASS | slope +5.10, delta 0.70 vs T5 (±1.0) PASS |
+
+(C++ `ToneBankTest` actuals at 48 kHz; rate probes: T1 0.030 / T2 0.065 /
+T3 0.033 / T4 0.244 (±0.3 DEVIATION, unchanged) / T5 0.000 / T6 0.094 —
+all in gate. Either-oracle advisory (±1.0): 0.82/0.44/0.33/0.47/0.23/0.28 —
+all pass. Port GREEN worst diff 0.0055 dB; self-test GREEN.)
+
+Per-finding numbers (where each came from — closed-form where visible,
+bounded Nelder-Mead multi-start search only where coupled):
+- Finding 1 (T1 20 Hz = 0 dB, hump gone, 10 Hz held): HP corner 14.859 →
+  12.344 Hz from the anchor+knee closed form, Q 1.5 → 0.8499 from the
+  hump-kill (peak/shelf frozen — the approved scoop stays bit-identical:
+  bottom −7.03 dB @ 697 Hz vs CSV −7.18). Wart +3.85 → +0.32 dB max over
+  10–40 Hz. Price: the 40–60 Hz foot (anchor-pinned HP ≈ 0 dB + peak skirt
+  ≈ −0.5 dB vs CSV +0.5–0.6 dB) lands 0.965 @ ~49 Hz — closed-form floor,
+  joint HP+peak search only moves the pain into the scoop, so gates widen
+  0.6 → 1.0 (RECORDED OVERRIDE, eye wins ties).
+- Finding 2 (T2 curve — NOT MET, ruling needed): numbers UNCHANGED.
+  Structural evidence: below ~60 Hz only the lowshelf acts (peaks/HS ≈ 0 dB
+  there) and one shelf has a single transition, but the ink needs two
+  features (rise 10→27, fall 50→100) while dense pins 40 Hz at +1.04 ±0.5
+  (forces gain ≈ +0.7, hence the flat floor) and the 60–150 Hz peak-skirt
+  complementarity pins the corner ≈ 75 Hz. Eye-hard probe (10 Hz −0.25
+  ±0.25, 27 Hz +1.3 ±0.35 as unbreakable walls) BREAKS both walls
+  (+0.48/+0.66) while destroying the foot (1.72 @ 40 Hz); positive-gain
+  shelves overshoot the wrong way (measured dip, no bump). Options: 5th
+  section (dedicated ~27 Hz hump), peak role-change (escalate first), or
+  accepted flatness.
+- Finding 3 (T3/T4 convex through 0 dB @ 20 Hz): T3 LS corner 31.232 →
+  14.795 Hz (knee position from the 10/20 Hz closed form) + scoop peak
+  Q 0.2315 → 0.28 in-role (foot relief; Q at cap, noted); T4 LS 25.902 →
+  18.189 Hz + HS 126.355 → 100.0 Hz (two-stage tilt-then-knee search: HS
+  sets the +1.3–1.5 shelf over 40–200, LS cuts the knee). 20 Hz: T3 +0.27,
+  T4 −0.01. T3 price: foot error 0.540 @ ~49 Hz (one knee, two places) —
+  gates widen 0.5 → 0.6 / 0.3 → 0.6 (RECORDED OVERRIDE). T3/T4 separation
+  above 40 Hz intact (1.0–4.7 dB apart at 100 Hz–10 kHz spots).
+- Finding 4 (T6 foot in T5's slope family): LS corner 51.684 → 29.651 Hz
+  (knee position from the slope closed form) + HS 240.601 → 182.857 Hz
+  in-role (holds the 100–200 Hz tail the steeper knee would drop); slope
+  +2.59 → +5.10 dB/oct vs T5's +5.80 (delta 0.70, gate 1.0). Anchor
+  −23.06 (1.06/2.0 PASS), 40 Hz foot and 15 kHz top end still land
+  (dense worst moved 40 Hz → 12.8 kHz at 0.460, in gate).
+- Finding 5 (no regression): every Fix-1 gate stays green except the three
+  recorded eye-price overrides (T1 dense/low 0.6 → 1.0, T3 dense 0.5 → 0.6,
+  T3 low 0.3 → 0.6). T4 rate deviation unchanged (0.244/0.3). Character
+  gates hold (T2 notch −20.55 dB < −12; T4 dip −4.38 dB < −2; bypass
+  bit-transparent; sine-vs-magnitudeAt exact).
+
+Thin margins (deterministic, recorded not chased): T1 dense/low 0.965/1.0 +
+anchor 0.81/1.0 + 20 Hz 0.31/0.5; T2 anchor 0.95/1.0 + low 0.48/0.5
+(pre-existing); T3 dense/low 0.540/0.6; T4 dense 0.480/0.5 + low 0.282/0.3
++ rate 0.244/0.3; T6 rate 0.094/0.1 (pre-existing) + slope delta 0.70/1.0;
+T5 pole radius 0.99975 (< 1). Fine-grid audit (800-pt vs log-interp CSV):
+gap-free on all tones (within 0.004 of on-grid worsts).
 
 ### Fix Round 1 (T2 fourth section + absolute 10 Hz anchors) COMPLETE
 
