@@ -49,6 +49,7 @@ struct GainStage
             step = 10;
 
         step_ = step;
+        // Order: the HP (DC-block) runs first in processSample, this gain after.
         gainLin_ = std::pow (10.0f, getDb() / 20.0f);
     }
 
@@ -57,6 +58,7 @@ struct GainStage
     float processSample (float x)
     {
         lp_ += hpCoeff_ * (x - lp_);
+        // Float settle: snap near-zero state to exact 0 (denormal-safe).
         if (std::fabs (lp_) < 1.0e-15f)
             lp_ = 0.0f;
         return (x - lp_) * gainLin_;

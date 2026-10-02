@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <vector> // (allowed include; storage uses fixed-size arrays, no heap in audio path)
 
 // Tone-bank biquads fitted to the Avalon U5 manual tone chart (Abalone W5 v1).
 //

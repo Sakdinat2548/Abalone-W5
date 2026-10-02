@@ -13,19 +13,29 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 enable_testing()
 
-add_executable(ToneTargetsTest tests/ToneTargetsTest.cpp)
-target_include_directories(ToneTargetsTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-add_test(NAME ToneTargetsTest COMMAND ToneTargetsTest)
+# Test-integrity: MSVC Release defines NDEBUG, which compiles bare assert()
+# out of existence and makes ctest PASS evidence vacuous. Every DSP test must
+# be created via this helper so its asserts stay live under ctest -C Release.
+function(add_dsp_test name)
+    add_executable(${name} ${ARGN})
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    # /U (MSVC) / -U (GNU/Clang) undefines the flag-injected NDEBUG for this
+    # target only; it sorts after CMAKE_CXX_FLAGS_RELEASE on the command line.
+    if (MSVC)
+        target_compile_options(${name} PRIVATE $<$<CONFIG:Release>:/UNDEBUG>)
+    else ()
+        target_compile_options(${name} PRIVATE $<$<CONFIG:Release>:-UNDEBUG>)
+    endif ()
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
 
-add_executable(ToneBankTest tests/ToneBankTest.cpp)
-target_include_directories(ToneBankTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_dsp_test(ToneTargetsTest tests/ToneTargetsTest.cpp)
+
+add_dsp_test(ToneBankTest tests/ToneBankTest.cpp)
 target_compile_definitions(ToneBankTest PRIVATE
     TONE_CSV_PATH="${CMAKE_CURRENT_SOURCE_DIR}/analysis/u5_tone_curves_digitized.csv")
-add_test(NAME ToneBankTest COMMAND ToneBankTest)
 
-add_executable(GainStageTest tests/GainStageTest.cpp)
-target_include_directories(GainStageTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-add_test(NAME GainStageTest COMMAND GainStageTest)
+add_dsp_test(GainStageTest tests/GainStageTest.cpp)
 
 include(FetchContent)
 FetchContent_Declare(

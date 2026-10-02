@@ -53,6 +53,7 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 - Tests before audio code: bypass flat 5Hz-100kHz ±0.5dB; tones ±1dB 40Hz-15kHz;
   boost +3dB/step no clip; highcut -3dB @8kHz; THD ~0.1%; IR shape agreement.
 - Flat bypass when tone=bypass, highcut=off, boost=min. No clicks on tone switch.
+- Test integrity: MSVC Release defines NDEBUG which kills bare `assert()` — every CTest target must use the `add_dsp_test()` helper so asserts stay live.
 
 ## References
 
