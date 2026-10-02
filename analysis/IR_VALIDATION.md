@@ -1,6 +1,62 @@
-# IR validation (Tasks 8 + 12 + 15 + 17) — method, status, measured results
+# IR validation (Tasks 8 + 12 + 15 + 17 + 20) — method, status, measured results
 
 ## Status history
+
+### Task 20 full-band fit to the digitized CSV COMPLETE — CSV binding ±0.5 dB
+
+User-directed (recreate the fit-check): the tone bank now tracks
+`analysis/u5_tone_curves_digitized.csv` within **±0.5 dB over 40 Hz–15 kHz
+at every CSV point** on every tone except T2 (recorded deviation, below).
+Hierarchy (user ruling, supersedes Tasks 12/15/17): **digitized CSV binding
+full-band; eye-read header advisory; IR shapes advisory (reported, not
+gated)** — the user judges the CSV + `docs/refs/u5_tone_fit_check.png`
+truer than both the eye-reads and the captures. Low end keeps Task-17
+gates ([40,200] Hz ±0.3 dB, T2 ±0.5); 10–40 Hz stays excluded (chart-noise
+floor); highcut-ON captures stay non-adjudicating (Ruling A); HighCut.h
+untouched; 3 RBJ sections per tone, types unchanged (numbers-only).
+
+Dense-CSV worsts (C++ `ToneBankTest`, 48 kHz; T3/T5 held at Task-17 numbers):
+
+| Tone | Before (Task-17) | After (Task-20) | Gate | Verdict |
+|------|------------------|-----------------|------|---------|
+| 1 | 0.57 dB @ 654 Hz | 0.28 dB @ ~1.9 kHz | ±0.5 | PASS |
+| 2 | 0.97 dB @ 956 Hz | 0.88 dB @ 742 Hz | ±0.5 | DEVIATION (dense gate stays ±1.0) |
+| 3 | 0.33 dB | 0.33 dB (held) | ±0.5 | PASS |
+| 4 | 0.71 dB @ 742 Hz | 0.34 dB @ ~10 kHz | ±0.5 | PASS |
+| 5 | 0.18 dB | 0.18 dB (held) | ±0.5 | PASS |
+| 6 | 0.56 dB @ 12.0 kHz | 0.13 dB @ 40 Hz | ±0.5 | PASS |
+
+Method: hand-rolled bounded Nelder-Mead with restarts, genuinely randomized
+multi-start (24 seeds + basin-hopping polish), same optimizer discipline as
+Tasks 4/12/17 (multi-start, no tip-chasing — full-grid objective, penalties
+only beyond the true gates: dense, low-end, analytic poles < 1 at
+44.1k + 48k, 44.1k/48k agreement ≤ 0.1 dB). Two audit catches, both fixed
+before porting: (1) the stock NM stagnated without restarts (T4 sat at 0.67
+until restarts unlocked 0.40); (2) T4's coarse-grid optimum hid a +0.59 dB
+shelf-knee overshoot *between* CSV points at ~14.9 kHz — refit on an 800-pt
+fine grid vs log-interp CSV (0.34 worst everywhere in-band; ≤ 1.0 dB above
+15 kHz, report-only). All other tones verified gap-free (fine-grid worst
+within 0.02 dB of on-grid worst).
+
+**T2 recorded deviation** (best 0.88 dB, low-end 0.50 dB met): six
+independent runs (minimax NM, Lp NM + basin-hopping, differential evolution
+×2 incl. wide bounds with the lowshelf f0 free into the midrange, low-end
+penalty removed) all stall at 0.87–0.92 dB. Structural cause: one RBJ peak
+renders a rounded notch bottom; the CSV tip is a sharp V (−20.99 dB @
+697 Hz, itself a line-intersection reconstruction in `fit_scripts/fit.py`)
+with fat skirts (model too deep 0.6–0.9 dB at 540–614 Hz *and* 956–1312 Hz
+while the tip stays 0.7–0.9 shallow) — narrowing trades skirt for tip
+forever, shelves supply only tilt. The SOS reference needed five free
+sections for 0.44 dB here. Pending user ruling: topology change vs accepted
+deviation. No gate loosened silently, no role changed.
+
+Known user complaints verified on the regen `docs/tone-curves.png` against
+`docs/refs/u5_tone_fit_check.png` panel by panel: T1 scoop bottom tracks the
+picture's dip depth (−7.18 dB @ 697 Hz within 0.28 dB); T3 keeps its slight
+low-end dip (tracked, visibly not flat); T3/T4 read as non-twins (gentle
+scoop vs flat shelf + 6 kHz dip). Sub-40 Hz divergences (HP plunge on
+T1/T5, shelf plateaus on T3/T4/T6 vs the falling ink) are the excluded
+chart-noise band — the 5 Hz DC-blocker owns that region by design.
 
 ### Task 17 low-end refit COMPLETE — chart binding, low end to CSV
 
@@ -65,21 +121,21 @@ as part of the self-test section) recomputes the six per-tone either-oracle
 worst deltas — min(|port−header|, |port−CSV|) over the 60 eye-read header
 points parsed live from `analysis/tone_targets.h`, the same algorithm as
 `tests/ToneBankTest.cpp` `checkHeaderOracle` — and requires each to match
-the recorded C++ reference within 0.05 dB. Actual output (Task 15 blend):
+the recorded C++ reference within 0.05 dB. Actual output (Task-20 fit):
 
 ```
-[PASS] tone 1 port either-oracle worst=0.4397 dB (C++ ref 0.44, diff 0.0003, tol 0.05)
-[PASS] tone 2 port either-oracle worst=0.7662 dB (C++ ref 0.77, diff 0.0038, tol 0.05)
-[PASS] tone 3 port either-oracle worst=0.3032 dB (C++ ref 0.31, diff 0.0068, tol 0.05)
-[PASS] tone 4 port either-oracle worst=0.6692 dB (C++ ref 0.67, diff 0.0008, tol 0.05)
-[PASS] tone 5 port either-oracle worst=0.3102 dB (C++ ref 0.32, diff 0.0098, tol 0.05)
-[PASS] tone 6 port either-oracle worst=0.3654 dB (C++ ref 0.37, diff 0.0046, tol 0.05)
+[PASS] tone 1 port either-oracle worst=0.2636 dB (C++ ref 0.26, diff 0.0036, tol 0.05)
+[PASS] tone 2 port either-oracle worst=0.7133 dB (C++ ref 0.71, diff 0.0033, tol 0.05)
+[PASS] tone 3 port either-oracle worst=0.3032 dB (C++ ref 0.30, diff 0.0032, tol 0.05)
+[PASS] tone 4 port either-oracle worst=0.3232 dB (C++ ref 0.32, diff 0.0032, tol 0.05)
+[PASS] tone 5 port either-oracle worst=0.1747 dB (C++ ref 0.17, diff 0.0047, tol 0.05)
+[PASS] tone 6 port either-oracle worst=0.1367 dB (C++ ref 0.14, diff 0.0033, tol 0.05)
 port verification: GREEN
 ```
 
-(worst diff 0.0098 dB — inside the required 0.05 dB. The references are
-small because the Task 15 blend tracks the manual chart again — chart
-binding, IR advisory; the check verifies Python-port fidelity to the C++
+(worst diff 0.0047 dB — inside the required 0.05 dB. The references are
+small because the Task-20 fit tracks the digitized chart — CSV binding,
+header/IR advisory; the check verifies Python-port fidelity to the C++
 header, not fit quality. Task-12-era output, kept for history: T1 1.60 /
 T2 1.99 / T3 0.45 / T4 3.93 / T5 2.91 / T6 7.05 dB — large because those
 fits tracked the measured IR shapes where they conflict with the chart.)

@@ -16,13 +16,12 @@ from src/dsp/ToneBank.h and src/dsp/HighCut.h. Equivalence is EXECUTED, not
 asserted: --verify-port (run on every invocation as part of the self-test
 section) recomputes the six per-tone either-oracle worst deltas
 (min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
-algorithm as tests/ToneBankTest.cpp checkHeaderOracle, binding since
-Task 15) and requires each to match the recorded C++ reference within
-0.05 dB (Task-17 numbers):
-  T1 0.32 / T2 0.78 / T3 0.30 / T4 0.67 / T5 0.17 / T6 0.37 dB.
-(The references are small because the Task 15 blend tracks the manual chart
-again — chart binding, IR advisory; see IR_VALIDATION.md. The check verifies
-port fidelity to C++, not fit quality.)
+algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each
+to match the recorded C++ reference within 0.05 dB (Task-20 numbers):
+  T1 0.26 / T2 0.71 / T3 0.30 / T4 0.32 / T5 0.17 / T6 0.14 dB.
+(The references are small because the Task-20 fit tracks the digitized
+chart — CSV binding, header/IR advisory; see IR_VALIDATION.md. The check
+verifies port fidelity to C++, not fit quality.)
 
 Usage:
   python analysis/ir_check.py                  # self-test + real IRs if present
@@ -65,29 +64,28 @@ SELFTEST_TOL_DB = 0.05  # end-to-end (time-domain synth IR -> FFT -> analytic)
 # ----------------------------------------------------------------------------
 # Section 1: Python port of src/dsp/ToneBank.h + src/dsp/HighCut.h.
 # (tone, stage) -> (type, f0 Hz, Q, gain dB); HP stages have no gain.
-# Verbatim from the header comment table (Task-15 user blend: 90% Task-4
-# chart fit + 10% Task-12 IR fit per stage-parameter, T6 at 95/5; T1/T2/T5
-# low-end refit by Task 17 over [40,200] Hz, T3/T4/T6 held).
+# Verbatim from the header comment table (Task-20 full-band fit to the
+# digitized CSV: T1/T2/T4/T6 refit numbers-only, T3/T5 held at Task-17).
 # ----------------------------------------------------------------------------
 TONE_PARAMS = {
-    10: ("hp", 36.1, 1.052, 0.0),
-    11: ("pk", 777.1, 0.173, -6.64),
-    12: ("hs", 12417.8, 1.223, 1.19),
-    20: ("pk", 681.2, 0.687, -21.03),
-    21: ("ls", 87.2, 1.646, 0.85),
-    22: ("hs", 3129.2, 0.173, 2.65),
+    10: ("hp", 36.7, 1.049, 0.0),
+    11: ("pk", 754.0, 0.183, -6.93),
+    12: ("hs", 11936.7, 1.776, 0.82),
+    20: ("pk", 680.0, 0.703, -21.19),
+    21: ("ls", 87.1, 1.920, 0.72),
+    22: ("hs", 3930.3, 0.116, 2.56),
     30: ("pk", 582.2, 0.394, -3.58),
     31: ("pk", 3167.6, 0.44, -2.3),
     32: ("ls", 76.8, 0.995, 0.9),
-    40: ("ls", 719.2, 0.388, 1.48),
-    41: ("pk", 5865.2, 0.964, -4.17),
-    42: ("hs", 11127.8, 1.326, 1.03),
+    40: ("ls", 2662.6, 0.351, 1.53),
+    41: ("pk", 6027.8, 0.695, -4.93),
+    42: ("hs", 15623.1, 0.518, 4.60),
     50: ("hp", 33.7, 0.305, 0.0),
     51: ("ls", 133.2, 0.738, -3.74),
     52: ("hs", 321.1, 0.684, 2.69),
-    60: ("ls", 77.0, 0.525, -16.11),
-    61: ("hs", 292.2, 0.699, 2.24),
-    62: ("hs", 10768.2, 0.824, -2.63),
+    60: ("ls", 72.7, 0.494, -16.89),
+    61: ("hs", 262.6, 0.610, 2.70),
+    62: ("hs", 13548.8, 0.576, -4.58),
 }
 
 
@@ -176,9 +174,9 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # same algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires
 # each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
 # Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal
-# (Task-17 numbers).
+# (Task-20 numbers).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 0.32, 2: 0.78, 3: 0.30, 4: 0.67, 5: 0.17, 6: 0.37}
+CXX_EITHER_REF_DB = {1: 0.26, 2: 0.71, 3: 0.30, 4: 0.32, 5: 0.17, 6: 0.14}
 PORT_VERIFY_TOL_DB = 0.05
 
 

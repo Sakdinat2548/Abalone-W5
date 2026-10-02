@@ -182,11 +182,12 @@ void checkIRShapes ()
 // outlier. No physical filter can sit within +/-1dB of both oracles where
 // they differ by up to 3.5dB, so each header point passes when it lands
 // within +/-1dB of EITHER oracle. Task 8 IR comparison adjudicates.
-// Binding gate (Task 15, numbers refit by Task 17): the manual chart is
-// binding again — every tone within +/-1dB of EITHER chart oracle (eye-read
-// header or digitized CSV) at every 40Hz-15kHz header point, Task-4 style.
-// Either-oracle worsts (Task-17 numbers): T1 0.32 / T2 0.78 / T3 0.30 /
-// T4 0.67 / T5 0.17 / T6 0.37 dB.
+// Binding gate (Task 20, numbers refit to the digitized CSV): the CSV binds
+// full-band — every tone within +/-0.5dB of the CSV at every 40Hz-15kHz CSV
+// point (T2 recorded deviation: 0.88dB best, dense gate stays +/-1.0 — see
+// ToneBank.h). Either-oracle worsts (Task-20 numbers): T1 0.26 / T2 0.71 /
+// T3 0.30 / T4 0.32 / T5 0.17 / T6 0.14 dB — the check passes trivially now:
+// a +/-0.5dB CSV track is always within +/-1dB of (at least) the CSV side.
 void checkHeaderOracle (const DenseCurve& csv)
 {
     // GATED since Task 15 (was report-only under Task 12): the fits track
@@ -217,16 +218,18 @@ void checkHeaderOracle (const DenseCurve& csv)
 
 void checkDenseCsv (const DenseCurve& csv)
 {
-    // GATED since Task 15 (was report-only under Task 12): the blend sits
-    // within +/-1dB of the digitized chart on the full dense grid too
-    // (Task-17 worsts T1-T6: 0.57/0.97/0.33/0.71/0.18/0.56 dB — T2's 0.97 dB
-    // at ~956 Hz is the thinnest margin, recorded honestly; it improves on
-    // the Task-15 0.98 dB worst).
+    // GATED since Task 20 (was +/-1dB since Task 15): every tone within
+    // +/-0.5dB of the digitized CSV over 40Hz-15kHz at every CSV point —
+    // EXCEPT T2, whose dense gate STAYS at +/-1.0dB (recorded deviation, see
+    // ToneBank.h header + task-20-report.md: six independent optimizer runs
+    // stall at 0.87-0.92dB on the sharp-V notch; best numbers-only 0.88dB).
+    // Task-20 worsts T1-T6: 0.28/0.88/0.33/0.34/0.18/0.13 dB.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
         bank.setSampleRate (48000.0);
         bank.setTone (tone);
+        const float gate = (tone == 2) ? 1.0f : 0.5f;
         float worst = 0.0f;
         float worstFreq = 0.0f;
         int count = 0;
@@ -242,10 +245,11 @@ void checkDenseCsv (const DenseCurve& csv)
                 worst = d;
                 worstFreq = f;
             }
-            REQUIRE (d <= 1.0f);
+            REQUIRE (d <= gate);
         }
         REQUIRE (count > 50);
-        std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts)\n", tone, worst, worstFreq, count);
+        std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts, gate %.1f)\n", tone, worst, worstFreq, count,
+                     gate);
     }
 }
 
