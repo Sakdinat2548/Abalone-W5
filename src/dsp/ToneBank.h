@@ -2,65 +2,67 @@
 
 #include <cmath>
 
-// Tone-bank biquads fitted to measured Avalon U5 impulse responses (Abalone
-// W5 v1, Task 12 re-fit; supersedes the Task 4 manual-chart fit where the IR
-// adjudicates — see analysis/IR_VALIDATION.md).
+// Tone-bank biquads, Abalone W5 v1 user blend (Task 15): 90% Task-4
+// manual-chart fit + 10% Task-12 measured-IR fit per stage-parameter
+// (T6 at 95/5 — its IR shape diverges most from the chart, so it keeps the
+// lightest IR dose). Chart is the binding oracle again (±1dB); IR deltas are
+// reported, not gated (user trusts the captures only lightly — see
+// analysis/IR_VALIDATION.md). Either-oracle worsts vs chart oracles:
+// T1 0.44dB, T2 0.77dB, T3 0.31dB, T4 0.67dB, T5 0.32dB, T6 0.37dB
+// (all within the +/-1dB gate). Param-blend verified against true dB-domain
+// blends (worst 0.38dB on T4 — stage roles moved most there, weight keeps it
+// near-chart). Poles re-checked < 1 at 44.1k + 48k after blending.
 //
 // Chain position: Tone (bypass + 1-6 biquad presets, Task 7 adds the 10ms
 // xfade around setTone). Bypass (tone 0) is bit-transparent passthrough.
 //
-// Per-tone topology + fitted numbers (f0 in Hz, Q = shelf-alpha quotient, gain
-// in dB). Fit method: differential-evolution + coordinate-descent polish of
-// RBJ parametric sections against Welch cross-spectral relative shapes
-// (each highcut-off capture vs the TONE0 capture, 28 x ~11s Hann segments,
-// coherence >= 0.9997 everywhere in-band, 1 kHz-normalized, 40 Hz-15 kHz);
-// worst dense-grid (2000-pt) deltas vs measured in 40Hz-15kHz:
-// T1 0.016dB, T2 0.012dB, T3 0.056dB, T4 0.246dB, T5 0.017dB, T6 0.306dB
-// (all within the +/-1dB gate). No section was added or removed (3 per tone);
-// stage roles were kept, except T6's mid shelf, which changed from a low-end
-// restore (+2.5dB @ 284Hz) to a mid cut (-2.75dB @ 447Hz) because the measured
-// low end needs a single deeper shelf (-22.05dB @ 58Hz) instead of the
-// chart's shelf-plus-restore stack.
+// Per-tone topology + blended numbers (f0 in Hz, Q = shelf-alpha quotient,
+// gain in dB): per-stage-parameter blend of the Task-4 manual-chart fit (90%,
+// 95% on T6) and the Task-12 measured-IR fit (10%, 5% on T6). Linear in
+// f0/Q/gainDb; every stage kept its type on both sides, so no role mapping
+// was needed — but stage ROLES still moved (T4s0: 794 Hz chart shelf vs
+// 46 Hz IR shelf; T6s1: +2.5 dB chart restore vs -2.75 dB IR cut), which is
+// why the blend was checked against the true dB-domain blend
+// (w*chart(f) + (1-w)*IR(f)): worst deviation 0.38 dB on T4 at ~10.4 kHz,
+// 0.24-0.33 dB on T1/T2, <=0.12 dB elsewhere. No section added or removed
+// (3 per tone). Chart either-oracle worsts (binding gate): T1 0.44 dB,
+// T2 0.77 dB, T3 0.31 dB, T4 0.67 dB, T5 0.32 dB, T6 0.37 dB.
 //
 //   tone  stage  type       f0       Q      gain
-//   1     0      highpass   19.4     0.662    --
-//   1     1      peak       831      0.20    -7.63
-//   1     2      highshelf  7178     0.530   +1.08
-//   2     0      peak       659      0.697  -20.67
-//   2     1      lowshelf   38.9     0.637   -1.35
-//   2     2      highshelf  3385     0.498   +2.33
-//   3     0      peak       422      0.338   -2.48
-//   3     1      peak       2876     0.347   -2.26
-//   3     2      lowshelf   92.7     0.947   +0.90
-//   4     0      lowshelf   46.3     0.550   -1.40
-//   4     1      peak       7217     0.823   -3.91
-//   4     2      highshelf  7094     0.300   -2.31
-//   5     0      highpass   31.3     0.355    --
-//   5     1      lowshelf   93.7     0.593   -3.45
-//   5     2      highshelf  195.8    0.537   +3.54
-//   6     0      lowshelf   58.2     0.438  -22.05
-//   6     1      highshelf  447      0.300   -2.75
-//   6     2      highshelf  9367     0.705   -5.06
+//   1     0      highpass   21.7     0.966    --
+//   1     1      peak       803.1    0.20     -6.88
+//   1     2      highshelf  12417.8  1.223   +1.19
+//   2     0      peak       677.9    0.727  -20.97
+//   2     1      lowshelf   93.9     1.504   +0.68
+//   2     2      highshelf  3218.5   0.23    +2.30
+//   3     0      peak       582.2    0.394    -3.58
+//   3     1      peak       3167.6   0.44     -2.30
+//   3     2      lowshelf   76.8     0.995   +0.90
+//   4     0      lowshelf   719.2    0.388   +1.48
+//   4     1      peak       5865.2   0.964    -4.17
+//   4     2      highshelf  11127.8  1.326   +1.03
+//   5     0      highpass   32.8     0.305    --
+//   5     1      lowshelf   126.4    0.734    -3.68
+//   5     2      highshelf  321.1    0.684   +2.69
+//   6     0      lowshelf   77.0     0.525  -16.11
+//   6     1      highshelf  292.2    0.699   +2.24
+//   6     2      highshelf  10768.2  0.824    -2.63
 //
-// Shape notes: T2's notch tip lands at -6.85dB @ 658Hz (1 kHz-normalized),
-// vs measured -6.84dB @ 661Hz — depth character matched, single-bin tip not
-// chased. T4's dip (-4.82dB @ 7332Hz vs measured -4.59dB @ 7558Hz) is formed
-// jointly by the peak and the high shelf at nearly the same f0; its worst
-// residual (0.246dB) sits at the 15kHz gate endpoint, where the measured
-// +3.5dB/oct recovery slope also binds the 44.1k/48k invariance probe (0.070
-// vs the 0.1dB test limit). T6's top cut (-5.06dB shelf @ 9367Hz) is the same
-// trade: residual 0.306dB at ~12.1kHz, invariance 0.069dB at 15kHz —
-// near-Nyquist knees warp slightly across rates, so both tones spend most of
-// the invariance budget there (deterministic, not noise; recorded for future
-// edits). T1 keeps its legacy Q=0.20 broad-mid peak (both independent fits
-// converged on it).
+// Shape notes: T2's notch tip lands at -6.88dB @ 676Hz (1 kHz-normalized),
+// vs measured -6.84dB @ 661Hz — depth character kept from the IR side.
+// T4's dip (-4.74dB @ 5922Hz normalized) is formed jointly by the peak and
+// the high shelf; its binding worst (0.67dB) sits at the 1kHz header point,
+// where the chart and IR oracles themselves disagree. T6 keeps the chart's
+// shelf-plus-restore stack at a 95/5 weight (mid shelf +2.24dB @ 292Hz) —
+// the IR's single-deep-shelf shape (-22.05dB @ 58Hz) would need a role
+// change the blend deliberately avoids. T1 keeps its legacy Q=0.20
+// broad-mid peak (both independent fits converged on it).
 //
-// Oracle conflicts (measured): the Task 2 eye-read header and the machine
-// CSV disagree with the IR at many points (e.g. T6@150Hz: header -7.00,
-// CSV -5.58, IR -3.17); the fits track the IR. The test asserts each tone
-// within +/-1dB of the MEASURED shape (40Hz-15kHz, 1kHz-normalized); the old
-// either-oracle check is kept report-only for the Python-port verification
-// chain. Highcut-ON captures are non-adjudicating per user Ruling A (see
+// Oracle hierarchy (user ruling): the MANUAL CHART is binding again — each
+// tone within +/-1dB of EITHER chart oracle (eye-read header or digitized
+// CSV) at every 40Hz-15kHz header point, Task-4 style. The measured IR
+// shapes (analysis/IR_VALIDATION.md) are advisory: reported, not gated.
+// Highcut-ON captures are non-adjudicating per user Ruling A (see
 // IR_VALIDATION.md section 6) — HighCut.h untouched.
 //
 // Biquad form: Transposed Direct Form II, RBJ cookbook coefficients with
@@ -189,41 +191,41 @@ private:
         switch (tone * 10 + stage)
         {
         case 10:
-            return {Type::HighPass, 19.4, 0.662, 0.0};
+            return {Type::HighPass, 21.7, 0.966, 0.0};
         case 11:
-            return {Type::Peak, 831.0, 0.2, -7.63};
+            return {Type::Peak, 803.1, 0.2, -6.88};
         case 12:
-            return {Type::HighShelf, 7178.0, 0.53, 1.08};
+            return {Type::HighShelf, 12417.8, 1.223, 1.19};
         case 20:
-            return {Type::Peak, 659.0, 0.697, -20.67};
+            return {Type::Peak, 677.9, 0.727, -20.97};
         case 21:
-            return {Type::LowShelf, 38.9, 0.637, -1.35};
+            return {Type::LowShelf, 93.9, 1.504, 0.68};
         case 22:
-            return {Type::HighShelf, 3385.0, 0.498, 2.33};
+            return {Type::HighShelf, 3218.5, 0.23, 2.3};
         case 30:
-            return {Type::Peak, 422.0, 0.338, -2.48};
+            return {Type::Peak, 582.2, 0.394, -3.58};
         case 31:
-            return {Type::Peak, 2876.0, 0.347, -2.26};
+            return {Type::Peak, 3167.6, 0.44, -2.3};
         case 32:
-            return {Type::LowShelf, 92.7, 0.947, 0.9};
+            return {Type::LowShelf, 76.8, 0.995, 0.9};
         case 40:
-            return {Type::LowShelf, 46.3, 0.55, -1.4};
+            return {Type::LowShelf, 719.2, 0.388, 1.48};
         case 41:
-            return {Type::Peak, 7217.0, 0.823, -3.91};
+            return {Type::Peak, 5865.2, 0.964, -4.17};
         case 42:
-            return {Type::HighShelf, 7094.0, 0.3, -2.31};
+            return {Type::HighShelf, 11127.8, 1.326, 1.03};
         case 50:
-            return {Type::HighPass, 31.3, 0.355, 0.0};
+            return {Type::HighPass, 32.8, 0.305, 0.0};
         case 51:
-            return {Type::LowShelf, 93.7, 0.593, -3.45};
+            return {Type::LowShelf, 126.4, 0.734, -3.68};
         case 52:
-            return {Type::HighShelf, 195.8, 0.537, 3.54};
+            return {Type::HighShelf, 321.1, 0.684, 2.69};
         case 60:
-            return {Type::LowShelf, 58.2, 0.438, -22.05};
+            return {Type::LowShelf, 77.0, 0.525, -16.11};
         case 61:
-            return {Type::HighShelf, 447.0, 0.3, -2.75};
+            return {Type::HighShelf, 292.2, 0.699, 2.24};
         case 62:
-            return {Type::HighShelf, 9367.0, 0.705, -5.06};
+            return {Type::HighShelf, 10768.2, 0.824, -2.63};
         default:
             break;
         }

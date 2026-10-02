@@ -1,6 +1,14 @@
-# IR validation (Tasks 8 + 12) — method, status, and measured results
+# IR validation (Tasks 8 + 12 + 15) — method, status, and measured results
 
-## Status: Task 12 re-fit COMPLETE — all 6 tones track the measured shapes
+## Status: Task 15 user blend COMPLETE — chart binding again, IR advisory
+
+User taste ruling (Task 15): the tone bank is now a **90% Task-4 manual-chart
+fit + 10% Task-12 measured-IR fit per stage-parameter blend (T6 at 95/5 —
+its IR shape diverges most from the chart)**. The manual chart is the binding
+oracle again (±1 dB either-oracle, Task-4 style); IR deltas are REPORTED, not
+gated (the T3K captures are trusted only lightly). See §7 for the blend
+rationale, derivation check, and honest deltas. Task 12's re-fit tables below
+are kept as history (the IR-fit endpoint of the blend).
 
 `analysis/ir_check.py` harness: port verification GREEN, self-test GREEN.
 Task 8 measured the shapes (14 real Tone3000 captures, coherence ≥ 0.999);
@@ -48,22 +56,24 @@ as part of the self-test section) recomputes the six per-tone either-oracle
 worst deltas — min(|port−header|, |port−CSV|) over the 60 eye-read header
 points parsed live from `analysis/tone_targets.h`, the same algorithm as
 `tests/ToneBankTest.cpp` `checkHeaderOracle` — and requires each to match
-the recorded C++ reference within 0.05 dB. Actual output:
+the recorded C++ reference within 0.05 dB. Actual output (Task 15 blend):
 
 ```
-[PASS] tone 1 port either-oracle worst=1.6032 dB (C++ ref 1.62, diff 0.0168, tol 0.05)
-[PASS] tone 2 port either-oracle worst=1.9851 dB (C++ ref 1.98, diff 0.0051, tol 0.05)
-[PASS] tone 3 port either-oracle worst=0.4537 dB (C++ ref 0.45, diff 0.0037, tol 0.05)
-[PASS] tone 4 port either-oracle worst=3.9347 dB (C++ ref 3.94, diff 0.0053, tol 0.05)
-[PASS] tone 5 port either-oracle worst=2.9102 dB (C++ ref 2.91, diff 0.0002, tol 0.05)
-[PASS] tone 6 port either-oracle worst=7.0526 dB (C++ ref 7.05, diff 0.0026, tol 0.05)
+[PASS] tone 1 port either-oracle worst=0.4397 dB (C++ ref 0.44, diff 0.0003, tol 0.05)
+[PASS] tone 2 port either-oracle worst=0.7662 dB (C++ ref 0.77, diff 0.0038, tol 0.05)
+[PASS] tone 3 port either-oracle worst=0.3032 dB (C++ ref 0.31, diff 0.0068, tol 0.05)
+[PASS] tone 4 port either-oracle worst=0.6692 dB (C++ ref 0.67, diff 0.0008, tol 0.05)
+[PASS] tone 5 port either-oracle worst=0.3102 dB (C++ ref 0.32, diff 0.0098, tol 0.05)
+[PASS] tone 6 port either-oracle worst=0.3654 dB (C++ ref 0.37, diff 0.0046, tol 0.05)
 port verification: GREEN
 ```
 
-(worst diff 0.0168 dB — inside the required 0.05 dB. The references are
-large because the Task 12 fits track the measured IR shapes, which
-supersede both oracles where they conflict; the check verifies Python-port
-fidelity to the C++ header, not fit quality.)
+(worst diff 0.0098 dB — inside the required 0.05 dB. The references are
+small because the Task 15 blend tracks the manual chart again — chart
+binding, IR advisory; the check verifies Python-port fidelity to the C++
+header, not fit quality. Task-12-era output, kept for history: T1 1.60 /
+T2 1.99 / T3 0.45 / T4 3.93 / T5 2.91 / T6 7.05 dB — large because those
+fits tracked the measured IR shapes where they conflict with the chart.)
 
 Environment: Python 3 with numpy 2.5.3, **no scipy** (FFT via `numpy.fft`;
 WAV I/O via `struct` + `wave`-write only — Python 3.14's `wave` module
@@ -249,7 +259,78 @@ highcut-ON captures do not adjudicate. The highcut-ON WAVs have been
 removed from `analysis/ir_local/`; the 7 highcut-off files above are the
 complete fitting set.
 
-## 7. Zoom leg — PENDING (user-side, ear A/B cannot be automated)
+## 7. Task 15 user blend — 90/10 chart/IR (T6 95/5): rationale + honest deltas
+
+**Ruling.** The user trusts the T3K captures only lightly: the manual chart
+binds again, the IR contributes a small advisory dose. Weights: T1–T5 90%
+chart / 10% IR, T6 95% / 5% (its IR shape diverges most from the chart —
+e.g. T6@150 Hz shape-space: header −7.00, CSV −5.58, IR −3.17 — so it keeps
+the lightest IR dose). Gate hierarchy inverted vs Task 12: chart gated
+(±1 dB either-oracle, Task-4 style, in `tests/ToneBankTest.cpp`), IR
+reported only. HighCut.h untouched (Ruling A stands); 3 sections per tone.
+
+**Derivation (independently re-derived, not trusted from the tree).**
+Linear blend per stage-parameter in f0/Q/gainDb:
+`blend = w*chart + (1-w)*IR` with w = 0.9 (0.95 on T6), using the Task-4
+chart fit (`84caf2c:src/dsp/ToneBank.h`) and the Task-12 IR fit
+(`HEAD:src/dsp/ToneBank.h`). Every stage kept its filter type on both sides,
+so no role mapping was needed — but stage ROLES still moved (T4s0: 794 Hz
+chart shelf vs 46 Hz IR shelf → blend 719.2 Hz; T6s1 kept the chart's
++2.5 dB restore at 95/5 → +2.24 dB @ 292 Hz, deliberately NOT the IR's
+−2.75 dB mid cut, which would need a role change). The tree's pre-written
+numbers were re-derived from scratch and matched exactly (within rounding),
+so they were KEPT — verified, not replaced.
+
+**Deviation bound (param-blend vs true dB-domain blend).** The honest blend
+target is `w*chart(f) + (1-w)*IR(f)` in dB; parameter-space blending is an
+approximation. Dense-grid (2000-pt, 40 Hz–15 kHz, 48 kHz) worst deviations:
+
+| Tone | Param-blend vs dB-blend worst | Where |
+|------|-------------------------------|-------|
+| 1 | 0.24 dB | ~12.6 kHz |
+| 2 | 0.33 dB | ~89 Hz |
+| 3 | 0.03 dB | ~316 Hz |
+| 4 | 0.38 dB | ~10.4 kHz |
+| 5 | 0.04 dB | ~198 Hz |
+| 6 | 0.12 dB | ~402 Hz |
+
+Worst 0.38 dB on T4 — the role-moved tone, as expected; the 90% chart
+weight keeps it near-chart. Poles re-checked < 1 at 44.1 kHz + 48 kHz
+(max radius 0.9985); 44.1k/48k invariance ≤ 0.07 dB at all gate probes.
+
+**Chart gate (binding, `ctest` GREEN).** Either-oracle worsts per tone
+(C++ `ToneBankTest` output, matches the independent Python check):
+
+| Tone | Either-oracle worst | Dense-CSV worst | Verdict vs ±1 dB |
+|------|--------------------|-----------------|------------------|
+| 1 | 0.44 dB | 0.54 dB @ ~55 Hz | PASS |
+| 2 | 0.77 dB | 0.98 dB @ ~576 Hz | PASS (thinnest margin, recorded) |
+| 3 | 0.31 dB | 0.33 dB @ ~4.7 kHz | PASS |
+| 4 | 0.67 dB | 0.71 dB @ ~742 Hz | PASS |
+| 5 | 0.32 dB | 0.34 dB @ ~143 Hz | PASS |
+| 6 | 0.37 dB | 0.56 dB @ ~12.0 kHz | PASS |
+
+Shape continuity on role-moved stages: T2 notch tip −6.88 dB @ 676 Hz
+(1 kHz-normalized) vs measured −6.84 dB @ 661 Hz — depth character kept;
+T4 dip −4.74 dB @ 5922 Hz normalized, formed jointly by peak + high shelf.
+
+**IR deltas (REPORTED, not gated — the honest cost of the ruling).**
+Blend vs the 14-spot measured-shape table (`kIrSpots`, 1 kHz-normalized):
+
+| Tone | IR-shape worst (spots) | At |
+|------|------------------------|-----|
+| 1 | 1.50 dB | 10 kHz |
+| 2 | 1.33 dB | 40 Hz |
+| 3 | 1.12 dB | 150 Hz |
+| 4 | 2.36 dB | 15 kHz |
+| 5 | 1.80 dB | 100 Hz |
+| 6 | 3.38 dB | 15 kHz |
+
+These exceed ±1 dB exactly where the chart and the hardware disagree
+(T4/T6 high end, T5 low end) — the blend follows the chart there by design.
+`docs/tone-curves.png` regenerated from the final blended numbers.
+
+## 8. Zoom leg — PENDING (user-side, ear A/B cannot be automated)
 
 1. Record the same riff: DI plus Tones 2/3/4 through the plugin, same input
    level, matched output level, 48 kHz WAV.

@@ -109,11 +109,13 @@ float sineRmsDb (ToneBank& bank, double sampleRate, double freqHz)
     return 20.0f * static_cast<float> (std::log10 (std::sqrt (sumOut / sumIn)));
 }
 
-// Measured IR shapes (Task 12, binding oracle): Welch cross-spectral
-// relative shapes of AVALON_TONEn.wav vs AVALON_TONE0.wav (highcut-off
-// captures only, per user Ruling A), 1 kHz-normalized, in dB. Recomputed
-// fresh from the WAVs 2026-10-02 (coherence >= 0.9997 in-band); do not
-// hand-edit — see analysis/IR_VALIDATION.md section 5 table (b).
+// Measured IR shapes (Task 12 leg, ADVISORY since Task 15): Welch
+// cross-spectral relative shapes of AVALON_TONEn.wav vs AVALON_TONE0.wav
+// (highcut-off captures only, per user Ruling A), 1 kHz-normalized, in dB.
+// Recomputed fresh from the WAVs 2026-10-02 (coherence >= 0.9997 in-band); do
+// not hand-edit — see analysis/IR_VALIDATION.md section 5 table (b). The
+// Task-15 blend trusts these captures only lightly: deltas are REPORTED
+// here, not gated; the manual chart is binding again.
 struct IrSpot
 {
     int tone;
@@ -141,11 +143,11 @@ constexpr IrSpot kIrSpots[] = {
     {6, 4000.0f, -0.69f},  {6, 6300.0f, -1.69f},  {6, 10000.0f, -3.51f}, {6, 15000.0f, -5.85f},
 };
 
-// Binding gate (Task 12): every tone within +/-1dB of the MEASURED shape,
-// 40Hz-15kHz, 1kHz-normalized. T2's notch tip is asserted for depth
-// character (-6.85dB @ ~660Hz measured) via the 630Hz spot, not single-bin.
 void checkIRShapes ()
 {
+    // REPORT-ONLY since Task 15: the blend trusts the T3K captures only
+    // lightly (user ruling), so IR deltas are recorded here, not gated.
+    // Inverted hierarchy vs Task 12 (which gated IR and reported chart).
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -166,10 +168,9 @@ void checkIRShapes ()
                 worst = d;
                 worstFreq = s.freqHz;
             }
-            REQUIRE (d <= 1.0f);
         }
         REQUIRE (count == 14);
-        std::printf ("tone %d IR-shape worst %+.3fdB at %.0fHz (%d pts)\n", tone, worst, worstFreq, count);
+        std::printf ("tone %d IR-shape worst %+.3fdB at %.0fHz (%d pts, report only)\n", tone, worst, worstFreq, count);
     }
 }
 
@@ -181,13 +182,16 @@ void checkIRShapes ()
 // outlier. No physical filter can sit within +/-1dB of both oracles where
 // they differ by up to 3.5dB, so each header point passes when it lands
 // within +/-1dB of EITHER oracle. Task 8 IR comparison adjudicates.
+// Binding gate (Task 15): the manual chart is binding again — every tone
+// within +/-1dB of EITHER chart oracle (eye-read header or digitized CSV)
+// at every 40Hz-15kHz header point, Task-4 style. The Task-15 blend worsts:
+// T1 0.44 / T2 0.77 / T3 0.31 / T4 0.67 / T5 0.32 / T6 0.37 dB.
 void checkHeaderOracle (const DenseCurve& csv)
 {
-    // REPORT-ONLY since Task 12: the fits track the measured IR shapes, which
-    // supersede both the eye-read header and the digitized CSV where they
-    // conflict (see IR_VALIDATION.md). Kept (ungated) because
-    // analysis/ir_check.py --verify-port compares its Python port against
-    // these printed C++ either-oracle values.
+    // GATED since Task 15 (was report-only under Task 12): the fits track
+    // the chart again, so either-oracle agreement is asserted. Kept printed
+    // because analysis/ir_check.py --verify-port compares its Python port
+    // against these C++ either-oracle values.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -204,16 +208,18 @@ void checkHeaderOracle (const DenseCurve& csv)
             const float dEither = dHeader < dCsv ? dHeader : dCsv;
             if (dEither > worstEither)
                 worstEither = dEither;
+            REQUIRE (dEither <= 1.0f);
         }
-        std::printf ("tone %d header-oracle worst either-oracle delta %+.3fdB (report only)\n", tone, worstEither);
+        std::printf ("tone %d header-oracle worst either-oracle delta %+.3fdB\n", tone, worstEither);
     }
 }
 
 void checkDenseCsv (const DenseCurve& csv)
 {
-    // REPORT-ONLY since Task 12: the fits track the measured IR shapes, which
-    // supersede the digitized manual chart where they conflict. Kept
-    // (ungated) to record the chart divergence honestly.
+    // GATED since Task 15 (was report-only under Task 12): the blend sits
+    // within +/-1dB of the digitized chart on the full dense grid too
+    // (blend worsts T1-T6: 0.54/0.98/0.33/0.71/0.35/0.56 dB — T2's 0.98 dB
+    // at ~576 Hz is the thinnest margin, recorded honestly).
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -234,10 +240,10 @@ void checkDenseCsv (const DenseCurve& csv)
                 worst = d;
                 worstFreq = f;
             }
+            REQUIRE (d <= 1.0f);
         }
         REQUIRE (count > 50);
-        std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts, report only)\n", tone, worst, worstFreq,
-                     count);
+        std::printf ("tone %d dense-CSV worst %+.3fdB at %.1fHz (%d pts)\n", tone, worst, worstFreq, count);
     }
 }
 
