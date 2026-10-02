@@ -10,12 +10,15 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
-// Trajan-class plate face: single Cinzel typeface (OFL, embedded as
-// BinaryData). Falls back to the default system font (never blank) if the
-// embed ever fails to parse. Built once per font at editor construction.
+// Eurostile-class plate face: single Michroma typeface (OFL, embedded as
+// BinaryData — the Eurostile-Extended-Black-class substitute; see the header
+// note for the pick rationale and the one-file-swap path). Falls back to the
+// default system font (never blank) if the embed ever fails to parse. Built
+// once per font at editor construction. The loader keys off the BinaryData
+// symbol only, so a future face swap touches just this line + CMake SOURCES.
 juce::Font makePlateFont (float height)
 {
-    if (auto face = juce::Typeface::createSystemTypefaceFor (BinaryData::Cinzel_ttf, BinaryData::Cinzel_ttfSize))
+    if (auto face = juce::Typeface::createSystemTypefaceFor (BinaryData::Michroma_ttf, BinaryData::Michroma_ttfSize))
         return juce::Font (juce::FontOptions (face).withHeight (height));
     return juce::Font (juce::FontOptions (height));
 }
@@ -56,11 +59,12 @@ juce::Rectangle<int> scaledRect (const std::map<juce::String, juce::Rectangle<fl
 }
 
 // Engraved-plate lettering (two-pass: pale groove highlight below, dark face
-// on top) for the in-code ABALONE wordmark. The face is Cinzel (OFL
-// Trajan-class serif vendored via BinaryData — matches the hardware's
-// engraved caps); the caller passes the editor's true horizontal center so
-// the wordmark is optically centered across the full panel via the measured
-// text width (no hardcoded x that can drift with letterforms).
+// on top) for the in-code ABALONE wordmark. The face is Michroma (OFL
+// Eurostile-class extended black, vendored via BinaryData — matches the
+// hardware badge's wide grotesque caps); the caller passes the editor's true
+// horizontal center so the wordmark is optically centered across the full
+// panel via the measured text width (no hardcoded x that can drift with
+// letterforms).
 void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce::String& text, float cx, float cyMid,
                           float trackingPx)
 {
@@ -88,7 +92,7 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
 } // namespace
 
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (31.0f)), readoutFont (makePlateFont (11.0f))
+    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (29.0f)), readoutFont (makePlateFont (9.0f))
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
@@ -112,15 +116,17 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     layoutRatios = parseLayoutCsv (BinaryData::component_positions_csv, BinaryData::component_positions_csvSize);
 
     // Needle sweeps, clockwise-from-12, fitted against the baked tick RAYS
-    // (end ticks exact; photo perspective leaves mid-scale residuals, worst
-    // ~10deg near the top where the print skews most — linear is all an
-    // attached/linear slider can do). Boost 1->209.0deg, 10->150.5deg;
-    // tone 1->268.3deg, 6->91.0deg. TRIM has no printed scale at its new
-    // spot, so it keeps the conventional 7-to-5-o'clock sweep.
+    // (re-measured fix round 3: radial min-dark scan, 0.1deg steps, r118-165;
+    // end ticks exact, detents land exactly on them with zero overtravel).
+    // Boost 1->209.0deg, 10->150.5deg (plateau centers 208.9/150.6, within
+    // 0.1deg — sub-pixel at tick radius); tone 1->268.3deg, 6->91.3deg.
+    // Photo perspective leaves mid-scale residuals a linear slider cannot
+    // follow. TRIM has no printed scale at its oval spot, so it keeps the
+    // conventional 7-to-5-o'clock sweep.
     boostDialLookAndFeel.needleStartDeg = 209.0f;
     boostDialLookAndFeel.needleSweepDeg = 301.5f;
     toneDialLookAndFeel.needleStartDeg = 268.3f;
-    toneDialLookAndFeel.needleSweepDeg = 182.7f;
+    toneDialLookAndFeel.needleSweepDeg = 183.0f;
     trimDialLookAndFeel.needleStartDeg = 225.0f;
     trimDialLookAndFeel.needleSweepDeg = 270.0f;
 
@@ -165,12 +171,12 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     outputSlider.setLookAndFeel (&trimDialLookAndFeel);
     addAndMakeVisible (outputSlider);
 
-    // In-code dB readout directly below the trim knob, following the output
-    // param (set in resized(); text refreshed in timerCallback). Cinzel at a
-    // subordinate size, non-interactive.
+    // In-code dB readout below the trim knob, following the output param
+    // (set in resized(); text refreshed in timerCallback). Pale on the black
+    // oval; Michroma at a subordinate size, non-interactive.
     trimReadout.setInterceptsMouseClicks (false, false);
     trimReadout.setJustificationType (juce::Justification::centred);
-    trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xff2e3234));
+    trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xffe9ebee));
     trimReadout.setFont (readoutFont);
     addAndMakeVisible (trimReadout);
 
@@ -197,9 +203,18 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     signalLedImage.setImage (ledOffImage);
     addAndMakeVisible (signalLedImage);
 
-    // Blue POWER LED: always on, like hardware.
+    // Blue POWER LED: on while ACTIVE is engaged, dark when bypassed (the
+    // timer below drives it from the `active` param; initial state synced
+    // here so the first paint is correct).
     powerLedImage.setImage (ledOnImage);
     addAndMakeVisible (powerLedImage);
+
+    // Lights-off veil: topmost child (paints over LEDs/knobs), visible only
+    // while ACTIVE is off. Non-interactive so knob drags pass straight
+    // through to the controls beneath.
+    dimOverlay.setInterceptsMouseClicks (false, false);
+    dimOverlay.setVisible (false);
+    addAndMakeVisible (dimOverlay);
 
     auto& apvts = processor.getApvts();
     boostAttachment =
@@ -224,6 +239,16 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     }
 
     setSize (kEditorWidth, kEditorHeight);
+
+    // Initial POWER + veil state from the `active` param (the timer keeps
+    // both live; this covers the first paint).
+    if (auto* activeParam = apvts.getParameter ("active"))
+    {
+        powerOn = activeParam->getValue() > 0.5f;
+        powerLedImage.setImage (powerOn ? ledOnImage : ledOffImage);
+        dimVisible = !powerOn;
+        dimOverlay.setVisible (dimVisible);
+    }
 
     // Initial readout text (the timer refreshes it; this covers first paint).
     if (auto* outParam = apvts.getParameter ("output"))
@@ -256,7 +281,7 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
 
     // ABALONE wordmark, engraved style, optically centered across the full
     // panel: cx is the editor's true horizontal center and the draw routine
-    // centers via the measured Cinzel text width. Texture y=189 is the
+    // centers via the measured Michroma text width. Texture y=189 is the
     // band where AVALON sat. The editor is aspect-locked to the texture,
     // so texture ratios map 1:1.
     const float sy = static_cast<float> (getHeight()) / 970.0f;
@@ -280,6 +305,7 @@ void AbaloneW5AudioProcessorEditor::resized ()
     activeButton.setBounds (scaledRect (layoutRatios, "active_button", w, h));
     signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
     powerLedImage.setBounds (scaledRect (layoutRatios, "power_led", w, h));
+    dimOverlay.setBounds (0, 0, w, h);
 }
 
 void AbaloneW5AudioProcessorEditor::timerCallback ()
@@ -290,6 +316,25 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
     {
         ledOn = shouldBeOn;
         signalLedImage.setImage (ledOn ? ledOnImage : ledOffImage);
+    }
+
+    // POWER follows ACTIVE (dark while bypassed); the lights-off veil covers
+    // the panel in the same state and lifts instantly on re-engage. Both are
+    // driven here on the existing 30Hz timer — no new threads, no fading.
+    if (auto* activeParam = processor.getApvts().getParameter ("active"))
+    {
+        const bool engaged = activeParam->getValue() > 0.5f;
+        if (engaged != powerOn)
+        {
+            powerOn = engaged;
+            powerLedImage.setImage (powerOn ? ledOnImage : ledOffImage);
+        }
+        const bool shouldDim = !engaged;
+        if (shouldDim != dimVisible)
+        {
+            dimVisible = shouldDim;
+            dimOverlay.setVisible (dimVisible);
+        }
     }
 
     // The knob always reflects the `tone` param — engaged or bypassed (like

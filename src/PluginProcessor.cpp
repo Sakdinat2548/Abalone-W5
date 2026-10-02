@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <cmath>
+
 AbaloneW5AudioProcessor::AbaloneW5AudioProcessor ()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
@@ -86,18 +88,22 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const int numSamples = buffer.getNumSamples();
     const int activeChannels = juce::jmin (numChannels, static_cast<int> (chains.size()));
 
-    pushChainParams (boostStep, tone, highcut, trimDb, activeChannels);
-
-    // ACTIVE-to-THRU: internal bypass. The buffer already holds the input,
-    // so transparency is leaving it untouched; the chains still consume the
-    // input (result discarded, params above already pushed) to keep
-    // DC-blocker/filter state advancing, so re-engaging clicks no more
-    // than the natural signal return.
+    // ACTIVE-to-THRU: TRUE bypass (relay-style). Zero DSP: the chains are not
+    // fed at all and their states freeze. The buffer already holds the input
+    // (in-place processing), so leaving it untouched IS the passthrough —
+    // only unmapped extra channels are cleared, as in the engaged path.
+    // Re-engage settle: filters resume from the frozen state, so a brief
+    // transient is possible on re-engage (authentic relay behavior), settling
+    // within milliseconds as the DC-blocker re-converges.
     if (!active)
     {
-        advanceChains (buffer, activeChannels, numSamples);
+        trackBypassPeak (buffer, activeChannels, numSamples);
+        for (int ch = activeChannels; ch < numChannels; ++ch)
+            buffer.clear (ch, 0, numSamples);
         return;
     }
+
+    pushChainParams (boostStep, tone, highcut, trimDb, activeChannels);
 
     for (int ch = 0; ch < activeChannels; ++ch)
     {
@@ -124,34 +130,46 @@ void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool hig
     }
 }
 
-void AbaloneW5AudioProcessor::advanceChains (juce::AudioBuffer<float>& buffer, int activeChannels, int numSamples)
+void AbaloneW5AudioProcessor::trackBypassPeak (const juce::AudioBuffer<float>& buffer, int activeChannels,
+                                               int numSamples)
 {
+    float m = 0.0f;
     for (int ch = 0; ch < activeChannels; ++ch)
     {
-        ProcessorChain& chain = chains[static_cast<size_t> (ch)];
         const float* data = buffer.getReadPointer (ch);
         for (int i = 0; i < numSamples; ++i)
-            static_cast<void> (chain.processSample (data[i]));
+        {
+            const float a = std::fabs (data[i]);
+            if (a > m)
+                m = a;
+        }
     }
+    // Benign race (monotonic max within the interval, reset-on-read on the
+    // message thread): a lost update only dims one 30Hz LED poll; the atomic
+    // keeps the realtime thread lock-free (no mutexes).
+    const float cur = bypassPeak_.load (std::memory_order_relaxed);
+    if (m > cur)
+        bypassPeak_.store (m, std::memory_order_relaxed);
 }
 
 void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    const int activeChannels = juce::jmin (buffer.getNumChannels(), static_cast<int> (chains.size()));
-    const int toneParam = static_cast<int> (apvts.getRawParameterValue ("tone")->load());
-    pushChainParams (static_cast<int> (apvts.getRawParameterValue ("boost")->load()) + 1,
-                     apvts.getRawParameterValue ("toneIn")->load() > 0.5f ? toneParam : 0,
-                     apvts.getRawParameterValue ("highcut")->load() > 0.5f,
-                     apvts.getRawParameterValue ("output")->load(), activeChannels);
-    advanceChains (buffer, activeChannels, buffer.getNumSamples());
+    // Host bypass: same TRUE passthrough as ACTIVE off — zero DSP, states
+    // frozen, buffer untouched. Only the input peak is tracked for the LED.
+    trackBypassPeak (buffer, juce::jmin (buffer.getNumChannels(), static_cast<int> (chains.size())),
+                     buffer.getNumSamples());
 }
 
 float AbaloneW5AudioProcessor::getSignalPeak ()
 {
-    float peak = 0.0f;
+    // Bypassed intervals contribute the input peak; engaged intervals the
+    // pre-trim chain peak. The legacy post-trim tracker is drained (not
+    // used) so no stale maximum survives across reads.
+    float peak = bypassPeak_.exchange (0.0f, std::memory_order_relaxed);
     for (auto& chain : chains)
     {
-        const float p = chain.getLastPeak();
+        static_cast<void> (chain.getLastPeak());
+        const float p = chain.getLastPreTrimPeak();
         if (p > peak)
             peak = p;
     }

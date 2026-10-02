@@ -109,15 +109,29 @@ struct ProcessorChain
         const float cut = highcut_.processSample (colored);
         const float out = cut * trimLin_;
 
+        // Pre-trim tap (post-HighCut, pre-trim-gain peak) for the SIGNAL LED:
+        // the hardware has no trim so its LED can't see one; the pre-trim tap
+        // keeps Boost staging readable at -18dBFS workflows. Tracked alongside
+        // (never instead of) the legacy post-trim peak below, so existing
+        // peak-tracker behavior is unchanged.
+        const float preMag = std::fabs (cut);
+        if (preMag > prePeak_.load (std::memory_order_relaxed))
+            prePeak_.store (preMag, std::memory_order_relaxed);
+
         const float mag = std::fabs (out);
         if (mag > peak_.load (std::memory_order_relaxed))
             peak_.store (mag, std::memory_order_relaxed);
         return out;
     }
 
-    // Max |post-trim| since the last call; resets to 0 on read (the editor
-    // timer polls this at 30Hz for the SIGNAL LED).
+    // Max |post-trim| since the last call; resets to 0 on read. Legacy tap,
+    // kept for the unit-tested peak-tracker behavior; the editor SIGNAL LED
+    // reads getLastPreTrimPeak() instead (drained here alongside).
     float getLastPeak () const { return peak_.exchange (0.0f, std::memory_order_relaxed); }
+
+    // Max |pre-trim| (post-HighCut, pre-trim-gain) since the last call;
+    // resets to 0 on read. This is the SIGNAL LED tap in normal operation.
+    float getLastPreTrimPeak () const { return prePeak_.exchange (0.0f, std::memory_order_relaxed); }
 
 private:
     // First selection (constructor): no audible past, so select directly.
@@ -138,6 +152,7 @@ private:
     HighCut highcut_;
     float trimLin_ = 1.0f;
     mutable std::atomic<float> peak_{0.0f};
+    mutable std::atomic<float> prePeak_{0.0f};
 
     int active_ = 0;
     int targetTone_ = 3;

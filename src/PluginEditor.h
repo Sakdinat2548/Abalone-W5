@@ -23,9 +23,12 @@ class AbaloneW5AudioProcessor;
 //   param ONLY; the TONE button is a `toneIn` attachment (never synced
 //   from the tone value).
 // - NEW additive Bool `active` (default true, red ACTIVE button) is the
-//   power switch: ACTIVE-to-THRU is an internal bypass (see processBlock).
-//   Old states load as active. SPEAKER is hardware-only: it renders as a
-//   permanent OFF image and is non-interactive.
+//   power switch: ACTIVE-to-THRU is a TRUE bypass (see processBlock) — zero
+//   DSP, chain states frozen, buffer untouched; a brief relay-style settle
+//   transient is possible on re-engage. Old states load as active. SPEAKER
+//   is hardware-only: it renders as a permanent OFF image and is
+//   non-interactive. ACTIVE off also veils the panel (DimOverlay) and kills
+//   the POWER LED; the SIGNAL LED follows the input peak while bypassed.
 // - Photo knob bodies (knob_*_no_pointer.png) are NEVER rotated: baked
 //   off-axis highlights + edge dial-numeral fragments would swing. Bodies
 //   are drawn static and circular-clipped; value is shown by the extracted
@@ -102,6 +105,16 @@ struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
     }
 };
 
+// Lights-off overlay: ACTIVE off darkens the whole panel with a translucent
+// fill. A topmost non-interactive child (added last, full panel bounds), so
+// it dims every LED/knob beneath it and never blocks drags; visibility flips
+// instantly on re-engage from the existing 30Hz timer (no new threads, no
+// fade animation). POWER is separately driven dark while inactive.
+struct DimOverlay : public juce::Component
+{
+    void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0x99000000)); }
+};
+
 class AbaloneW5AudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -132,22 +145,30 @@ private:
 
     juce::Slider boostSlider;
     juce::Slider toneSlider;   // manual: values 1-6, never engages (see note above).
-    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob in the clear
-                               // silver band right of the TONE dial (see CSV trim_dial).
-    juce::Label trimReadout;   // in-code dB readout directly below the trim knob.
+    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob on the
+                               // black oval right of the THRU jack (see CSV trim_dial).
+    juce::Label trimReadout;   // in-code dB readout below the trim knob (pale
+                               // on the black oval).
     juce::ToggleButton highcutButton;
     juce::ToggleButton toneEngageButton; // attached to `toneIn`.
     juce::ToggleButton activeButton;     // attached to `active` (power switch).
     juce::ImageComponent speakerImage;   // permanent OFF, non-interactive (hardware-only tap).
     juce::ImageComponent signalLedImage;
     juce::ImageComponent powerLedImage;
+    DimOverlay dimOverlay; // lights-off veil, visible only while ACTIVE is off.
 
     PngToggleLookAndFeel toggleLookAndFeel;
     juce::Image ledOnImage;
     juce::Image ledOffImage;
 
-    // Trajan-class header face: Cinzel (OFL, embedded as BinaryData) for the
-    // in-code ABALONE wordmark + TRIM dB readout. Single typeface built once
+    // Eurostile-class header face: Michroma (OFL, embedded as BinaryData)
+    // for the in-code ABALONE wordmark + TRIM dB readout. Michroma is the
+    // established Eurostile-Extended-Black-class OFL substitute (extended
+    // square caps, single static weight — Orbitron ships variable-only
+    // upstream, so its 900 Black is unreachable reliably in JUCE). A licensed
+    // Eurostile cut drops in later as a one-file swap: replace
+    // ui/Michroma.ttf + ui/OFL.txt, rename the SOURCES entry, and point
+    // makePlateFont at the new BinaryData symbol. Single typeface built once
     // at construction; system-font fallback if the embed ever fails to parse.
     juce::Font headerFont;
     juce::Font readoutFont;
@@ -163,6 +184,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
 
     bool ledOn = false;
+    bool powerOn = true;
+    bool dimVisible = false;
     juce::String lastTrimText;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)

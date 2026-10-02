@@ -81,11 +81,13 @@ target_sources(AbaloneW5 PRIVATE
 #   (Obsidian pattern — positions are data, not magic numbers; the editor parses
 #   this at construction). docs/refs/u5_front.png stays a layout reference only
 #   and is not embedded.
-# - Cinzel.ttf + OFL.txt: OFL Trajan-class serif for the in-code ABALONE header
-#   (matches the hardware's engraved caps) and the in-code TRIM dB readout.
-#   The footer strip is baked plate pixels, so the font is header+readout only.
-#   Loaded once as a single juce::Typeface at construction with a system-font
-#   fallback (never blank).
+# - Michroma.ttf + OFL.txt: OFL Eurostile-Extended-Black-class face for the
+#   in-code ABALONE header (matches the hardware badge's wide grotesque caps)
+#   and the in-code TRIM dB readout. The footer strip is baked plate pixels,
+#   so the font is header+readout only. Loaded once as a single
+#   juce::Typeface at construction with a system-font fallback (never blank).
+#   A licensed Eurostile cut drops in later as a one-file swap (see
+#   PluginEditor.h).
 juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
@@ -101,7 +103,7 @@ juce_add_binary_data(AbaloneW5Assets
         ui/led_on.png
         ui/led_off.png
         ui/component_positions.csv
-        ui/Cinzel.ttf
+        ui/Michroma.ttf
         ui/OFL.txt
 )
 

@@ -19,11 +19,11 @@ public:
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
-    // Host bypass: bit-transparent passthrough that keeps the chains'
-    // processing state advancing (the input is run through the chains and
-    // the result discarded), so re-engaging clicks no more than the natural
-    // signal return. JUCE 8.0.15 has no AudioProcessor::isBypassed(); the
-    // host calls this INSTEAD of processBlock, which is the equivalent hook.
+    // Host bypass: TRUE passthrough — the buffer is left untouched (zero DSP,
+    // chain states frozen), exactly like ACTIVE off. The input peak is still
+    // tracked so the SIGNAL LED follows the input while bypassed.
+    // JUCE 8.0.15 has no AudioProcessor::isBypassed(); the host calls this
+    // INSTEAD of processBlock, which is the equivalent hook.
     void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor () override;
@@ -47,21 +47,28 @@ public:
 
     juce::AudioProcessorValueTreeState& getApvts () { return apvts; }
 
-    // Max chain peak since the last call (resets on read). The editor LED
-    // timer polls this on the message thread; the atomics are lock-free.
+    // Max LED peak since the last call (resets on read). Normal operation:
+    // the pre-trim (post-HighCut, pre-trim-gain) chain peak — the hardware
+    // has no trim so its LED can't see one. Bypassed (ACTIVE off or host
+    // bypass): the input peak, since passthrough has no output stage to
+    // read. The editor LED timer polls this on the message thread; the
+    // atomics are lock-free.
     float getSignalPeak ();
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout ();
 
-    // Runs the input through the chains and discards the result, keeping
-    // filter state advancing while the buffer (still the input) is untouched.
-    void advanceChains (juce::AudioBuffer<float>& buffer, int activeChannels, int numSamples);
+    // Tracks max |input| over the kept channels into bypassPeak_ (read side
+    // of the chains is never touched: bypass runs zero DSP, states frozen).
+    void trackBypassPeak (const juce::AudioBuffer<float>& buffer, int activeChannels, int numSamples);
 
     void pushChainParams (int boostStep, int tone, bool highcut, float trimDb, int activeChannels);
 
     juce::AudioProcessorValueTreeState apvts;
     std::array<ProcessorChain, 2> chains;
+    // Input-peak accumulator for the bypassed SIGNAL LED (reset-on-read).
+    // Written on the audio thread, drained on the message thread.
+    mutable std::atomic<float> bypassPeak_{0.0f};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessor)
 };
