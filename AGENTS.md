@@ -46,7 +46,7 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 - DC-block: 5Hz input. Tone: bypass (TONE0) + 1-6 biquads, default Tone 3, 10ms xfade.
 - Color: fixed subtle tanh/2nd-harmonic ~0.1% THD at +10dB, bypassable for test.
 - HighCut: on/off, -3dB at 8kHz, 1-pole min-phase. Trim + SIGNAL LED at -2dB.
-- APVTS: boost (Choice 1-10), tone (Choice Bypass,1-6), highcut (Bool), output (dB trim).
+- APVTS: boost (Choice 1-10), tone (Choice Bypass,1-6), highcut (Bool), output CUT-ONLY −30..0dB (default 0; old +values clamp to 0 on load), + additive toneIn/active Bools (default true/engaged).
 
 ## TDD + lint rules
 

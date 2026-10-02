@@ -9,25 +9,41 @@ class AbaloneW5AudioProcessor;
 
 // Tone bypass mapping (hardware-true, preset-safe):
 // - The APVTS `tone` param (Choice Bypass/1-6, default Tone 3) is UNCHANGED;
-//   presets/automation store param values, so recall is byte-identical.
+//   presets/automation store denormalised param values, so recall of the
+//   existing four ids is unaffected.
+// - NEW additive Bool `toneIn` (default true) is driven by the red TONE
+//   button; the chain receives `toneIn ? tone : 0`. Old states lack the
+//   child, so APVTS falls back to the default: engaged.
 // - The TONE KNOB is a manual (unattached) slider covering values 1-6 only.
-//   Dragging it writes the param and re-engages the tone if bypassed.
-// - The red TONE BUTTON toggles Bypass <-> last non-bypass tone: pressing it
-//   while engaged parks the param at Bypass (the knob keeps its position, like
-//   hardware); pressing it while bypassed restores lastToneIndex.
-// - timerCallback re-syncs the button (and the knob, when engaged and not
-//   being dragged) from the param, so preset recall + automation always show.
-// - Boost 1-10 keeps its attached Choice mapping; output trim is attached.
+//   Turning it while bypassed writes `tone` but never engages and never
+//   changes the sound (the chain still receives 0) — like the hardware
+//   knob sitting where you left it. The knob always reflects the `tone`
+//   param, following automation/presets even while bypassed.
+// - timerCallback re-syncs the knob (when not dragged) from the `tone`
+//   param ONLY; the TONE button is a `toneIn` attachment (never synced
+//   from the tone value).
+// - NEW additive Bool `active` (default true, red ACTIVE button) is the
+//   power switch: ACTIVE-to-THRU is an internal bypass (see processBlock).
+//   Old states load as active. SPEAKER is hardware-only: it renders as a
+//   permanent OFF image and is non-interactive.
 // - Photo knob bodies (knob_*_no_pointer.png) are NEVER rotated: baked
-//   off-axis highlights + edge dial-numeral fragments would swing. Bodies are
-//   drawn static and circular-clipped; value is shown by a drawn needle only.
+//   off-axis highlights + edge dial-numeral fragments would swing. Bodies
+//   are drawn static and circular-clipped; value is shown by the extracted
+//   photo pointer (pointer_*.png: tight offline crop of the baked pointer
+//   from knob_*.png, straightened to 12 o'clock, pivot = rim-fit axle)
+//   rotated about the measured pivot — true to hardware and immune to skew.
 
-// Rotary look-and-feel: static photo knob body + drawn needle. The slider
-// bounds ARE the knob frame; `needleStartDeg`/`needleSweepDeg` are measured
-// clockwise-from-12 to match the baked dial ticks (see component_positions.csv).
+// Rotary look-and-feel: static photo knob body + extracted photo pointer.
+// The slider bounds ARE the knob frame; `needleStartDeg`/`needleSweepDeg`
+// are clockwise-from-12, fitted against tick RAYS (see
+// component_positions.csv). `pivotX/Y` is the rotation axle as a fraction
+// of the slider bounds (rim-circle fit per knob art, not the frame center).
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
-    juce::Image knobImage;
+    juce::Image bodyImage;
+    juce::Image pointerImage;
+    float pivotX = 0.5f;
+    float pivotY = 0.5f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
 
@@ -35,36 +51,39 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
                            float /*rotaryStartAngle*/, float /*rotaryEndAngle*/, juce::Slider&) override
     {
         const float side = static_cast<float> (juce::jmin (width, height));
-        const float cx = static_cast<float> (x) + static_cast<float> (width) * 0.5f;
-        const float cy = static_cast<float> (y) + static_cast<float> (height) * 0.5f;
+        const float fx = static_cast<float> (x);
+        const float fy = static_cast<float> (y);
 
-        if (knobImage.isValid())
+        if (bodyImage.isValid())
         {
             // Circular clip keeps the photo frame's square corners (and any
             // surround plate/numeral fragments) off the faceplate. The knob
             // bevel sits at ~102/224 of the frame half-side; the clip at
             // 108/224 keeps the dark outline ring and drops the surround.
+            const float cx = fx + static_cast<float> (width) * 0.5f;
+            const float cy = fy + static_cast<float> (height) * 0.5f;
             juce::Path clip;
             clip.addEllipse (cx - side * 0.4821f, cy - side * 0.4821f, side * 0.9642f, side * 0.9642f);
             g.saveState();
             g.reduceClipRegion (clip);
-            g.drawImage (knobImage, juce::Rectangle<float> (static_cast<float> (x), static_cast<float> (y),
-                                                            static_cast<float> (width), static_cast<float> (height)));
+            g.drawImage (bodyImage,
+                         juce::Rectangle<float> (fx, fy, static_cast<float> (width), static_cast<float> (height)));
             g.restoreState();
         }
 
-        // Drawn needle: dark keyline + light core, hardware-pointer style.
-        // The photo body never rotates; only this needle moves with value.
-        const float angle = (needleStartDeg + sliderPos * needleSweepDeg) * juce::MathConstants<float>::pi / 180.0f;
-        const float knobR = side * (102.0f / 224.0f);
-        const float len = knobR * 0.78f;
-        const juce::Point<float> tip (cx + std::sin (angle) * len, cy - std::cos (angle) * len);
-        const juce::Point<float> tail (cx - std::sin (angle) * len * 0.18f, cy + std::cos (angle) * len * 0.18f);
-        const float w = juce::jmax (2.0f, side * 0.020f);
-        g.setColour (juce::Colour (0xff232527));
-        g.drawLine (juce::Line<float> (tail, tip), w + 2.0f);
-        g.setColour (juce::Colour (0xfff4f6f8));
-        g.drawLine (juce::Line<float> (tail, tip), w);
+        if (pointerImage.isValid())
+        {
+            // Extracted photo pointer, rotated about the measured axle. The
+            // art points at 12 o'clock at rotation 0, so the rotation angle
+            // IS the needle angle (clockwise-from-12, y-down screen space).
+            const float angle = (needleStartDeg + sliderPos * needleSweepDeg) * juce::MathConstants<float>::pi / 180.0f;
+            g.saveState();
+            g.addTransform (juce::AffineTransform::rotation (angle, fx + pivotX * static_cast<float> (width),
+                                                             fy + pivotY * static_cast<float> (height)));
+            g.drawImage (pointerImage,
+                         juce::Rectangle<float> (fx, fy, static_cast<float> (width), static_cast<float> (height)));
+            g.restoreState();
+        }
     }
 };
 
@@ -112,10 +131,12 @@ private:
     PhotoDialLookAndFeel trimDialLookAndFeel;
 
     juce::Slider boostSlider;
-    juce::Slider toneSlider; // manual: values 1-6, re-engages on drag (see note above).
-    juce::Slider outputSlider;
+    juce::Slider toneSlider;   // manual: values 1-6, never engages (see note above).
+    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob at the ex-AVALON spot.
     juce::ToggleButton highcutButton;
-    juce::ToggleButton toneEngageButton;
+    juce::ToggleButton toneEngageButton; // attached to `toneIn`.
+    juce::ToggleButton activeButton;     // attached to `active` (power switch).
+    juce::ImageComponent speakerImage;   // permanent OFF, non-interactive (hardware-only tap).
     juce::ImageComponent signalLedImage;
     juce::ImageComponent powerLedImage;
 
@@ -130,8 +151,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> highcutAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toneInAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
 
-    int lastToneIndex = 3; // restored when the tone-engage toggle is re-armed.
     bool ledOn = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)

@@ -19,6 +19,13 @@ public:
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
+    // Host bypass: bit-transparent passthrough that keeps the chains'
+    // processing state advancing (the input is run through the chains and
+    // the result discarded), so re-engaging clicks no more than the natural
+    // signal return. JUCE 8.0.15 has no AudioProcessor::isBypassed(); the
+    // host calls this INSTEAD of processBlock, which is the equivalent hook.
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
     juce::AudioProcessorEditor* createEditor () override;
     bool hasEditor () const override;
 
@@ -46,6 +53,12 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout ();
+
+    // Runs the input through the chains and discards the result, keeping
+    // filter state advancing while the buffer (still the input) is untouched.
+    void advanceChains (juce::AudioBuffer<float>& buffer, int activeChannels, int numSamples);
+
+    void pushChainParams (int boostStep, int tone, bool highcut, float trimDb, int activeChannels);
 
     juce::AudioProcessorValueTreeState apvts;
     std::array<ProcessorChain, 2> chains;

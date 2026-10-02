@@ -70,7 +70,12 @@ target_sources(AbaloneW5 PRIVATE
 #   rings + numerals + labels intact, W5 mark) drawn 1:1 as the editor faceplate.
 # - knob_boost/tone_no_pointer.png: 224x224 photo knob bodies WITHOUT pointers.
 #   NEVER rotated (baked off-axis highlights + edge numeral fragments would
-#   swing): drawn static + circular-clipped, value shown by a drawn needle.
+#   swing): drawn static + circular-clipped, value shown by pointer_*.png.
+# - pointer_boost/tone/trim.png: 224x224 extracted photo pointers (tight offline
+#   crop of the baked pointer from knob_boost/tone.png, straightened to 12
+#   o'clock about the rim-fit axle; trim uses a dilated tone pointer so it
+#   reads at mini size). Rotated at runtime about the measured pivot (see
+#   PluginEditor.cpp); the drawn-line needle is gone.
 # - button_on/off.png, led_on/off.png: single-frame toggle + LED skins.
 # - component_positions.csv: all live-element rects as texture ratios
 #   (Obsidian pattern — positions are data, not magic numbers; the editor parses
@@ -83,6 +88,9 @@ juce_add_binary_data(AbaloneW5Assets
         ui/u5_front_clean.png
         ui/knob_boost_no_pointer.png
         ui/knob_tone_no_pointer.png
+        ui/pointer_boost.png
+        ui/pointer_tone.png
+        ui/pointer_trim.png
         ui/button_on.png
         ui/button_off.png
         ui/led_on.png
