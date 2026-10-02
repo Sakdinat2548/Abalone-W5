@@ -20,16 +20,31 @@ For each IR WAV (expected: TONE0–6 × HIGHCUT on/off = 14 files):
    (b) the digitized manual chart (bypass = flat 0 dB; highcut-on files get
    our highcut curve added to the chart oracle so the column stays meaningful).
 4. Gate band 40 Hz–15 kHz: PASS if max |IR − ours| ≤ ±1 dB.
-   The 10–20 kHz region (manual axis-caveat zone) is **reported separately,
-   never gated**.
+   The 15–20 kHz region is **reported separately, never gated**
+   (printed as `15-20k (report only)`).
 
-### Python-port verification (no build coupling)
+### Python-port verification (no build coupling, self-proving)
 
 The RBJ / HighCut math in `ir_check.py` is transcribed verbatim from
-`src/dsp/ToneBank.h` / `src/dsp/HighCut.h`. Proof of equivalence: the port
-reproduces all six published C++ either-oracle worst deltas (Task 4 report,
-48 kHz) exactly — T1 0.47 / T2 0.75 / T3 0.27 / T4 0.48 / T5 0.11 /
-T6 0.30 dB (all ≤ 0.01 dB) — far inside the required 0.05 dB.
+`src/dsp/ToneBank.h` / `src/dsp/HighCut.h`. Equivalence is executed, not
+asserted: `--verify-port` (which also runs automatically on every invocation
+as part of the self-test section) recomputes the six per-tone either-oracle
+worst deltas — min(|port−header|, |port−CSV|) over the 60 eye-read header
+points parsed live from `analysis/tone_targets.h`, the same algorithm as
+`tests/ToneBankTest.cpp` `checkHeaderOracle` — and requires each to match
+the recorded C++ reference within 0.05 dB. Actual output:
+
+```
+[PASS] tone 1 port either-oracle worst=0.4742 dB (C++ ref 0.47, diff 0.0042, tol 0.05)
+[PASS] tone 2 port either-oracle worst=0.7506 dB (C++ ref 0.75, diff 0.0006, tol 0.05)
+[PASS] tone 3 port either-oracle worst=0.2706 dB (C++ ref 0.27, diff 0.0006, tol 0.05)
+[PASS] tone 4 port either-oracle worst=0.4835 dB (C++ ref 0.48, diff 0.0035, tol 0.05)
+[PASS] tone 5 port either-oracle worst=0.1112 dB (C++ ref 0.11, diff 0.0012, tol 0.05)
+[PASS] tone 6 port either-oracle worst=0.3005 dB (C++ ref 0.30, diff 0.0005, tol 0.05)
+port verification: GREEN
+```
+
+(worst diff 0.0042 dB — far inside the required 0.05 dB).
 
 Environment: Python 3 with numpy 2.5.3, **no scipy** (FFT via `numpy.fft`;
 WAV I/O via `struct` + `wave`-write only — Python 3.14's `wave` module
@@ -66,8 +81,10 @@ fmt-tag-sniffing manual RIFF parser); (2) filename regex `\b` rejecting
 2. Drop the WAVs in `analysis/ir_local/` (gitignored). Accepted names
    (case-insensitive), e.g. `tone3_highcut_off_48k.wav`,
    `TONE2_HIGHCUT_ON_44k1.wav`, `tone0.wav` (must contain tone 0–6 and,
-   except bypass-only files, `on`/`off` for highcut; unparseable names are
-   listed as SKIP, never guessed).
+   except bypass-only files, `on`/`off` for highcut; unparseable names and
+   unreadable files are listed as SKIP, never guessed — and if files are
+   present but zero are actually compared, the script exits 2 with a loud
+   warning instead of looking green).
 3. Run `python analysis/ir_check.py`. Per-tone max/mean deltas vs ours and
    vs the chart print to console with PASS/FAIL vs the ±1 dB gate.
 4. Record the numbers in §5 below. Do NOT tune DSP in this step — this task

@@ -6,24 +6,35 @@ chart/CSV oracle. Shape agreement only: every curve is normalized at 1 kHz to
 remove capture-gain unknowns.
 
 Dependencies: Python 3 stdlib + numpy ONLY (no scipy; FFT via numpy.fft).
-WAV I/O via stdlib `wave` (PCM 16/24/32-int and float32 supported).
+WAV read via a manual RIFF parser (stdlib `wave` rejects float32 files on
+read, so `wave` is write-only here for the self-test round-trip, with the
+format tag patched to 3 afterwards); the reader supports PCM 8/16/24/32-bit
+int and float32.
 
 Python-port verification: the RBJ / HighCut math below is transcribed verbatim
-from src/dsp/ToneBank.h and src/dsp/HighCut.h. The port reproduces the
-published C++ either-oracle worst deltas (Task 4 report, 48 kHz) exactly:
+from src/dsp/ToneBank.h and src/dsp/HighCut.h. Equivalence is EXECUTED, not
+asserted: --verify-port (run on every invocation as part of the self-test
+section) recomputes the six per-tone either-oracle worst deltas
+(min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
+algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each to
+match the recorded C++ reference within 0.05 dB:
   T1 0.47 / T2 0.75 / T3 0.27 / T4 0.48 / T5 0.11 / T6 0.30 dB.
-Matching all six tones to 0.01 dB confirms the port is equivalent to the C++
-`magnitudeAt` chain response within far better than the required 0.05 dB.
+Actual port values (48 kHz): T1 0.4742 / T2 0.7506 / T3 0.2706 / T4 0.4835 /
+T5 0.1112 / T6 0.3005 dB (worst diff 0.0042 dB, far inside the 0.05 dB
+requirement).
 
 Usage:
   python analysis/ir_check.py                  # self-test + real IRs if present
   python analysis/ir_check.py --self-test-only  # harness sanity only, no files
+  python analysis/ir_check.py --verify-port     # port-vs-C++ check only
   python analysis/ir_check.py --ir-dir <dir> --zoom-dir <dir>
 
 Exit code: 0 = self-test green (and every real IR within gate, if any);
-1 = self-test failure; 2 = a real IR failed the +/-1 dB gate (measure, don't
-tune here -- tuning is a follow-up decision). Absent local files are NOT a
-failure: they print BLOCKED-ON-FILES / pending instructions and exit 0.
+1 = self-test failure (includes port-verification failure); 2 = a real IR
+failed the +/-1 dB gate (measure, don't tune here -- tuning is a follow-up
+decision) or files were present but NONE could be compared (all skipped).
+Absent local files are NOT a failure: they print BLOCKED-ON-FILES / pending
+instructions and exit 0.
 """
 
 import argparse
@@ -153,6 +164,61 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
     if highcut:
         out += highcut_magnitude_at(freq_hz, fs)
     return out
+
+
+# ----------------------------------------------------------------------------
+# Section 1b: self-proving Python-port verification (no build coupling).
+# Recomputes the six per-tone either-oracle worst deltas
+# (min(|port-header|, |port-CSV|) over the 60 eye-read header points -- the
+# same algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires
+# each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
+# Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal.
+# ----------------------------------------------------------------------------
+CXX_EITHER_REF_DB = {1: 0.47, 2: 0.75, 3: 0.27, 4: 0.48, 5: 0.11, 6: 0.30}
+PORT_VERIFY_TOL_DB = 0.05
+
+
+def load_header_targets(path):
+    """Parse the eye-read header oracle (analysis/tone_targets.h).
+
+    Returns [(tone, freq_hz, db)]; single source of truth, no transcription.
+    """
+    with open(path) as fh:
+        txt = fh.read()
+    pts = re.findall(r"\{(\d),\s*([\d.]+)f,\s*([+-]?[\d.]+)f\}", txt)
+    out = [(int(t), float(f), float(db)) for t, f, db in pts]
+    if len(out) < 60:
+        raise ValueError("expected >=60 header targets in %s, got %d"
+                         % (path, len(out)))
+    return out
+
+
+def verify_port(csv_path, header_path, fs=48000.0):
+    """Check the Python port against the C++ reference. Returns (ok, lines)."""
+    chart_freqs, chart = load_chart_csv(csv_path)
+    targets = load_header_targets(header_path)
+    ok = True
+    lines = []
+    for tone in range(1, 7):
+        worst = 0.0
+        for t, f, db in targets:
+            if t != tone:
+                continue
+            m = tone_magnitude_at(tone, f, fs)
+            csvv = float(log_interp(f, chart_freqs, chart[tone]))
+            d = dHeader = abs(m - db)
+            dCsv = abs(m - csvv)
+            dEither = dHeader if dHeader < dCsv else dCsv
+            if dEither > worst:
+                worst = dEither
+        diff = abs(worst - CXX_EITHER_REF_DB[tone])
+        passed = diff <= PORT_VERIFY_TOL_DB
+        ok = ok and passed
+        lines.append("  [%-4s] tone %d port either-oracle worst=%.4f dB "
+                     "(C++ ref %.2f, diff %.4f, tol %.2f)"
+                     % ("PASS" if passed else "FAIL", tone, worst,
+                        CXX_EITHER_REF_DB[tone], diff, PORT_VERIFY_TOL_DB))
+    return ok, lines
 
 
 # ----------------------------------------------------------------------------
@@ -368,12 +434,19 @@ def parse_ir_name(name):
 
 
 def check_ir_dir(ir_dir, grid_freqs, chart_freqs, chart):
-    """Compare each IR WAV against chain + chart. Returns (n, n_fail, lines)."""
+    """Compare each IR WAV against chain + chart.
+
+    Returns (n_total, n_compared, n_fail, lines). Unparseable or unreadable
+    files are SKIP lines -- never guessed, never fatal here; the caller
+    treats "files present but none compared" as a loud nonzero exit so an
+    all-SKIP run can never look green.
+    """
     wavs = sorted(f for f in os.listdir(ir_dir)
                   if f.lower().endswith(".wav"))
     if not wavs:
-        return 0, 0, []
+        return 0, 0, 0, []
     lines = []
+    n_compared = 0
     n_fail = 0
     for f in wavs:
         parsed = parse_ir_name(f)
@@ -381,7 +454,12 @@ def check_ir_dir(ir_dir, grid_freqs, chart_freqs, chart):
             lines.append("  SKIP %s: cannot parse tone/highcut from name" % f)
             continue
         tone, hc = parsed
-        ir, fs = read_wav_mono(os.path.join(ir_dir, f))
+        try:
+            ir, fs = read_wav_mono(os.path.join(ir_dir, f))
+        except (ValueError, struct.error, OSError) as e:
+            lines.append("  SKIP %s: unreadable (%s)" % (f, e))
+            continue
+        n_compared += 1
         meas = ir_response(ir, fs, grid_freqs)
         ref = np.array([chain_db(tone, fr, fs, hc) for fr in grid_freqs])
         ref = ref - float(log_interp(NORM_HZ, grid_freqs, ref))
@@ -404,12 +482,12 @@ def check_ir_dir(ir_dir, grid_freqs, chart_freqs, chart):
                      "vs-ours max=%.2f mean=%.2f | vs-chart max=%.2f mean=%.2f" %
                      (verdict, f, tone, "on" if hc else "off", fs,
                       w_ours, m_ours, w_cht, m_cht))
-        # 10-20 kHz axis-caveat region: reported separately, NEVER gated.
+        # 15-20 kHz axis-caveat region: reported separately, NEVER gated.
         hi = grid_freqs > GATE_HI_HZ
-        lines.append("         10-20k (report only): vs-ours max=%.2f mean=%.2f"
+        lines.append("         15-20k (report only): vs-ours max=%.2f mean=%.2f"
                      % (float(np.abs(meas[hi] - ref[hi]).max()),
                         float(np.abs(meas[hi] - ref[hi]).mean())))
-    return len(wavs), n_fail, lines
+    return len(wavs), n_compared, n_fail, lines
 
 
 # ----------------------------------------------------------------------------
@@ -421,14 +499,34 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def main():
     ap = argparse.ArgumentParser(description="Abalone W5 IR validation harness")
     ap.add_argument("--self-test-only", action="store_true")
+    ap.add_argument("--verify-port", action="store_true",
+                    help="run only the Python-port-vs-C++ check, then exit")
     ap.add_argument("--ir-dir", default=os.path.join(HERE, "ir_local"))
     ap.add_argument("--zoom-dir", default=os.path.join(HERE, "zoom_ref"))
     ap.add_argument("--csv", default=os.path.join(HERE,
                                                   "u5_tone_curves_digitized.csv"))
+    ap.add_argument("--header-targets", default=os.path.join(HERE,
+                                                             "tone_targets.h"))
     args = ap.parse_args()
 
     chart_freqs, chart = load_chart_csv(args.csv)
     grid = chart_freqs[(chart_freqs >= GATE_LO_HZ)]  # 40 Hz..20 kHz grid
+
+    if args.verify_port:
+        print("== ir_check.py port verification (Python port vs C++ ref) ==")
+        ok, lines = verify_port(args.csv, args.header_targets)
+        print("\n".join(lines))
+        print("port verification: %s" % ("GREEN" if ok else "FAILED"))
+        return 0 if ok else 1
+
+    print("== ir_check.py port verification (Python port vs C++ ref) ==")
+    port_ok, port_lines = verify_port(args.csv, args.header_targets)
+    print("\n".join(port_lines))
+    if not port_ok:
+        print("PORT VERIFICATION FAILED -- port disagrees with C++, "
+              "fix before trusting any comparison.")
+        return 1
+    print("port verification: GREEN")
 
     print("== ir_check.py self-test (synthetic IRs, no files needed) ==")
     ok, lines = run_self_test(grid)
@@ -453,10 +551,17 @@ def main():
         ir_fail = 0
         ir_ran = False
     else:
-        n, ir_fail, lines = check_ir_dir(args.ir_dir, grid, chart_freqs, chart)
+        n, n_compared, ir_fail, lines = check_ir_dir(args.ir_dir, grid,
+                                                     chart_freqs, chart)
         print("\n".join(lines))
-        print("IR leg: %d file(s), %d FAIL vs +/-%.0f dB gate (40 Hz-15 kHz)"
-              % (n, ir_fail, GATE_DB))
+        print("IR leg: %d file(s), %d compared, %d FAIL vs +/-%.0f dB gate "
+              "(40 Hz-15 kHz)" % (n, n_compared, ir_fail, GATE_DB))
+        if n_compared == 0:
+            print("WARNING: %d WAV file(s) present but ALL SKIPPED -- "
+                  "zero IRs actually compared. This is NOT green: fix "
+                  "filenames (must contain tone 0-6 + on/off) or repair "
+                  "the unreadable files and re-run." % n)
+            return 2
         ir_ran = True
 
     print("\n== Zoom leg (ear A/B captures) ==")
