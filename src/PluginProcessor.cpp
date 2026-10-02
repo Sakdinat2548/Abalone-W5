@@ -3,6 +3,25 @@
 
 #include <cmath>
 
+namespace
+{
+
+// Dual-mono copy: channel 0 to every remaining buffer channel. Plain loop
+// (memcpy-class, no heap, no locks) for the 1-in/N-out case; the caller owns
+// the bus-layout check. ch0 itself is never touched.
+void duplicateMonoToOutputs (juce::AudioBuffer<float>& buffer, int numSamples)
+{
+    const int numChannels = buffer.getNumChannels();
+    if (numChannels < 2)
+        return;
+
+    const float* src = buffer.getReadPointer (0);
+    for (int ch = 1; ch < numChannels; ++ch)
+        buffer.copyFrom (ch, 0, src, numSamples);
+}
+
+} // namespace
+
 AbaloneW5AudioProcessor::AbaloneW5AudioProcessor ()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
@@ -88,6 +107,16 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const int numSamples = buffer.getNumSamples();
     const int activeChannels = juce::jmin (numChannels, static_cast<int> (chains.size()));
 
+    // Dual-mono rule: the buses admit mono-in/stereo-out (e.g. a mono ASIO
+    // input feeding the stereo Standalone output). The extra buffer channels
+    // then hold no input data, so per-channel processing would play garbage
+    // on the right. Detect via the BUS layout (never buffer content): with a
+    // single main-bus input and >= 2 buffer channels, ch0 runs through
+    // chain[0] and the result is copied to every remaining channel. With
+    // inputs >= outputs each channel keeps its own chain, exactly as before.
+    // The copy is a plain loop: no heap, no locks on the audio path.
+    const bool monoDuplicate = getMainBusNumInputChannels() == 1 && numChannels >= 2;
+
     // ACTIVE-to-THRU: TRUE bypass (relay-style). Zero DSP: the chains are not
     // fed at all and their states freeze. The buffer already holds the input
     // (in-place processing), so leaving it untouched IS the passthrough —
@@ -97,13 +126,28 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // within milliseconds as the DC-blocker re-converges.
     if (!active)
     {
-        trackBypassPeak (buffer, activeChannels, numSamples);
-        for (int ch = activeChannels; ch < numChannels; ++ch)
-            buffer.clear (ch, 0, numSamples);
+        trackBypassPeak (buffer, monoDuplicate ? 1 : activeChannels, numSamples);
+        if (monoDuplicate)
+            duplicateMonoToOutputs (buffer, numSamples);
+        else
+            for (int ch = activeChannels; ch < numChannels; ++ch)
+                buffer.clear (ch, 0, numSamples);
         return;
     }
 
-    pushChainParams (boostStep, tone, highcut, trimDb, activeChannels);
+    pushChainParams (boostStep, tone, highcut, trimDb, monoDuplicate ? 1 : activeChannels);
+
+    if (monoDuplicate)
+    {
+        ProcessorChain& chain = chains[0];
+
+        float* data = buffer.getWritePointer (0);
+        for (int i = 0; i < numSamples; ++i)
+            data[i] = chain.processSample (data[i]);
+
+        duplicateMonoToOutputs (buffer, numSamples);
+        return;
+    }
 
     for (int ch = 0; ch < activeChannels; ++ch)
     {
@@ -156,8 +200,17 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
 {
     // Host bypass: same TRUE passthrough as ACTIVE off — zero DSP, states
     // frozen, buffer untouched. Only the input peak is tracked for the LED.
-    trackBypassPeak (buffer, juce::jmin (buffer.getNumChannels(), static_cast<int> (chains.size())),
-                     buffer.getNumSamples());
+    // Mono-in exception: the extra channels hold no input data, so ch0 is
+    // copied out (same dual-mono rule as the other paths) — still no DSP.
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
+    const bool monoDuplicate = getMainBusNumInputChannels() == 1 && numChannels >= 2;
+
+    trackBypassPeak (buffer, monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size())),
+                     numSamples);
+
+    if (monoDuplicate)
+        duplicateMonoToOutputs (buffer, numSamples);
 }
 
 float AbaloneW5AudioProcessor::getSignalPeak ()

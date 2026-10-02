@@ -134,3 +134,38 @@ target_link_libraries(AbaloneW5
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# Task 11 headless channel-layout test: drives the REAL processor. Linking the
+# juce:: modules compiles their sources into this target (JUCE INTERFACE
+# sources), so src/PluginProcessor.cpp + src/PluginEditor.cpp build here too;
+# only JucePlugin_Name is needed (the sole JucePlugin_* macro used in src/).
+# Deliberately NOT via add_dsp_test(): that helper undefines NDEBUG, which
+# would enable JUCE_DEBUG (leak-checker statics, extra debug paths) inside a
+# headless pass/fail binary. The checks in ProcessorIOTest.cpp are explicit
+# and NDEBUG-independent, so they stay live under ctest either way.
+add_executable(ProcessorIOTest tests/ProcessorIOTest.cpp src/PluginProcessor.cpp src/PluginEditor.cpp)
+target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5")
+target_link_libraries(ProcessorIOTest PRIVATE
+    AbaloneW5Assets
+    juce::juce_audio_utils
+    juce::juce_audio_processors
+    juce::juce_gui_extra
+)
+add_test(NAME ProcessorIOTest COMMAND ProcessorIOTest)
+
+# Task 11 ASIO hookup (Standalone device list; the VST3 never touches ASIO,
+# but the flag lives on the shared-code target because juce_audio_devices
+# compiles there). Empty default = build exactly as today. When pointed at a
+# Steinberg ASIO SDK root, the build uses the REAL SDK headers
+# (JUCE_ASIO_USE_EXTERNAL_SDK=1 makes juce_audio_devices.cpp #include
+# <iasiodrv.h> from the SDK instead of JUCE's bundled copy) and fails LOUDLY
+# if the SDK layout is wrong. Never commit the SDK.
+set(ABALONEW5_ASIO_SDK_DIR "" CACHE PATH "Steinberg ASIO SDK root (dir containing common/iasiodrv.h); empty builds without ASIO")
+if (ABALONEW5_ASIO_SDK_DIR)
+    if (NOT EXISTS "${ABALONEW5_ASIO_SDK_DIR}/common/iasiodrv.h")
+        message(FATAL_ERROR "ABALONEW5_ASIO_SDK_DIR='${ABALONEW5_ASIO_SDK_DIR}' has no common/iasiodrv.h — point it at the Steinberg ASIO SDK root (Steinberg developer downloads, accept the license; never commit the SDK).")
+    endif ()
+    target_include_directories(AbaloneW5 PRIVATE "${ABALONEW5_ASIO_SDK_DIR}/common")
+    target_compile_definitions(AbaloneW5 PRIVATE JUCE_ASIO=1 JUCE_ASIO_USE_EXTERNAL_SDK=1)
+endif ()

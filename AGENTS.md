@@ -63,6 +63,21 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 - Flat bypass when tone=bypass, highcut=off, boost=min. No clicks on tone switch.
 - Test integrity: MSVC Release defines NDEBUG which kills bare `assert()` — every CTest target must use the `add_dsp_test()` helper so asserts stay live.
 
+## Standalone audio + channel layout
+
+- Mono rule (exact): 1 main-bus input + >= 2 buffer channels → ch0 through
+  chain[0], result copied to all other outs. Inputs >= outputs → per-channel.
+  Layout is read from `getMainBusNumInputChannels()`, never buffer sniffing.
+- Host bypass OR ACTIVE-off → bit-transparent passthrough (host bypass runs
+  `processBlockBypassed`; both apply the mono copy when 1-in).
+- ASIO: download the Steinberg ASIO SDK (steinberg.net developer downloads —
+  accept the license; NEVER commit the SDK), then configure with
+  `-DABALONEW5_ASIO_SDK_DIR=<sdk-root-containing-common/iasiodrv.h>`.
+  That defines `JUCE_ASIO=1` + `JUCE_ASIO_USE_EXTERNAL_SDK=1` on the plugin
+  target only (uses the real SDK headers, not JUCE's bundled copy). Empty =
+  build exactly as today. In the Standalone: Options > Audio Settings >
+  Device Type > ASIO, then pick the driver and enable mono/stereo inputs.
+
 ## References
 
 - Spec: `C:\Users\kluis\.opencode\plan\u5-spec.md`

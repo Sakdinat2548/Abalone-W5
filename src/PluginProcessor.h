@@ -22,6 +22,9 @@ public:
     // Host bypass: TRUE passthrough — the buffer is left untouched (zero DSP,
     // chain states frozen), exactly like ACTIVE off. The input peak is still
     // tracked so the SIGNAL LED follows the input while bypassed.
+    // Mono-in exception: with a single main-bus input and >= 2 buffer
+    // channels, ch0 is copied to the extra channels (same dual-mono rule as
+    // processBlock) since they hold no input data.
     // JUCE 8.0.15 has no AudioProcessor::isBypassed(); the host calls this
     // INSTEAD of processBlock, which is the equivalent hook.
     void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
