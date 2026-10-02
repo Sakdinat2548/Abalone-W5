@@ -36,10 +36,15 @@
 // stages stay at 1x: no wasted cycles, and biquads keep host-rate
 // coefficients (no tone-shape change with rate doubling).
 //
-// Filter: 33-tap windowed-sinc lowpass (Hamming, fc = 0.23 cycles/sample
-// at the 2x rate; host Nyquist sits at 0.25), DC gain normalized to 1.
-// Each FIR delays (33-1)/2 samples at the 2x rate = (33-1)/4 at the host
-// rate; up + down in series = (33-1)/2 = 16 host samples, rate-independent
+// Filter: 81-tap windowed-sinc lowpass (Hamming, fc = 0.25 cycles/sample
+// at the 2x rate = host Nyquist, the midpoint of the pass/stop transition
+// for both 44.1k and 48k), DC gain normalized to 1. The 33-tap/0.23
+// prototype drooped -3.2dB@20kHz/48k and -10.2dB@20kHz/44.1k (measured
+// linear cascade, no gate covered it); the 81-tap holds +/-0.04dB to 20kHz
+// at both rates (the ChainTest top-octave gate pins 1x-vs-2x within
+// +/-0.5dB at 15/20kHz, both rates).
+// Each FIR delays (81-1)/2 samples at the 2x rate = (81-1)/4 at the host
+// rate; up + down in series = (81-1)/2 = 40 host samples, rate-independent
 // (the cutoff is a fraction of the 2x rate, so the same taps serve 44.1k
 // and 48k). Reported via getLatencySamples() for the processor's
 // setLatencySamples; the ChainTest impulse gate pins reported == measured
@@ -58,8 +63,8 @@ struct ProcessorChain
     // 2x resampler taps (windowed-sinc lowpass, see note above) and the
     // exact 2x-path group delay in host samples: each FIR delays
     // (kOsTaps-1)/2 samples at the 2x rate = (kOsTaps-1)/4 at the host
-    // rate, so up + down in series = (kOsTaps-1)/2 = 16.
-    static constexpr int kOsTaps = 33;
+    // rate, so up + down in series = (kOsTaps-1)/2 = 40.
+    static constexpr int kOsTaps = 81;
     static constexpr int kOsLatencySamples = (kOsTaps - 1) / 2;
 
     ProcessorChain ()
@@ -274,7 +279,7 @@ private:
     // the taps are rate-independent; no audio-thread use after the ctor.
     void initOsFir ()
     {
-        constexpr double fc = 0.23;
+        constexpr double fc = 0.25;
         constexpr double center = static_cast<double> (kOsTaps - 1) / 2.0;
         double sum = 0.0;
         for (int n = 0; n < kOsTaps; ++n)

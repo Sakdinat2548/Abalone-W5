@@ -76,8 +76,19 @@ void AbaloneW5AudioProcessor::changeProgramName (int, const juce::String&) {}
 
 void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
 {
+    // Restored oversampled sessions must report the 2x delay from the start:
+    // push the param into the chains BEFORE reading getLatencySamples, or a
+    // session saved with oversample on reports 0 until the first processBlock
+    // push flips it (DAW compensates late -> early audio runs uncompensated).
+    // setOversampled on an already-matching target is a no-op, so repeated
+    // prepares never re-arm the entry blend; setSampleRate preserves the
+    // target (ChainTest prepare-ordering gate pins both orders, both rates).
+    const bool oversample = apvts.getRawParameterValue ("oversample")->load() > 0.5f;
     for (auto& chain : chains)
+    {
         chain.setSampleRate (sampleRate);
+        chain.setOversampled (oversample);
+    }
     // Re-report after every rate change (the 1x/2x latency is
     // rate-independent, but the host still needs a fresh value on
     // re-prepare; the toggle path in processBlock covers switches).

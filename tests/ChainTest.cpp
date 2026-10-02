@@ -391,6 +391,87 @@ void checkOsToggleNoClick ()
     checkOsToggleOneFlip (false);
 }
 
+// (i) Oversample top-octave transparency: 1x-vs-2x fundamental at 15kHz and
+// 20kHz, both rates, same +10dB-at-color drive as (f). The 33-tap/0.23
+// prototype drooped -3.2dB@20k/48k and -10.2dB@20k/44.1k (measured linear
+// cascade); the 81-tap/0.25 holds +/-0.04dB, so +/-0.5dB leaves 10x margin
+// while failing the old filter decisively. Correlation magnitude is
+// phase-independent, so the 2x group delay does not enter the comparison;
+// test tones complete integer cycles in the 1s window, so tanh harmonics
+// (aliased at 1x, filtered at 2x) stay orthogonal to the fundamental.
+void checkOsTopOctave ()
+{
+    const double rates[2] = {48000.0, 44100.0};
+    const double freqs[2] = {15000.0, 20000.0};
+    const float amp = std::pow (10.0f, 7.0f / 20.0f); // +7dB in, +3dB boost -> +10dB at color.
+    for (int r = 0; r < 2; ++r)
+    {
+        for (int f = 0; f < 2; ++f)
+        {
+            ProcessorChain oneX;
+            oneX.setSampleRate (rates[r]);
+            oneX.setBoostStep (1);
+            oneX.setTone (0);
+            oneX.setHighcut (false);
+            oneX.setTrimDb (0.0f);
+            oneX.setOversampled (false);
+            const float a1 = fundAmp (oneX, rates[r], freqs[f], amp);
+
+            ProcessorChain twoX;
+            twoX.setSampleRate (rates[r]);
+            twoX.setBoostStep (1);
+            twoX.setTone (0);
+            twoX.setHighcut (false);
+            twoX.setTrimDb (0.0f);
+            twoX.setOversampled (true);
+            const float a2 = fundAmp (twoX, rates[r], freqs[f], amp);
+
+            const float diffDb = 20.0f * std::log10 (a2 / a1);
+            std::printf ("os top-octave 1x-vs-2x @ %.0fHz/%.0fkHz: %+0.4fdB (expect 0 +/- 0.5)\n", rates[r],
+                         freqs[f] / 1000.0, diffDb);
+            std::fflush (stdout);
+            assert (std::fabs (diffDb) < 0.5f);
+        }
+    }
+}
+
+// (j) Prepare-ordering contract (processor fix round 1): prepareToPlay must
+// push the `oversample` param into the chains BEFORE reading
+// getLatencySamples for setLatencySamples, or a restored oversampled session
+// reports 0 until the first block. Chain side of that contract: the toggle
+// target survives setSampleRate, so param-push before rate-change and rate
+// before param-push both report the 2x delay immediately, at both rates;
+// untouched chains still report 0 (1x default path unchanged).
+void checkOsPrepareOrdering ()
+{
+    const double rates[2] = {48000.0, 44100.0};
+    for (int r = 0; r < 2; ++r)
+    {
+        {
+            ProcessorChain chain; // push param, then rate.
+            chain.setOversampled (true);
+            chain.setSampleRate (rates[r]);
+            std::printf ("os prepare push-then-rate @ %.0fHz: latency %d (expect %d)\n", rates[r],
+                         chain.getLatencySamples(), ProcessorChain::kOsLatencySamples);
+            assert (chain.getLatencySamples() == ProcessorChain::kOsLatencySamples);
+        }
+        {
+            ProcessorChain chain; // rate, then push param.
+            chain.setSampleRate (rates[r]);
+            chain.setOversampled (true);
+            std::printf ("os prepare rate-then-push @ %.0fHz: latency %d (expect %d)\n", rates[r],
+                         chain.getLatencySamples(), ProcessorChain::kOsLatencySamples);
+            assert (chain.getLatencySamples() == ProcessorChain::kOsLatencySamples);
+        }
+        {
+            ProcessorChain chain; // 1x default still zero after rate set.
+            chain.setSampleRate (rates[r]);
+            std::printf ("os prepare 1x @ %.0fHz: latency %d (expect 0)\n", rates[r], chain.getLatencySamples());
+            assert (chain.getLatencySamples() == 0);
+        }
+    }
+}
+
 } // namespace
 
 int main ()
@@ -403,6 +484,8 @@ int main ()
     checkOsEquivalence();
     checkOsLatencyTruth();
     checkOsToggleNoClick();
+    checkOsTopOctave();
+    checkOsPrepareOrdering();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }

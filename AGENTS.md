@@ -1,6 +1,6 @@
 # AGENTS.md — Abalone W5 v1 (read first)
 
-U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF. 2x oversampling on the Color stage only (ABALONE header toggle, additive `oversample` Bool default off, 5ms equal-power entry xfade); exact 16-sample FIR delay reported via setLatencySamples on toggle + prepare.
+U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF. 2x oversampling on the Color stage only (ABALONE header toggle, additive `oversample` Bool default off, 5ms equal-power entry xfade); exact 40-sample FIR delay reported via setLatencySamples on toggle + prepare (param pushed before report).
 
 ## Commands (verbatim)
 
