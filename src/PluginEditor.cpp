@@ -166,19 +166,80 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     addAndMakeVisible (toneSlider);
 
     // Cut-only output trim, attached (range must match the param exactly).
+    // Starting a trim drag while the readout is being edited cancels the
+    // edit (the hide below restores the live value via onEditorHide).
     outputSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     outputSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     outputSlider.setRange (-30.0, 0.0, 0.1);
     outputSlider.setLookAndFeel (&trimDialLookAndFeel);
+    outputSlider.onDragStart = [this]
+    {
+        if (trimReadout.isBeingEdited())
+            trimReadout.hideEditor (true);
+    };
     addAndMakeVisible (outputSlider);
 
     // In-code dB readout below the trim knob, following the output param
     // (set in resized(); text refreshed in timerCallback). Pale on the black
-    // oval; Cinzel Black at a subordinate size, non-interactive.
-    trimReadout.setInterceptsMouseClicks (false, false);
+    // oval; Cinzel Black at a subordinate size. Single-click editable:
+    // Enter commits the typed number to the output param (clamped -30..0,
+    // so -40 lands at -30; non-numeric input is ignored and the live value
+    // returns), Esc cancels and restores the live value, and focus-loss
+    // also exits editing (discards, never traps keyboard focus).
+    trimReadout.setEditable (true, false, true);
     trimReadout.setJustificationType (juce::Justification::centred);
     trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xffe9ebee));
+    trimReadout.setColour (juce::Label::backgroundWhenEditingColourId, juce::Colour (0xff0a0b0c));
+    trimReadout.setColour (juce::Label::textWhenEditingColourId, juce::Colour (0xffe9ebee));
+    trimReadout.setColour (juce::Label::outlineWhenEditingColourId, juce::Colour (0xff3a3d40));
+    trimReadout.setColour (juce::CaretComponent::caretColourId, juce::Colour (0xffe9ebee));
+    trimReadout.setColour (juce::TextEditor::highlightColourId, juce::Colour (0xff4a5a6a));
+    trimReadout.setKeyboardType (juce::TextInputTarget::decimalKeyboard);
     trimReadout.setFont (readoutFont);
+    trimReadout.onEditorShow = [this]
+    {
+        // Editing shows the bare number (no " dB" suffix) so a typed value
+        // replaces it cleanly; the commit below re-parses with or without it.
+        if (auto* ed = trimReadout.getCurrentTextEditor())
+        {
+            juce::String t = trimReadout.getText().trim();
+            if (t.endsWithIgnoreCase ("dB"))
+                t = t.dropLastCharacters (2).trim();
+            ed->setText (t);
+            ed->setHighlightedRegion (juce::Range<int> (0, t.length()));
+        }
+    };
+    trimReadout.onEditorHide = [this]
+    {
+        // Single commit/cancel point: JUCE moves the typed text into the
+        // label BEFORE this fires on the Enter/focus paths, while Esc (and
+        // the trim-drag cancel above) leave the pre-edit text — so a changed
+        // numeric text commits and anything else falls through to the live
+        // restore. The commit wins over automation/preset drift mid-edit.
+        auto* outParam = processor.getApvts().getParameter ("output");
+        if (outParam == nullptr)
+            return;
+        if (trimReadout.getText() != lastTrimText)
+        {
+            juce::String typed = trimReadout.getText().trim();
+            if (typed.endsWithIgnoreCase ("dB"))
+                typed = typed.dropLastCharacters (2).trim();
+            bool hasDigit = false;
+            for (const auto ch : typed)
+                if (juce::CharacterFunctions::isDigit (ch))
+                {
+                    hasDigit = true;
+                    break;
+                }
+            if (hasDigit)
+            {
+                const float clamped = juce::jlimit (-30.0f, 0.0f, typed.getFloatValue());
+                outParam->setValueNotifyingHost (outParam->convertTo0to1 (clamped));
+            }
+        }
+        lastTrimText = outParam->getCurrentValueAsText() + " dB";
+        trimReadout.setText (lastTrimText, juce::dontSendNotification);
+    };
     addAndMakeVisible (trimReadout);
 
     highcutButton.setLookAndFeel (&toggleLookAndFeel);
@@ -204,18 +265,19 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     signalLedImage.setImage (ledOffImage);
     addAndMakeVisible (signalLedImage);
 
-    // Lights-off veil: ordered below the POWER LED (which stays bright as
-    // the mains lamp) but above every other control. Non-interactive so
-    // knob drags pass straight through to the controls beneath.
+    // Blue POWER LED: mains lamp, ALWAYS lit while the plugin is open,
+    // independent of ACTIVE. Painted UNDER the dim veil with everything
+    // else, so the veil dims it naturally while bypassed (the on-image is
+    // set once and never swapped dark).
+    powerLedImage.setImage (ledOnImage);
+    addAndMakeVisible (powerLedImage);
+
+    // Lights-off veil LAST so it paints over every control including POWER.
+    // Non-interactive so knob drags pass straight through to the controls
+    // beneath (the readout stays clickable while dimmed).
     dimOverlay.setInterceptsMouseClicks (false, false);
     dimOverlay.setVisible (false);
     addAndMakeVisible (dimOverlay);
-
-    // Blue POWER LED: mains lamp, ALWAYS lit while the plugin is open,
-    // independent of ACTIVE. Added after the veil so it paints above it
-    // and stays bright while everything else dims.
-    powerLedImage.setImage (ledOnImage);
-    addAndMakeVisible (powerLedImage);
 
     auto& apvts = processor.getApvts();
     boostAttachment =
@@ -346,13 +408,19 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
     }
 
     // TRIM dB readout follows the output param (repaint only on change).
-    if (auto* outParam = processor.getApvts().getParameter ("output"))
+    // Skipped while the readout is being edited (Label::setText would kill
+    // the edit): a commit overwrites any automation/preset drift made
+    // mid-edit, Esc restores the live value.
+    if (!trimReadout.isBeingEdited())
     {
-        const juce::String text = outParam->getCurrentValueAsText() + " dB";
-        if (text != lastTrimText)
+        if (auto* outParam = processor.getApvts().getParameter ("output"))
         {
-            lastTrimText = text;
-            trimReadout.setText (text, juce::dontSendNotification);
+            const juce::String text = outParam->getCurrentValueAsText() + " dB";
+            if (text != lastTrimText)
+            {
+                lastTrimText = text;
+                trimReadout.setText (text, juce::dontSendNotification);
+            }
         }
     }
 }

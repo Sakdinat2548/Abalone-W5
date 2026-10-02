@@ -29,8 +29,8 @@ class AbaloneW5AudioProcessor;
 //   is hardware-only: it renders as a permanent OFF image and is
 //   non-interactive. ACTIVE off veils the panel (DimOverlay); the POWER
 //   LED is a mains lamp — always lit while the plugin is open, painted
-//   above the veil so it stays bright; the SIGNAL LED follows the input
-//   peak while bypassed.
+//   UNDER the veil with everything else so it dims naturally while
+//   bypassed; the SIGNAL LED follows the input peak while bypassed.
 // - Photo knob bodies (knob_*_no_pointer.png) are NEVER rotated: baked
 //   off-axis highlights + edge dial-numeral fragments would swing. Bodies
 //   are drawn static and circular-clipped; value is shown by the extracted
@@ -108,11 +108,12 @@ struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
 };
 
 // Lights-off overlay: ACTIVE off darkens the whole panel with a translucent
-// fill. Ordered BELOW the POWER LED (which stays bright as the mains lamp)
-// but above every other control, so it dims knobs/buttons/SIGNAL while
-// POWER shines through. Non-interactive so drags pass through; visibility
-// flips instantly on re-engage from the existing 30Hz timer (no new threads,
-// no fade animation). POWER's image is set once and never driven dark.
+// fill. Painted LAST so it veils every control including the POWER LED
+// (the mains lamp dims naturally with the panel, like hardware). Ordered
+// above every other control; non-interactive so drags pass through;
+// visibility flips instantly on re-engage from the existing 30Hz timer (no
+// new threads, no fade animation). POWER's image is set once and never
+// driven dark.
 struct DimOverlay : public juce::Component
 {
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0x99000000)); }
@@ -151,7 +152,9 @@ private:
     juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob on the
                                // black oval right of the THRU jack (see CSV trim_dial).
     juce::Label trimReadout;   // in-code dB readout below the trim knob (pale
-                               // on the black oval).
+                               // on the black oval). Single-click editable: type a
+                               // number, Enter commits (clamped -30..0), Esc cancels.
+                               // Follows the param while idle (see timerCallback).
     juce::ToggleButton highcutButton;
     juce::ToggleButton toneEngageButton; // attached to `toneIn`.
     juce::ToggleButton activeButton;     // attached to `active` (power switch).
