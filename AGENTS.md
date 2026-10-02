@@ -4,14 +4,20 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 
 ## Commands (verbatim)
 
-- Configure: `cmake -B build -G "Visual Studio 16 2019" -A x64`
-- Build: `cmake --build build --target AbaloneW5_VST3 --config Release`
+- Configure (from repo root, `cmd`, NOT a MinGW shell — JUCE hard-rejects
+  MinGW gcc on PATH, so force `CC=cl`/`CXX=cl`):
+  `call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 && set CC=cl && set CXX=cl && C:\msys64\ucrt64\bin\cmake.exe -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=C:\msys64\ucrt64\bin\ninja.exe`
+- Build: `cmake --build build` (all: VST3 + Standalone + tests; single-config Release, no `--config`)
 - Tests: `ctest --test-dir build --output-on-failure`
 - Format gate: `clang-format --dry-run --Werror "src/*.cpp" "src/*.h" "src/dsp/*.h" "tests/*.cpp"` clean every commit
+- VS fallback (if Ninja ever misbehaves on a fresh machine): `cmake -B build -G "Visual Studio 16 2019" -A x64` then `cmake --build build --config Release`
 
 ## Toolchain
 
 - MSVC 2019 BuildTools; JUCE 8.0.15 FetchContent (`GIT_TAG 8.0.15`); C++17.
+- Ninja 1.13.2 via `C:\msys64\ucrt64\bin\ninja.exe` + MSYS2 cmake; `CMakeLists.txt`
+  forces `CMAKE_NINJA_CMCLDEPS_RC=OFF` under Ninja (MSYS2 cmake ships no
+  cmcldeps.exe — without the guard every RC compile dies with RC1107).
 - MinGW hard-blocked by JUCE (Ruling 5). Static MSVC runtime (/MT) for Sonar.
 - Never commit Tone3000 IR WAVs (T3K license); test locally only.
 
@@ -24,8 +30,10 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF, no oversampling v1.
 
 ## IDE (clangd) setup — one-time
 
-- The VS generator in `build/` never emits `compile_commands.json`, so clangd
-  uses a secondary Ninja+MSVC scratch dir `build-ide/` (gitignored, never commit).
+- `build/` is now a Ninja+MSVC single-config dir, so it also emits
+  `compile_commands.json` — but clangd still uses the stable secondary scratch
+  dir `build-ide/` (gitignored, never commit), since `build/` is routinely
+  wiped for clean rebuilds.
 - One-time setup (from repo root, `cmd`, NOT a MinGW shell — JUCE hard-rejects
   MinGW gcc on PATH, so force `CC=cl`/`CXX=cl`):
   `call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 && set CC=cl && set CXX=cl && C:\msys64\ucrt64\bin\cmake.exe -B build-ide -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=C:\msys64\ucrt64\bin\ninja.exe`

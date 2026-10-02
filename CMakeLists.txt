@@ -11,6 +11,18 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Static MSVC runtime (/MT Release, /MTd Debug) so Sonar loads with no extra DLLs.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# Ninja + MSVC: CMake routes RC dependency scanning through its cmcldeps
+# helper, but the MSYS2-packaged cmake.exe used here does not ship
+# cmcldeps.exe, so the tool prefix expands to empty and the RC rule degrades
+# to a bare `RC <args>` call that dies with RC1107. Disabling the cmcldeps
+# path for Ninja yields a plain `rc.exe ... /fo <out> <in>` rule (verified:
+# RC1107 without this, clean compile with it). VS generator unaffected
+# (guarded on Ninja); the generated .rc changes rarely so the lost dep-scan
+# precision is irrelevant.
+if(CMAKE_GENERATOR MATCHES "^Ninja")
+    set(CMAKE_NINJA_CMCLDEPS_RC OFF)
+endif()
+
 enable_testing()
 
 # Test-integrity: MSVC Release defines NDEBUG, which compiles bare assert()
