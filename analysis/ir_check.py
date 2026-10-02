@@ -421,16 +421,26 @@ def run_self_test(grid_freqs):
 # Section 4: filename parsing + per-IR comparison.
 # Accepted names (case-insensitive), e.g.:
 #   tone3_highcut_off_48k.wav / TONE2_HIGHCUT_ON_44k1.wav / tone0.wav
+#   AVALON_TONE1.wav / AVALON_TONE1_HIGHCUT.wav (real Tone3000 names:
+#   highcut iff _HIGHCUT appears, else off)
 # Anything unparseable is reported and skipped (never guessed silently).
 # ----------------------------------------------------------------------------
 IR_NAME_RE = re.compile(r"tone\s*([0-6]).*?(off|on)", re.IGNORECASE)
+TONE_FALLBACK_RE = re.compile(r"tone\s*([0-6])", re.IGNORECASE)
+HIGHCUT_RE = re.compile(r"highcut", re.IGNORECASE)
 
 
 def parse_ir_name(name):
     m = IR_NAME_RE.search(name)
-    if not m:
+    if m:
+        return int(m.group(1)), m.group(2).lower() == "on"
+    # Real Tone3000 names carry no on/off token
+    # (AVALON_TONE1.wav / AVALON_TONE1_HIGHCUT.wav): highcut iff
+    # _HIGHCUT appears, else off.
+    m2 = TONE_FALLBACK_RE.search(name)
+    if not m2:
         return None
-    return int(m.group(1)), m.group(2).lower() == "on"
+    return int(m2.group(1)), bool(HIGHCUT_RE.search(name))
 
 
 def check_ir_dir(ir_dir, grid_freqs, chart_freqs, chart):
@@ -559,8 +569,8 @@ def main():
         if n_compared == 0:
             print("WARNING: %d WAV file(s) present but ALL SKIPPED -- "
                   "zero IRs actually compared. This is NOT green: fix "
-                  "filenames (must contain tone 0-6 + on/off) or repair "
-                  "the unreadable files and re-run." % n)
+                  "filenames (tone 0-6 + on/off, or AVALON_TONE<n>[_HIGHCUT]) "
+                  "or repair the unreadable files and re-run." % n)
             return 2
         ir_ran = True
 
