@@ -10,15 +10,16 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
-// Eurostile-class plate face: single Michroma typeface (OFL, embedded as
-// BinaryData — the Eurostile-Extended-Black-class substitute; see the header
-// note for the pick rationale and the one-file-swap path). Falls back to the
-// default system font (never blank) if the embed ever fails to parse. Built
-// once per font at editor construction. The loader keys off the BinaryData
-// symbol only, so a future face swap touches just this line + CMake SOURCES.
+// Trajan-class plate face: single Cinzel Black 900 typeface (OFL, embedded
+// as BinaryData — stroke-matched to the hardware badge, see the header
+// note). Falls back to the default system font (never blank) if the embed
+// ever fails to parse. Built once per font at editor construction. The
+// loader keys off the BinaryData symbol only, so a future face swap touches
+// just this line + CMake SOURCES.
 juce::Font makePlateFont (float height)
 {
-    if (auto face = juce::Typeface::createSystemTypefaceFor (BinaryData::Michroma_ttf, BinaryData::Michroma_ttfSize))
+    if (auto face =
+            juce::Typeface::createSystemTypefaceFor (BinaryData::CinzelBlack_ttf, BinaryData::CinzelBlack_ttfSize))
         return juce::Font (juce::FontOptions (face).withHeight (height));
     return juce::Font (juce::FontOptions (height));
 }
@@ -59,12 +60,12 @@ juce::Rectangle<int> scaledRect (const std::map<juce::String, juce::Rectangle<fl
 }
 
 // Engraved-plate lettering (two-pass: pale groove highlight below, dark face
-// on top) for the in-code ABALONE wordmark. The face is Michroma (OFL
-// Eurostile-class extended black, vendored via BinaryData — matches the
-// hardware badge's wide grotesque caps); the caller passes the editor's true
-// horizontal center so the wordmark is optically centered across the full
-// panel via the measured text width (no hardcoded x that can drift with
-// letterforms).
+// on top) for the in-code ABALONE wordmark. The face is Cinzel Black 900
+// (OFL Trajan-class serif, vendored via BinaryData — stroke-matched to the
+// hardware AVALON badge at matched cap-height); the caller passes the
+// editor's true horizontal center so the wordmark is optically centered
+// across the full panel via the measured text width (no hardcoded x that
+// can drift with letterforms).
 void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce::String& text, float cx, float cyMid,
                           float trackingPx)
 {
@@ -92,7 +93,7 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
 } // namespace
 
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (29.0f)), readoutFont (makePlateFont (9.0f))
+    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (32.0f)), readoutFont (makePlateFont (9.0f))
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
@@ -173,7 +174,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 
     // In-code dB readout below the trim knob, following the output param
     // (set in resized(); text refreshed in timerCallback). Pale on the black
-    // oval; Michroma at a subordinate size, non-interactive.
+    // oval; Cinzel Black at a subordinate size, non-interactive.
     trimReadout.setInterceptsMouseClicks (false, false);
     trimReadout.setJustificationType (juce::Justification::centred);
     trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xffe9ebee));
@@ -281,11 +282,14 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
 
     // ABALONE wordmark, engraved style, optically centered across the full
     // panel: cx is the editor's true horizontal center and the draw routine
-    // centers via the measured Michroma text width. Texture y=189 is the
-    // band where AVALON sat. The editor is aspect-locked to the texture,
-    // so texture ratios map 1:1.
-    const float sy = static_cast<float> (getHeight()) / 970.0f;
-    drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 189.0f * sy, 6.0f);
+    // centers via the measured Cinzel Black text width. Texture y=98.5 is the
+    // measured AVALON cap-center on the cropped faceplate (caps 74-123). The
+    // editor is aspect-locked to the texture, so texture ratios map 1:1.
+    // JUCE maps font height across the full ascent+descent cell, so the
+    // measured cap at 32px is ~35px @2x = ~49px texture, matching the
+    // hardware badge cap-height (50px) with matched stroke weight.
+    const float sy = static_cast<float> (getHeight()) / 867.0f;
+    drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 98.5f * sy, 8.0f);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()

@@ -130,10 +130,10 @@ private:
     // -2dBFS signal-present threshold (spec: LED is signal-present, not clip).
     static constexpr float kLedThreshold = 0.79432823f; // 10^(-2/20).
 
-    // Editor size locks to the base-texture aspect (2136x970); the faceplate
-    // is drawn 1:1 with no stretching.
+    // Editor size locks to the base-texture aspect (2136x867 faceplate-only);
+    // the faceplate is drawn 1:1 with no stretching.
     static constexpr int kEditorWidth = 748;
-    static constexpr int kEditorHeight = 340;
+    static constexpr int kEditorHeight = 304;
 
     AbaloneW5AudioProcessor& processor;
 
@@ -161,15 +161,15 @@ private:
     juce::Image ledOnImage;
     juce::Image ledOffImage;
 
-    // Eurostile-class header face: Michroma (OFL, embedded as BinaryData)
-    // for the in-code ABALONE wordmark + TRIM dB readout. Michroma is the
-    // established Eurostile-Extended-Black-class OFL substitute (extended
-    // square caps, single static weight — Orbitron ships variable-only
-    // upstream, so its 900 Black is unreachable reliably in JUCE). A licensed
-    // Eurostile cut drops in later as a one-file swap: replace
-    // ui/Michroma.ttf + ui/OFL.txt, rename the SOURCES entry, and point
-    // makePlateFont at the new BinaryData symbol. Single typeface built once
-    // at construction; system-font fallback if the embed ever fails to parse.
+    // Trajan-class header face: Cinzel Black 900 (OFL, embedded as
+    // BinaryData) for the in-code ABALONE wordmark + TRIM dB readout.
+    // Cinzel Black is the user's final call (fix round 4): legally-available
+    // OFL, supersedes the Eurostile-class round. Stroke-matched against the
+    // hardware AVALON badge in docs/refs/u5_front.png at matched cap-height
+    // (AVALON cap 50px texture, stems 14-15px; Cinzel Black at the same cap
+    // renders stems 15-16px — no faux-bold anywhere). Single static 900
+    // weight. Single typeface built once at construction; system-font
+    // fallback if the embed ever fails to parse.
     juce::Font headerFont;
     juce::Font readoutFont;
 
