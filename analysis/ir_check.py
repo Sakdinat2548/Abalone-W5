@@ -250,6 +250,7 @@ def read_wav_mono(path):
         pos += 8 + size + (size & 1)  # chunks are word-aligned
     if tag is None or raw is None:
         raise ValueError("WAV missing fmt/data chunk: %s" % path)
+    assert nch is not None and fs is not None and width is not None
     if tag == 3 and width == 4:
         data = np.frombuffer(raw, dtype=np.float32).astype(np.float64)
     elif tag == 1 and width == 1:  # 8-bit unsigned

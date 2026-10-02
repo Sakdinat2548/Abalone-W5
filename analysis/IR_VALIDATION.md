@@ -1,11 +1,11 @@
 # IR validation (Task 8) — method, status, and measured results
 
-## Status: measured on 13 real Tone3000 captures (2026-10-02)
+## Status: measured on 14 real Tone3000 captures (2026-10-02, completed set)
 
 `analysis/ir_check.py` harness: port verification GREEN, self-test GREEN.
 Filename fix (`parse_ir_name` accepts `AVALON_TONE{n}[_HIGHCUT]`) lets all
-13 local files parse and compare (0 SKIP). `TONE2_HIGHCUT` is absent upstream
-(expected — only 13 of 14 files exist; the T2 highcut leg cannot be checked).
+14 local files parse and compare (0 SKIP). The set is now complete —
+`AVALON_TONE2_HIGHCUT.wav` was added after the initial 13-file run.
 
 Key file finding: the 13 WAVs are ~190 s 48 kHz 24-bit-stereo Tone3000
 training/reamp captures (same stimulus reamped per setting), NOT impulse
@@ -86,8 +86,8 @@ fmt-tag-sniffing manual RIFF parser); (2) filename regex `\b` rejecting
 
 ## 3. IR leg — MEASURED (files present since 2026-10-02)
 
-Files: `analysis/ir_local/AVALON_TONE{0..6}[_HIGHCUT].wav` (13 files;
-`AVALON_TONE2_HIGHCUT.wav` absent upstream). Accepted names
+Files: `analysis/ir_local/AVALON_TONE{0..6}[_HIGHCUT].wav` (14 files,
+complete set). Accepted names
 (case-insensitive): old `tone3_highcut_off_48k.wav` /
 `TONE2_HIGHCUT_ON_44k1.wav` / `tone0.wav` forms AND the real
 `AVALON_TONE{n}` (highcut off) / `AVALON_TONE{n}_HIGHCUT` (highcut on)
@@ -95,8 +95,8 @@ forms. Unparseable names and unreadable files are listed as SKIP, never
 guessed — and if files are present but zero are actually compared, the
 script exits 2 with a loud warning instead of looking green.
 
-`python analysis/ir_check.py` on the 13 files: 13 parsed, 13 compared,
-13 FAIL vs the ±1 dB gate (direct-FFT leg, exit 2 — stimulus-dominated,
+`python analysis/ir_check.py` on the 14 files: 14 parsed, 14 compared,
+14 FAIL vs the ±1 dB gate (direct-FFT leg, exit 2 — stimulus-dominated,
 see §5 table (a)). The adjudicating measurement is the cross-spectral
 relative-shape leg (§5 table (b)): per-file transfer function vs the
 TONE0-off capture, Welch-averaged (14 segments), coherence ≥ 0.999
@@ -170,6 +170,7 @@ raw FFT measures the stimulus, not the device:
 | AVALON_TONE1.wav | 30.02 / 14.00 | 30.05 / 13.99 | FAIL (stimulus) |
 | AVALON_TONE1_HIGHCUT.wav | 27.40 / 14.78 | 27.59 / 14.76 | FAIL (stimulus) |
 | AVALON_TONE2.wav | 29.32 / 13.70 | 30.73 / 14.06 | FAIL (stimulus) |
+| AVALON_TONE2_HIGHCUT.wav | 31.74 / 15.75 | 30.65 / 15.80 | FAIL (stimulus) |
 | AVALON_TONE3.wav | 29.16 / 13.94 | 29.51 / 14.00 | FAIL (stimulus) |
 | AVALON_TONE3_HIGHCUT.wav | 27.68 / 14.55 | 28.07 / 14.59 | FAIL (stimulus) |
 | AVALON_TONE4.wav | 28.79 / 13.95 | 29.59 / 14.05 | FAIL (stimulus) |
@@ -181,7 +182,7 @@ raw FFT measures the stimulus, not the device:
 
 (b) Cross-spectral relative-shape leg (adjudicating; Welch cross-spectrum
 vs TONE0-off, 1 kHz-normalized, gate 40 Hz–15 kHz; coherence min ≥ 0.999,
-mean 1.0000 on all 13 files):
+mean 1.0000 on all 14 files):
 
 | Tone | Highcut | vs-ours max/mean | vs-chart max/mean | Verdict vs ±1 dB |
 |------|---------|------------------|-------------------|------------------|
@@ -190,7 +191,7 @@ mean 1.0000 on all 13 files):
 | 1 | off | 1.69 / 0.43 | 1.82 / 0.56 | FAIL (worst 1.69) |
 | 1 | on | 13.75 / 4.05 | 13.75 / 4.10 | FAIL — highcut (see §6) |
 | 2 | off | 1.55 / 0.52 | 1.96 / 1.04 | FAIL (worst 1.55) |
-| 2 | on | — (file absent) | — | NOT MEASURABLE (TONE2_HIGHCUT missing upstream) |
+| 2 | on | 21.52 / 10.62 | 20.26 / 9.75 | FAIL — highcut (see §6, worst of all on-files: notch + steep skirt stack) |
 | 3 | off | 1.28 / 0.71 | 1.17 / 0.50 | FAIL (worst 1.28) |
 | 3 | on | 9.68 / 2.89 | 9.80 / 2.67 | FAIL — highcut (see §6) |
 | 4 | off | 2.98 / 0.75 | 2.28 / 0.56 | FAIL (worst 2.98) |
@@ -211,8 +212,8 @@ highcut stage with stimulus exactly cancelled (20–50 s FFT cross-correlation
 **fc ≈ 3.65 kHz** (mean residual 0.04 dB, max 0.77 dB; spot check vs fit:
 +0.33/+0.32 @ 100 Hz, −3.06/−3.10 @ 4 kHz, −7.09/−7.06 @ 8 kHz,
 −11.78/−10.93 @ 15 kHz — the 15 kHz endpoint is 0.85 dB off the 1-pole fit,
-so order/skirt needs a follow-up look). All six on-files consequently read
-FAIL vs ours (max 5.98–15.28 dB, table (b)); per-tone on−off curves vary
+so order/skirt needs a follow-up look). All seven on-files consequently read
+FAIL vs ours (max 5.98–21.52 dB, table (b)); per-tone on−off curves vary
 (T4 closest: −0.59 @ 4 kHz / −2.68 @ 8 kHz vs our −1.02/−3.00) because each
 pair's tone stack shapes the stimulus energy distribution before the
 highcut — the T0 pair is the clean read. Recorded only; highcut re-tune is
