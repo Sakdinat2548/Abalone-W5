@@ -70,8 +70,9 @@
 // where the chart and IR oracles themselves disagree. T6 keeps the chart's
 // shelf-plus-restore stack at a 95/5 weight (mid shelf +2.24dB @ 292Hz) —
 // the IR's single-deep-shelf shape (-22.05dB @ 58Hz) would need a role
-// change the blend deliberately avoids. T1 keeps its legacy Q=0.20
-// broad-mid peak (both independent fits converged on it).
+// change the blend deliberately avoids. T1's broad-mid peak now sits at
+// Q=0.173 (Task-17 low-end refit moved it off the legacy Q=0.20 both
+// independent fits had converged on — shape won over lineage).
 //
 // Oracle hierarchy (user ruling): the MANUAL CHART is binding again — each
 // tone within +/-1dB of EITHER chart oracle (eye-read header or digitized

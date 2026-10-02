@@ -282,7 +282,7 @@ void checkLowEndCsv (const DenseCurve& csv)
             }
             REQUIRE (d <= gate);
         }
-        REQUIRE (count > 10);
+        REQUIRE (count == 26); // pins the 26-pt CSV grid the gate was validated against
         std::printf ("tone %d low-end-CSV worst %+.3fdB at %.1fHz (%d pts, gate %.1f)\n", tone, worst, worstFreq, count,
                      gate);
     }
