@@ -55,7 +55,7 @@ juce_add_plugin(AbaloneW5
     COMPANY_NAME "Abalone"
     PLUGIN_MANUFACTURER_CODE Abal
     PLUGIN_CODE Au55
-    FORMATS VST3
+    FORMATS VST3 Standalone
     PRODUCT_NAME "Abalone W5"
 )
 
