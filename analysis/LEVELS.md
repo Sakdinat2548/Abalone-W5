@@ -43,7 +43,7 @@ operating point) exceeds 5%, which is expected hard saturation, not a defect.
 - At +15 dB boost with a −10 dBFS bass, the stage sees +29 dBu and contributes ≈0.06% THD (subtle).
 - At +30 dB boost with a −20 dBFS bass, the stage sees +34 dBu and contributes ≈0.12% THD (the spec anchor).
 - At +30 dB boost with a −10 dBFS bass, the stage sees +44 dBu and contributes ≈0.8% THD (audible grind).
-- At +30 dB boost with a 0 dBFS input, the stage sees +54 dBu and contributes ≈6.3% THD (pinned — 30 dB past hardware max, not a sane level).
+- At +30 dB boost with a 0 dBFS input, the stage sees +54 dBu and contributes ≈6.3% THD (documented, not assert-pinned — 30 dB past hardware max, not a sane level).
 
 ## Pinned calibration points (asserts in `tests/ColorStageTest.cpp`)
 
