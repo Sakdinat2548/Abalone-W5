@@ -2,6 +2,59 @@
 
 ## Status history
 
+### Task 24 (tight RBJ fit: metric fix + 0.15/0.05 gates) PARTIAL — T2/T3/T5 pass, T1/T4/T6 recorded deviations
+
+Metric fix first (Ruling 20): max/RMS now over EVERY CSV point 10 Hz–
+20 kHz inclusive (the old 40 Hz+ window under-reported T2/T5 by up to
+0.6 dB — honest baseline on Task-22 numbers: T1 0.252/0.112, T2
+0.671/0.200, T3 0.146/0.062, T4 0.419/0.084, T5 0.746/0.256, T6
+0.427/0.119 max/RMS @48k). A spike-pin test (0.4 dB at ~12 Hz on flat
+bypass) guards the coverage. Notch exception recentered on the user's
+715 Hz read (CSV minimum 696.75 Hz is a digitizer artifact inside the
+±3% band); T2 target cubic-spliced inside ±3% of 715 Hz.
+
+| Tone | Max 48/44.1 (gate) | RMS 48/44.1 (gate) | Sub-bands 48 (low/mid/high) | Verdict |
+|------|--------------------|--------------------|------------------------------|---------|
+| 1 (6s) | 0.158/0.156 (0.17 DEVIATION) | 0.0529/0.0559 (0.06 DEVIATION) | 0.077/0.158/0.083 | DEVIATION (probes 0.102/0.11) |
+| 2 (6s) | 0.136/0.133 (0.15) | 0.0486/0.0487 (0.05) | 0.072/0.179/0.098 | PASS (tip 0.18 exc) |
+| 3 (5s) | 0.124/0.115 (0.15) | 0.0382/0.0397 (0.05) | 0.080/0.094/0.124 | PASS |
+| 4 (6s) | 0.177/0.188 (0.19 DEVIATION) | 0.0537/0.0518 (0.06 DEVIATION) | 0.070/0.177/0.129 | DEVIATION |
+| 5 (5s) | 0.080/0.080 (0.15) | 0.0227/0.0228 (0.05) | 0.031/0.080/0.002 | PASS |
+| 6 (6s) | 0.216/0.165 (0.22 DEVIATION) | 0.0666/0.0665 (0.07 DEVIATION) | 0.060/0.216/0.212 | DEVIATION (probes 0.140/0.15) |
+
+(C++ `ToneBankTest` actuals. Tips: T2 in-exception 0.179/0.180 (≤0.3).
+Anchors all pass (0.18/0.61/0.18/0.24/0.09/0.17). Eye low-end green on
+STRICT gates — the Task-22 T6-slope deviation is SUPERSEDED (T5-red slope
+now 4.459 = gray 4.464; T6-red 4.241, delta 0.219 vs 1.0). T4 probes 0.195
+stay inside the standing 0.3 gate. 96 kHz verify-only: max 0.52/0.23/0.35/
+1.04/0.50/1.27 (T4/T6 top ends + T5/T3 feet render near-analog at 96k vs
+warped at 48k/44.1k; inherent, reported not gated).)
+
+Deviations (structural evidence + probe numbers in
+`.superpowers/sdd/2026-10-02-abalone-u55-plan/task-24-report.md`):
+- T1: 6-sec floor 0.168 (10 rounds); all five user bands fixed (worst
+  +0.124); 7th-peak probe (@58.7/0.55/+1.98, NOT shipped) lands max
+  0.119/0.121 rms 0.039/0.040 — but probes stay 0.103. Ruling: 7th
+  section + probe relief (0.103 vs 0.1), accepted deviation, or relief.
+- T4: 6-sec floor 0.189; 7th-peak probe (narrow cut @6412/2.65/-0.60,
+  NOT shipped) lands max 0.146/0.155 rms 0.0427/0.0424 — one point
+  (9964@44.1, +0.155) 0.005 over. Ruling: 7th section (+0.005 relief),
+  accepted deviation, or relief.
+- T6: 6-sec floor 0.217 (12 rounds); 7-sec probe fails too (0.214) — NOT
+  a budget problem. Edge provably compatible alone (e20k = 0.0000 both
+  rates) but jointly incompatible with the mid-top corner; probes 0.140.
+  Ruling: edge-point relief, per-rate top tables (needs logic change),
+  accepted deviation, or relief.
+
+`analysis/ir_check.py` harness: port verification GREEN (worst diff
+0.0053 dB against refs 0.16/0.12/0.07/0.10/0.05/0.21), self-test GREEN
+(worst 0.0328 dB). IR-shape leg (report-only, 1 kHz-normalized spots):
+worsts T1 1.73 @10k / T2 1.85 @6.3k / T3 1.09 @15k / T4 2.16 @15k /
+T5 2.03 @63 / T6 3.28 @63 Hz — exceed ±1 dB exactly where chart and
+hardware disagree (the fits follow the chart there by design, unchanged
+ruling). Port-vs-C++ sub-15 Hz corner split ≤0.03 dB recorded (MSVC-vs-
+numpy transcendental LSBs at near-DC-null transfers; C++ governs).
+
 ### Task 22 (optimizer RBJ re-fit to digitized gray) COMPLETE, 2 recorded deviations
 
 From-scratch optimizer fit (scipy DE-global + multi-start LS + L8/minimax +

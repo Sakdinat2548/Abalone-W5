@@ -2,98 +2,106 @@
 
 #include <cmath>
 
-// Tone-bank biquads, Abalone W5 v1 Task-22 optimizer re-fit to the digitized
-// gray — analysis/u5_tone_curves_digitized.csv (121 log-spaced points,
-// 10 Hz-20 kHz) is the SOLE binding target over 40 Hz-20 kHz. Supersedes all
-// blend-era numbers (Tasks 12/15/17/20 + fix rounds); keeps the anchor,
-// low-end-eye, and highcut rulings (Rulings A/B, anchors, Fix-2 eye gates).
-//
+// Tone-bank biquads, Abalone W5 v1 Task-24 tight fit to the digitized gray
+// — analysis/u5_tone_curves_digitized.csv (121 log-spaced points, 10 Hz-20
+// kHz) is the SOLE binding target over EVERY point 10 Hz-20 kHz inclusive
+// (Ruling 20 — the old 40 Hz+ window under-reported the 10-40 Hz band by up
+// to 0.6 dB). Supersedes all Task-22 numbers; keeps anchor/highcut rulings.
 // Binding gates, per tone per rate (48 kHz + 44.1 kHz, one number set serves
-// all rates — no rate-specific numbers): max |red-gray| <= 0.3 dB over the
-// 40 Hz-20 kHz CSV points (T2 <= 0.5 within +/-3% of the gray notch tip
-// 696.75 Hz ONLY — the sharp-V tip exception); RMS <= 0.08 dB EXCEPT T1
-// (recorded deviation, gate 0.11 — see below); |err| <= 0.3 dB at the 10 Hz
-// AND 20 kHz CSV points. 10-40 Hz stays excluded as chart-noise floor EXCEPT
-// the 10 Hz point + the six absolute 10 Hz anchors (T1/T3/T4 -3, T2 -0.25,
-// T5/T6 -22; prior tolerances T1-T4 +/-1.0, T5/T6 +/-2.0 — all PASS, and
-// every anchor agrees with gray to <= 0.68 dB, so no averaging-away: the
-// fits land both). 96 kHz verify-only (reported in IR_VALIDATION.md).
-// Section budget (user table +1 for RBJ): T1 <= 5, T2 <= 6, T3 <= 4,
-// T4 <= 5, T5 <= 3, T6 <= 4 — T1/T2/T4/T6 at cap, T3/T5 under.
-//
-// Shipped results (C++ ToneBankTest actuals; first value 48 kHz, second
-// 44.1 kHz; max is outside the T2 tip exception):
-//   T1 5sec: max 0.218/0.217, RMS 0.101/0.102 (DEVIATION, gate 0.11),
-//     e10 -0.02/-0.02, e20k -0.02/-0.01, anchor 0.13/0.13.
-//   T2 6sec: max 0.257/0.271 (tip 0.139/0.132 in-exception), RMS
-//     0.0785/0.0786, e10 -0.04/-0.05, e20k +0.16/+0.27, anchor 0.72/0.73.
-//   T3 4sec: max 0.146/0.145, RMS 0.0578/0.0574, e10 +0.10/-0.04,
-//     e20k -0.02/+0.01, anchor 0.20/0.06.
-//   T4 5sec: max 0.188/0.270, RMS 0.0536/0.0534, e10 -0.02/+0.06,
-//     e20k -0.18/-0.06, anchor 0.15/0.23. (Old T4-rate deviation SUPERSEDED:
-//     44.1k/48k probes now 0.235 vs gate 0.3 with max/RMS green both rates.)
-//   T5 3sec: max 0.126/0.126, RMS 0.0733/0.0733, e10 -0.11/-0.09,
-//     e20k +0.08/+0.08, anchor 0.19/0.17.
-//   T6 4sec: max 0.204/0.178, RMS 0.0778/0.0739, e10 +0.07/+0.05,
-//     e20k +0.04/-0.01, anchor 0.15/0.17.
-// Fine-grid audit (800-pt vs log-interp gray, gap-free): worsts within 0.02
-// of on-grid except T6-44.1k (0.284 vs 0.178 — still <= 0.3 everywhere).
+// all rates — no rate-specific numbers): max |red-gray| <= 0.15 dB, RMS <=
+// 0.05 dB; T2 <= 0.3 within +/-3% of the 715 Hz notch (user read — the CSV
+// minimum at 696.75 Hz is a digitizer artifact inside this band). 96 kHz
+// verify-only. Section budget <= 6/tone (Ruling 23): T1 6, T2 6, T3 5,
+// T4 6, T5 5, T6 6.
+// Shipped results (C++ ToneBankTest actuals; 48 kHz then 44.1 kHz):
+//   T1 6sec: max 0.158/0.156, RMS 0.0529/0.0559 (DEVIATION, gates 0.17/0.06;
+//     probes 0.102, gate 0.11 — see T1 note).
+//   T2 6sec: max 0.136/0.133 (tip 0.179/0.180 in-exception), RMS
+//     0.0486/0.0487 — PASS. No top shelf (V+bump skirts cover the top).
+//   T3 5sec: max 0.124/0.115, RMS 0.0382/0.0397 — PASS.
+//   T4 6sec: max 0.177/0.188, RMS 0.0537/0.0518 (DEVIATION, gates 0.19/0.06;
+//     probes 0.195, inside the standing T4 0.3 gate — see T4 note).
+//   T5 5sec: max 0.080/0.080, RMS 0.0227/0.0228 — PASS (slope now 4.459,
+//     i.e. gray 4.464 — the old 5.284 steepness is gone).
+//   T6 6sec: max 0.216/0.165, RMS 0.0666/0.0665 (DEVIATION, gates 0.22/0.07;
+//     probes 0.140, gate 0.15 — see T6 note).
+// Anchors all PASS (T1-T4 <= 1.0, T5/T6 <= 2.0); eye low-end green on the
+// strict gates (T1-20Hz, T3/T4-20Hz+convex, T6-slope-vs-T5red delta 0.219
+// vs 1.0 — the Task-22 T6-slope deviation is SUPERSEDED).
 // Poles < 1 at 44.1k + 48k + 96k incl. float32-quantized radii (worst
-// 0.999591 on T2's lowshelf at 96k, stable and deterministic).
-// Prior gates held: bypass flat/bit-transparent; T2 notch tip < -12 dB;
-// T4 dip < -2 dB; sine-vs-magnitudeAt < 0.3 dB; rate probes <= 0.1 dB
-// (T1 0.0988 / T2 0.0949 / T3 0.0423 / T4 0.2347 on the 0.3 gate /
-// T5 0.0085 / T6 0.0974 — T1/T2/T6 thin but deterministic, recorded);
-// anchors (above); eye low-end EXCEPT T6 slope (recorded deviation below:
-// 1.270 vs gate 1.0, eye gate widened to 1.3); either-oracle advisory;
-// IR shapes advisory (reported, not gated).
+// 0.999904 on T4's micro-peak at 48k, stable and deterministic).
 //
-// Method (optimizer on DIGITAL RBJ responses at the plugin rate, joint
-// 48+44.1 kHz objective — one number set, verified gap-free on a fine grid):
-// scipy differential-evolution-global (HEAD-seeded) -> multi-start
-// least-squares -> L8 Powell -> smooth-minimax polish, then a gate-slack
-// Phase-D finish; greedy section growth, fewest sections that pass.
-// scipy lives on the fitting workstation only — shipped code stays
-// dependency-free C++ as today. RBJ notch type never used (T2's V is twin
-// peaking-with-big-negative-gain); T5/T6 knees are shelf+peak/HP blends
-// (their ~16 dB/decade feet are NOT 2nd-order-steep). f0 floor 5 Hz and
-// Q floor 0.15 are method deviations (brief: 10 Hz / 0.2 — HEAD's own T5
-// corner 9.921 Hz and knee Q 0.18 live below them); the binding poles<1
-// gate is enforced exactly. T6's top shelf is capped at 13 kHz: a later
-// corner maximizes 44.1k/48k warp at 20 kHz with no gate-safe optimum.
+// Method (optimizer on DIGITAL RBJ responses, joint 48+44.1 kHz quantized
+// objective — one number set out; Ruling 24's fit@48/verify@44.1 is met and
+// exceeded by verifying during search, forced by rate-asymmetric float32
+// warp): smooth (float64, unquantized) DE-global + least_squares (x_scale
+// jac) + Powell L8/log-sum-exp minimax, quantized ship-rounded shortlist
+// pick; fit grid 8 Hz-22 kHz (~600 log pts, target clamped flat beyond
+// data); weights x3 on 10-40 Hz (x1 on the 8-10 Hz clamped extrapolation,
+// which must not drive the fit), x2 above 10 kHz, explicit 10 Hz CSV-point
+// pressure; greedy section growth, fewest sections that pass. scipy lives
+// on the fitting workstation only — shipped code stays dependency-free C++
+// as today. f0 floor 5 Hz, Q floor 0.15 (task-22 deviations, kept — the
+// brief's 10 Hz/0.2 floors exclude proven shipped numbers); binding poles<1
+// enforced exactly. T2 target cubic-spliced inside +/-3% of 715 Hz (cubic
+// fit over the 650-800 Hz jitter zone — a cubic over the apply window alone
+// is underdetermined at CSV density; gates still vs raw CSV).
+// Harness lesson (recorded): finite-difference Jacobians through
+// float32-quantized coefficients are mostly exactly zero (LSB steps), so
+// gradient search on the quantized model is blind — all search is smooth
+// (+derivative-free), all acceptance quantized. Low shelf/HP corners still
+// warp rate-asymmetrically up to ~0.1 dB in float32; the joint quantized
+// gates auto-reject warp-hostile corners.
 //
-// T1 RECORDED DEVIATION (RMS 0.101/0.102 vs gate 0.08 — gate 0.11 for T1):
-// three 5-sec allocations (DE costs identical to 4 decimals) floor at RMS
-// ~0.10: a scoop-entry see-saw (118/126 Hz +0.21 vs 269-306 Hz -0.21) needs
-// an entry notch while knee, foot-bump, scoop, midfill, and tilt are all
-// load-bearing. Proof it is structural: an over-budget 6th peak
-// (@653/0.83/-0.90, NOT shipped) collapses RMS to 0.065 with max 0.144.
-// Ruling options: 6th section on T1 (probe numbers in task-22-report.md),
+// T1 RECORDED DEVIATION (6-sec floor 0.168 after 10 rounds; gates
+// 0.17/0.06/0.11 for max/rms/probes): all five user bands fixed (12-15 Hz
+// +0.070, 25-30 -0.035, 110-130 +0.124, 170-250 -0.070, ~700 +0.088 — was
+// +/-0.25-0.3); remainder is the 80 Hz hole (-0.158, no section within 2
+// octaves) + the 15 kHz probe split (0.102, analog-shape warp of the HS
+// knee — probe pressure to 25x will not move it). Proof it is structural:
+// over-budget 7th peak (@58.7/0.55/+1.98, NOT shipped) lands max
+// 0.119/0.121 rms 0.039/0.040 (gates PASS) with all 7 load-bearing — but
+// probes stay 0.103. Ruling options: 7th section on T1 + probe relief
+// (0.103 vs 0.1), accepted deviation, or gate relief.
+//
+// T4 RECORDED DEVIATION (6-sec floor 0.189; gates 0.19/0.06): e10 fixed by
+// the micro-peak (@9.93/3.38/-0.45, T5-pattern); remainder is the dip
+// bottom/exit (6.4 kHz +0.19 shallow vs 8.8 kHz -0.18 deep — in-place
+// deepen conflicts with 9964@44 at +0.151). Proof it is structural:
+// over-budget 7th peak (narrow cut @6412/2.65/-0.60, NOT shipped) lands max
+// 0.146/0.155 rms 0.0427/0.0424 — one point (9964@44, +0.155) 0.005 over.
+// Ruling options: 7th section on T4 (+0.005 relief on that point),
 // accepted deviation, or gate relief.
 //
-// T6 RECORDED DEVIATION (eye slope delta 1.270 vs gate 1.0 — eye gate 1.3
-// for the T6-vs-T5 delta): the LS+HS foot renders the 10-20 Hz slope at
-// ~4.05 while T5-red sits at 5.284 (itself steeper than ink 4.46 — pulling
-// T5 to ink broke T5's RMS, reverted). e10 pulls, an HP-foot topology, and
-// exact slope targeting (diverged, e10 -0.91) all fail the slope without
-// breaking binding gates; the foot rotates rigidly (m10/m20 lockstep).
-// Proof it is structural: an over-budget 5th peak (narrow foot cut
-// @11.2/1.52/-0.49, NOT shipped) lands delta 0.931 with all Task-22 gates
-// green. Ruling options: 5th section on T6 (probe numbers in
-// task-22-report.md), accepted deviation, or eye-gate relief. T6's Task-22
-// gates all pass (above); T6-vs-gray tracks the knee within 0.08 RMS.
+// T6 RECORDED DEVIATION (6-sec floor 0.217 after 12 rounds; gates
+// 0.22/0.07/0.15): foot solved (twin-LS + micro-peak, low band <= 0.09);
+// remainder is the top — 9964 bump + 18-20 kHz edge warp split (48-20k
+// under-cut vs 44-18.8k over-cut) + probes 0.14. NOT a budget problem:
+// over-budget 7th peak (fill @9221/+0.49, NOT shipped) still floors at
+// 0.214 with all 7 load-bearing. Edge provably compatible in isolation
+// (edge-only fit lands e20k = 0.0000 both rates) but incompatible with the
+// mid-top's HS corner (edge wants ~10.4k, mid-top ~14.7k — same section).
+// Ruling options: edge-point relief, per-rate top tables (needs logic
+// change — escalate), accepted deviation, or gate relief.
 //
-// T2 note: the 10-50 Hz ink hump is now RENDERED (dedicated hump peak @36.4
-// Hz + restructured lowshelf @8.3 Hz): e10 -0.04 (anchor 0.72/1.0 PASS),
-// 40 Hz foot in-band, hump peak tracked — see the regen plot. The Fix-2
-// shortfall is resolved within the 6-section budget (twin-V + LS + HS +
-// hump + 2.5 kHz bump-killer).
+// T2 note: restructured — twin-V now centered 645/715 Hz (tip peak AT the
+// user's 715 Hz notch) + foot LS + LF peak @34.9 Hz (the prescribed 15-35
+// Hz LF duty, re-tasked hump slot — 6-sec budget kept) + bump-killer +
+// HS skirt @611 Hz (fills the 654 Hz lower-skirt hole from above); the old
+// top shelf went dead (+0.00) and was dropped. 10-50 rise rendered
+// (low band <= 0.081); tip in-exception 0.18.
 //
-// Per-tone topology + fitted numbers (f0 in Hz, Q = shelf-alpha quotient,
-// gain in dB). Roles: T1 knee+bump+scoop+midfill+tilt; T2 twin-V + LS + HS
-// + hump + upper-mid trim; T3 scoop + top-lift + deep-LS + foot-peak;
-// T4 shelf-down + twin dip peaks + tilt + recovery shelf; T5 HP knee + LS +
-// up-shelf (reference); T6 deep-LS + up-shelf + capped top-shelf + top bell.
+// T5 note: prescribed HP@150-200 assumes a 1st-order HP (6 dB/oct); ours is
+// 2nd-order RBJ (measured -49.7 dB @10 Hz for HP@175 — unusable). Shipped
+// twin-LS foot + plateau HS (+2.55, as prescribed) + handoff peak + 11 Hz
+// micro-peak instead (greedy 3->5, within budget); in-band improved
+// (0.126 -> 0.080). No general-biquad escape hatch used on any tone.
+//
+// Per-tone topology (f0 Hz, Q, gain dB): T1 HP+foot+scoop+refill+tilt+entry;
+// T2 twin-V + LS + LF + bump + HS-skirt (no top shelf); T3 scoop + top-lift
+// + LS + foot-peak + hump-trim; T4 shelf-down + twin dip peaks + tilt +
+// recovery shelf + micro-peak; T5 twin-LS + plateau + handoff + micro-peak;
+// T6 twin-LS + plateau + capped top-shelf + top bell + micro-peak.
 //
 // Biquad form: Transposed Direct Form II, RBJ cookbook coefficients with
 // shelf alpha = sin(w0)/(2Q) (Q-parametrized shelf knee, same family as the
@@ -221,59 +229,73 @@ private:
         switch (tone * 10 + stage)
         {
         case 10:
-            return {Type::HighPass, 8.9923, 0.64508, 0.0};
+            return {Type::HighPass, 5.0, 0.40395, 0.0};
         case 11:
-            return {Type::Peak, 46.4103, 0.73812, 1.4121};
+            return {Type::Peak, 49.0866, 0.35951, 1.8346};
         case 12:
-            return {Type::Peak, 978.7854, 0.15159, -7.3399};
+            return {Type::Peak, 1048.8736, 0.16364, -13.7137};
         case 13:
-            return {Type::Peak, 3677.4141, 0.45995, 1.7283};
+            return {Type::Peak, 1734.5392, 0.21392, 7.1515};
         case 14:
-            return {Type::HighShelf, 12201.5685, 1.08892, 1.2716};
+            return {Type::HighShelf, 11981.7927, 1.06858, 1.311};
+        case 15:
+            return {Type::Peak, 284.8489, 0.89252, 1.335};
         case 20:
-            return {Type::Peak, 570.6655, 0.41982, -11.347};
+            return {Type::Peak, 644.5752, 0.31635, -9.5942};
         case 21:
-            return {Type::Peak, 710.4872, 1.82947, -9.8575};
+            return {Type::Peak, 715.0513, 1.6408, -12.8167};
         case 22:
-            return {Type::LowShelf, 8.3405, 0.46291, -2.9399};
+            return {Type::LowShelf, 12.4907, 0.91201, -1.5117};
         case 23:
-            return {Type::HighShelf, 16735.5412, 0.15402, 2.7028};
+            return {Type::Peak, 34.9406, 0.50216, 1.5057};
         case 24:
-            return {Type::Peak, 36.3589, 0.63432, 1.6442};
+            return {Type::Peak, 3159.9499, 0.61821, -0.7183};
         case 25:
-            return {Type::Peak, 2488.075, 0.66904, -0.8865};
+            return {Type::HighShelf, 610.9243, 1.6477, 1.3745};
         case 30:
-            return {Type::Peak, 1109.5272, 0.1576, -3.8247};
+            return {Type::Peak, 1139.8615, 0.15462, -3.7423};
         case 31:
-            return {Type::Peak, 18569.9136, 0.21718, 0.3918};
+            return {Type::Peak, 18852.0009, 0.17095, 0.4067};
         case 32:
-            return {Type::LowShelf, 7.2652, 0.45436, -10.89};
+            return {Type::LowShelf, 12.9996, 0.78994, -3.6748};
         case 33:
-            return {Type::Peak, 22.1174, 0.38366, 1.6991};
+            return {Type::Peak, 40.4319, 0.64122, 0.8181};
+        case 34:
+            return {Type::Peak, 677.6882, 1.72978, -0.2364};
         case 40:
-            return {Type::LowShelf, 26.7169, 0.70508, -2.5107};
+            return {Type::LowShelf, 23.3315, 0.66438, -2.6291};
         case 41:
-            return {Type::Peak, 7491.8754, 0.71334, -3.4394};
+            return {Type::Peak, 8815.7501, 1.19986, -2.0138};
         case 42:
-            return {Type::HighShelf, 13.4908, 1.40105, 1.5742};
+            return {Type::HighShelf, 12.6487, 1.02216, 1.5772};
         case 43:
-            return {Type::Peak, 4504.351, 0.66648, -3.0077};
+            return {Type::Peak, 5139.997, 0.66627, -4.9216};
         case 44:
-            return {Type::HighShelf, 12646.3537, 0.74338, 1.2231};
+            return {Type::HighShelf, 14083.1316, 0.57743, 1.3207};
+        case 45:
+            return {Type::Peak, 9.9251, 3.37706, -0.4468};
         case 50:
-            return {Type::HighPass, 5.3662, 0.1667, 0.0};
+            return {Type::LowShelf, 16.5931, 0.66482, -4.0};
         case 51:
-            return {Type::LowShelf, 92.2558, 0.5492, -11.8988};
+            return {Type::LowShelf, 61.4232, 0.42485, -19.2452};
         case 52:
-            return {Type::HighShelf, 284.9325, 0.65913, 2.6281};
+            return {Type::HighShelf, 166.6066, 0.51491, 2.5516};
+        case 53:
+            return {Type::Peak, 732.2752, 1.09303, 0.3299};
+        case 54:
+            return {Type::Peak, 11.0426, 3.60242, -0.6};
         case 60:
-            return {Type::LowShelf, 49.6087, 0.3749, -24.998};
+            return {Type::LowShelf, 17.7493, 0.65975, -3.972};
         case 61:
-            return {Type::HighShelf, 60.8899, 0.30597, 2.7361};
+            return {Type::LowShelf, 63.4268, 0.43413, -18.9831};
         case 62:
-            return {Type::HighShelf, 12978.3914, 0.57358, -4.2799};
+            return {Type::HighShelf, 198.2506, 0.53229, 2.7376};
         case 63:
-            return {Type::Peak, 19802.5408, 1.46112, -1.7045};
+            return {Type::HighShelf, 14729.0504, 0.51821, -5.6445};
+        case 64:
+            return {Type::Peak, 20141.4081, 1.42257, -0.5909};
+        case 65:
+            return {Type::Peak, 11.1211, 2.63754, -0.7999};
         default:
             break;
         }
@@ -367,22 +389,24 @@ private:
         }
     }
 
-    // Section budget (Task 22 user table +1 for RBJ): T1 5, T2 6, T3 4,
-    // T4 5, T5 3, T6 4 — every tone at its cap except T3/T5 (fewer is better).
+    // Section budget (Task 24, Ruling 23: <= 6 sections/tone): T1 6, T2 6,
+    // T3 5, T4 6, T5 5, T6 6. T1/T2/T4/T6 at cap; T3/T5 under.
     static int numSections (int tone)
     {
         switch (tone)
         {
         case 1:
-            return 5;
+            return 6;
         case 2:
             return 6;
         case 3:
-            return 4;
+            return 5;
         case 4:
+            return 6;
+        case 5:
             return 5;
         case 6:
-            return 4;
+            return 6;
         default:
             break;
         }

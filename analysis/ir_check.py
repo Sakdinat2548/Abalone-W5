@@ -17,8 +17,8 @@ asserted: --verify-port (run on every invocation as part of the self-test
 section) recomputes the six per-tone either-oracle worst deltas
 (min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
 algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each
-to match the recorded C++ reference within 0.05 dB (Task-22 numbers):
-  T1 0.19 / T2 0.09 / T3 0.14 / T4 0.18 / T5 0.12 / T6 0.20 dB.
+to match the recorded C++ reference within 0.05 dB (Task-24 numbers):
+  T1 0.16 / T2 0.12 / T3 0.07 / T4 0.10 / T5 0.05 / T6 0.21 dB.
 (The references are small because the fit tracks the digitized
 chart — CSV binding, header/IR advisory; see IR_VALIDATION.md. The check
 verifies port fidelity to C++, not fit quality.)
@@ -64,43 +64,50 @@ SELFTEST_TOL_DB = 0.05  # end-to-end (time-domain synth IR -> FFT -> analytic)
 # ----------------------------------------------------------------------------
 # Section 1: Python port of src/dsp/ToneBank.h + src/dsp/HighCut.h.
 # (tone, stage) -> (type, f0 Hz, Q, gain dB); HP stages have no gain.
-# Verbatim from the header comment table (Task 22: T1x5/T2x6/T3x4/T4x5/T5x3/
-# T6x4 — optimizer re-fit to the digitized gray, see ToneBank.h).
+# Verbatim from the header comment table (Task 24: T1x6/T2x6/T3x5/T4x6/T5x5/
+# T6x6 — tight fit to the digitized gray, see ToneBank.h).
 # ----------------------------------------------------------------------------
 TONE_PARAMS = {
-    10: ("hp", 8.9923, 0.64508, 0.0),
-    11: ("pk", 46.4103, 0.73812, 1.4121),
-    12: ("pk", 978.7854, 0.15159, -7.3399),
-    13: ("pk", 3677.4141, 0.45995, 1.7283),
-    14: ("hs", 12201.5685, 1.08892, 1.2716),
-    20: ("pk", 570.6655, 0.41982, -11.347),
-    21: ("pk", 710.4872, 1.82947, -9.8575),
-    22: ("ls", 8.3405, 0.46291, -2.9399),
-    23: ("hs", 16735.5412, 0.15402, 2.7028),
-    24: ("pk", 36.3589, 0.63432, 1.6442),
-    25: ("pk", 2488.075, 0.66904, -0.8865),
-    30: ("pk", 1109.5272, 0.1576, -3.8247),
-    31: ("pk", 18569.9136, 0.21718, 0.3918),
-    32: ("ls", 7.2652, 0.45436, -10.89),
-    33: ("pk", 22.1174, 0.38366, 1.6991),
-    40: ("ls", 26.7169, 0.70508, -2.5107),
-    41: ("pk", 7491.8754, 0.71334, -3.4394),
-    42: ("hs", 13.4908, 1.40105, 1.5742),
-    43: ("pk", 4504.351, 0.66648, -3.0077),
-    44: ("hs", 12646.3537, 0.74338, 1.2231),
-    50: ("hp", 5.3662, 0.1667, 0.0),
-    51: ("ls", 92.2558, 0.5492, -11.8988),
-    52: ("hs", 284.9325, 0.65913, 2.6281),
-    60: ("ls", 49.6087, 0.3749, -24.998),
-    61: ("hs", 60.8899, 0.30597, 2.7361),
-    62: ("hs", 12978.3914, 0.57358, -4.2799),
-    63: ("pk", 19802.5408, 1.46112, -1.7045),
+    10: ("hp", 5.0, 0.40395, 0.0),
+    11: ("pk", 49.0866, 0.35951, 1.8346),
+    12: ("pk", 1048.8736, 0.16364, -13.7137),
+    13: ("pk", 1734.5392, 0.21392, 7.1515),
+    14: ("hs", 11981.7927, 1.06858, 1.311),
+    15: ("pk", 284.8489, 0.89252, 1.335),
+    20: ("pk", 644.5752, 0.31635, -9.5942),
+    21: ("pk", 715.0513, 1.6408, -12.8167),
+    22: ("ls", 12.4907, 0.91201, -1.5117),
+    23: ("pk", 34.9406, 0.50216, 1.5057),
+    24: ("pk", 3159.9499, 0.61821, -0.7183),
+    25: ("hs", 610.9243, 1.6477, 1.3745),
+    30: ("pk", 1139.8615, 0.15462, -3.7423),
+    31: ("pk", 18852.0009, 0.17095, 0.4067),
+    32: ("ls", 12.9996, 0.78994, -3.6748),
+    33: ("pk", 40.4319, 0.64122, 0.8181),
+    34: ("pk", 677.6882, 1.72978, -0.2364),
+    40: ("ls", 23.3315, 0.66438, -2.6291),
+    41: ("pk", 8815.7501, 1.19986, -2.0138),
+    42: ("hs", 12.6487, 1.02216, 1.5772),
+    43: ("pk", 5139.997, 0.66627, -4.9216),
+    44: ("hs", 14083.1316, 0.57743, 1.3207),
+    45: ("pk", 9.9251, 3.37706, -0.4468),
+    50: ("ls", 16.5931, 0.66482, -4.0),
+    51: ("ls", 61.4232, 0.42485, -19.2452),
+    52: ("hs", 166.6066, 0.51491, 2.5516),
+    53: ("pk", 732.2752, 1.09303, 0.3299),
+    54: ("pk", 11.0426, 3.60242, -0.6),
+    60: ("ls", 17.7493, 0.65975, -3.972),
+    61: ("ls", 63.4268, 0.43413, -18.9831),
+    62: ("hs", 198.2506, 0.53229, 2.7376),
+    63: ("hs", 14729.0504, 0.51821, -5.6445),
+    64: ("pk", 20141.4081, 1.42257, -0.5909),
+    65: ("pk", 11.1211, 2.63754, -0.7999),
 }
 
 
 def num_sections(tone):
-    """Section budget T1x5/T2x6/T3x4/T4x5/T5x3/T6x4 — mirrors ToneBank::numSections."""
-    return {1: 5, 2: 6, 3: 4, 4: 5, 5: 3, 6: 4}[tone]
+    """Section budget T1x6/T2x6/T3x5/T4x6/T5x5/T6x6 — mirrors ToneBank::numSections."""
+    return {1: 6, 2: 6, 3: 5, 4: 6, 5: 5, 6: 6}[tone]
 
 
 def rbj_cook(typ, f0, q, gain_db, fs):
@@ -188,9 +195,9 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # same algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires
 # each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
 # Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal
-# (Task-22 numbers).
+# (Task-24 numbers).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 0.19, 2: 0.09, 3: 0.14, 4: 0.18, 5: 0.12, 6: 0.20}
+CXX_EITHER_REF_DB = {1: 0.16, 2: 0.12, 3: 0.07, 4: 0.10, 5: 0.05, 6: 0.21}
 PORT_VERIFY_TOL_DB = 0.05
 
 
