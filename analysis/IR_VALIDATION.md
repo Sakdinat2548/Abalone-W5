@@ -2,6 +2,52 @@
 
 ## Status history
 
+### Task 22 (optimizer RBJ re-fit to digitized gray) COMPLETE, 2 recorded deviations
+
+From-scratch optimizer fit (scipy DE-global + multi-start LS + L8/minimax +
+gate-slack Phase-D, joint 48+44.1 kHz, one number set for all rates) to the
+digitized CSV over 40 Hz–20 kHz. Section budget T1x5/T2x6/T3x4/T4x5/T5x3/T6x4
+(user table +1 for RBJ). Hierarchy UNCHANGED: CSV binding 40 Hz–20 kHz;
+six 10 Hz anchors binding (all pass, every anchor within 0.73 dB);
+eye-read header + IR shapes advisory; highcut-ON non-adjudicating (Ruling A);
+HighCut.h untouched. 96 kHz verify-only (max 0.18/0.35/0.30/1.08/0.18/0.72 —
+T4/T6 top ends render near-analog at 96k vs warped at 48k; inherent,
+reported not gated).
+
+| Tone | Max 48/44.1 (gate) | RMS 48/44.1 (gate) | e10 / e20k 48 | Anchor d (gate) |
+|------|--------------------|--------------------|---------------|-----------------|
+| 1 (5s) | 0.218/0.217 (0.3) | 0.101/0.102 (0.11 DEVIATION) | -0.02/-0.02 | 0.13 (1.0) PASS |
+| 2 (6s) | 0.257/0.271 (0.3; tip 0.14 exc) | 0.0785/0.0786 (0.08) | -0.04/+0.16 | 0.72 (1.0) PASS |
+| 3 (4s) | 0.146/0.145 (0.3) | 0.0578/0.0574 (0.08) | +0.10/-0.02 | 0.20 (1.0) PASS |
+| 4 (5s) | 0.188/0.270 (0.3) | 0.0536/0.0534 (0.08) | -0.02/-0.18 | 0.15 (1.0) PASS |
+| 5 (3s) | 0.126/0.126 (0.3) | 0.0733/0.0733 (0.08) | -0.11/+0.08 | 0.19 (2.0) PASS |
+| 6 (4s) | 0.204/0.178 (0.3) | 0.0778/0.0739 (0.08) | +0.07/+0.04 | 0.15 (2.0) PASS |
+
+(C++ `ToneBankTest` actuals. Fine-grid 800-pt audit gap-free: worsts within
+0.02 of on-grid except T6-44.1k 0.284 vs 0.178 — still <= 0.3 everywhere.
+Poles < 1 at 44.1k/48k/96k incl. float32 radii. Prior gates: bypass/T2-notch
+(−20.86)/T4-dip (−4.00)/sine-agreement green; rate probes T1 0.099 / T2 0.095 /
+T3 0.042 / T4 0.235 (0.3 gate, old 0.244 deviation SUPERSEDED) / T5 0.009 /
+T6 0.097 (0.1); eye low-end green except T6 slope 1.270 (1.3 DEVIATION);
+either-oracle advisory 0.195/0.092/0.137/0.176/0.119/0.199 — all pass.)
+
+Recorded deviations (structural evidence + probe numbers in
+`.superpowers/sdd/2026-10-02-abalone-u55-plan/task-22-report.md`):
+- T1 RMS 0.101/0.11 (scoop-entry see-saw needs a 6th section; 6th-peak probe
+  lands rms 0.065/max 0.144 — ruling: budget+1 vs accepted deviation).
+- T6 eye slope 1.270/1.3 (LS+HS foot renders ~4.05 vs T5-red 5.284; 5th-peak
+  foot-cut probe lands delta 0.931 all-green — ruling: budget+1 vs accepted
+  deviation). All T6 Task-22 gates pass.
+- Resolved this round: T2 10–50 curve (Fix-2 shortfall, now rendered by the
+  hump peak within the 6-section budget); T4 rate warp (twin dip peaks).
+
+`analysis/ir_check.py` harness: port verification GREEN (worst diff 0.0150 dB
+against refs 0.19/0.09/0.14/0.18/0.12/0.20), self-test GREEN (worst 0.0252 dB
+on the T2 notch case). IR-shape leg (report-only, 1 kHz-normalized spots):
+worsts T1 1.72 @10k / T2 1.82 @10k / T3 1.09 @15k / T4 2.20 @15k /
+T5 2.08 @63 / T6 3.24 @63 Hz — exceed ±1 dB exactly where chart and hardware
+disagree (the blend follows the chart there by design, unchanged ruling).
+
 ### Fix Round 2 (low-end eye corrections) COMPLETE except T2-curve ruling
 
 The user's overlay read of the manual's left third (10–200 Hz) retargets the
