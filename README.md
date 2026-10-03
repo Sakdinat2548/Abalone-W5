@@ -1,6 +1,6 @@
 # Abalone W5
 
-U5-inspired clean bass DI — VST3 + Standalone for Windows.
+U5-inspired clean bass DI — VST3 for Windows. (A Standalone test build exists for developers; the product is the VST3.)
 
 ![Abalone W5 UI](docs/ui-preview.png)
 
@@ -41,8 +41,8 @@ Requires MSVC 2019 BuildTools, JUCE 8.0.15 (FetchContent), C++17. See `AGENTS.md
 
 ## Install
 
-- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW.
-- Standalone: run the `Abalone W5.exe` directly (Options > Audio Settings for device/ASIO setup).
+- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship only the VST3.
+- Standalone (dev testing only, not shipped): run the locally built `Abalone W5.exe` directly.
 
 ## Validation
 
