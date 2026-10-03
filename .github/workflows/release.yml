@@ -1,12 +1,18 @@
-# Release: on version tags (v*), rebuild + ship the VST3 ONLY.
+# Release: on version tags (v*), rebuild per OS + ship VST3 zips.
 #
-# Self-contained (own configure+build, not an artifact download from CI) so a
-# tagged build is always fresh and reproducible from the tag alone.
-# Ships ONLY "Abalone W5.vst3" (+ LICENSE + README.md) in one zip — the
-# Standalone is dev-testing and is NOT released. Upload via
+# Self-contained (own configure+build per leg, not artifact downloads from CI)
+# so a tagged build is always fresh and reproducible from the tag alone.
+# Per-OS setup mirrors ci.yml (Windows MSVC / macOS Xcode+universal /
+# Linux GCC+JUCE deps); see ci.yml header for the why. Upload via
 # softprops/action-gh-release (maintained, de-facto standard for tag releases;
-# auto-creates the GitHub release, takes a files glob, needs nothing else).
-# No code signing (known limitation); no installer (manual install per README).
+# auto-creates the GitHub release; each matrix leg appends its own zip).
+# Ships ONLY the VST3 bundle (+ LICENSE + README.md) per zip — the Standalone
+# is dev-testing and is NOT released. VST3 bundle name follows PRODUCT_NAME
+# ("Abalone-W5.vst3" since the SA48/AbW5 identity commit; the old
+# "Abalone W5.vst3" dir lingering in local build/ output is pre-rename stale).
+# Release body comes from RELEASE_NOTES.md in-repo (standing caveat: only
+# Windows is host-tested by the author).
+# No AU, no code signing, no installer (all prior rulings stand).
 name: Release
 
 on:
@@ -16,54 +22,132 @@ on:
 
 jobs:
   release:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            tag: windows
+          - os: macos-latest
+            tag: macos
+          - os: ubuntu-latest
+            tag: linux
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up MSVC environment
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Ensure Ninja
+      - name: Ensure Ninja (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { choco install ninja -y }
           ninja --version
 
-      - name: Configure (Ninja, Release)
+      - name: Check Xcode toolchain + Ninja (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          xcode-select -p
+          cmake --version
+          command -v ninja >/dev/null || brew install ninja
+          ninja --version
+
+      - name: Install JUCE deps (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          DEPS="cmake ninja-build g++ libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev"
+          sudo apt-get install -y $DEPS libfreetype-dev libwebkit2gtk-4.1-dev || sudo apt-get install -y $DEPS libfreetype6-dev libwebkit2gtk-4.0-dev
+          gcc --version
+          cmake --version
+          ninja --version
+
+      - name: Assert no MinGW on PATH
+        shell: bash
+        run: |
+          if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then echo "MinGW gcc on PATH - refusing (Ruling 5)"; exit 1; fi
+          echo "no MinGW gcc on PATH"
+
+      - name: "Configure (Windows: Ninja, Release, MSVC)"
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           CC: cl
           CXX: cl
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: |
+          Write-Host "CC=$env:CC CXX=$env:CXX"
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: "Configure (macOS: Ninja, Release, universal)"
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          echo "CC=$CC CXX=$CXX"
+          "$CC" --version
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: "Configure (Linux: Ninja, Release, GCC)"
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          CC: gcc
+          CXX: g++
+        run: |
+          echo "CC=$CC CXX=$CXX"
+          "$CC" --version
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       # Builds all targets as proof (as CI does); only the VST3 is packaged.
       - name: Build (VST3 + Standalone + tests)
-        shell: pwsh
         run: cmake --build build
 
       - name: Test
-        shell: pwsh
         run: ctest --test-dir build --output-on-failure
 
-      - name: Package VST3 zip
+      # ZIP_NAME via env keeps ${{ }} out of the script body so the script is
+      # statically parse-clean (Task-31 lesson).
+      - name: Package VST3 zip (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
-          ZIP_NAME: AbaloneW5-${{ github.ref_name }}-windows-vst3.zip
+          ZIP_NAME: Abalone-W5-${{ matrix.tag }}.zip
         run: |
-          $vst3 = "build/AbaloneW5_artefacts/Release/VST3/Abalone W5.vst3"
+          $vst3 = "build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3"
           if (-not (Test-Path -LiteralPath $vst3)) { throw "VST3 not found at $vst3" }
           New-Item -ItemType Directory -Force -Path stage | Out-Null
           Copy-Item -LiteralPath $vst3 -Destination stage/ -Recurse
           Copy-Item -LiteralPath LICENSE, README.md -Destination stage/
-          Compress-Archive -LiteralPath stage/"Abalone W5.vst3", stage/LICENSE, stage/README.md `
+          Compress-Archive -LiteralPath stage/"Abalone-W5.vst3", stage/LICENSE, stage/README.md `
             -DestinationPath $env:ZIP_NAME
+
+      - name: Package VST3 zip (macOS/Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          ZIP_NAME: Abalone-W5-${{ matrix.tag }}.zip
+        run: |
+          VST3="build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3"
+          test -d "$VST3" || { echo "VST3 not found at $VST3"; exit 1; }
+          command -v zip >/dev/null || { echo "zip tool missing"; exit 1; }
+          rm -rf stage && mkdir stage
+          cp -R "$VST3" stage/
+          cp LICENSE README.md stage/
+          (cd stage && zip -r "../$ZIP_NAME" "Abalone-W5.vst3" LICENSE README.md)
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
-          files: AbaloneW5-*-windows-vst3.zip
-          generate_release_notes: true
+          files: Abalone-W5-${{ matrix.tag }}.zip
+          body_path: RELEASE_NOTES.md

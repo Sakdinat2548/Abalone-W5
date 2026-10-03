@@ -1,11 +1,24 @@
-# CI: Windows build + tests (Release only, one runner).
+# CI: 3-OS matrix build + tests (Release only).
 #
-# Toolchain: any recent MSVC via ilammy/msvc-dev-cmd (sets up the full cl
-# environment Ninja needs; microsoft/setup-msbuild only puts msbuild on PATH,
-# which Ninja builds don't use) + Ninja (preinstalled on windows-latest;
-# choco fallback if ever missing) + MSYS2-free configure.
-# Ruling 5: NO MinGW on PATH — CC=cl/CXX=cl forced explicitly.
-# No code signing (known limitation); no installer (manual install per README).
+# Toolchain per leg:
+# - Windows: any recent MSVC via ilammy/msvc-dev-cmd (sets up the full cl
+#   environment Ninja needs; microsoft/setup-msbuild only puts msbuild on PATH,
+#   which Ninja builds don't use) + Ninja (preinstalled; choco fallback).
+#   CC=cl/CXX=cl forced per Ruling 5.
+# - macOS: Xcode toolchain from the runner image (xcode-select -p fails loud if
+#   absent) + Ninja (image or brew fallback). Universal arm64+x86_64 binary via
+#   the single CMAKE_OSX_ARCHITECTURES flag — no lipo handcraft.
+# - Linux: GCC + JUCE system deps per JUCE 8.0.15 docs/Linux Dependencies.md
+#   (libfreetype-dev / libwebkit2gtk-4.1-dev are the Ubuntu 22/24 names, with
+#   older-name fallbacks). Full list installed even though JUCE_USE_CURL=0 and
+#   JUCE_WEB_BROWSER=0 are set on the plugin target: ProcessorIOTest links the
+#   JUCE modules with default flags, so the headers must exist. cmake/ninja/g++
+#   ride the same apt line (no-op if preinstalled).
+# Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg + a
+# shared step that fails loud if a MinGW gcc is on PATH.
+# Builds all targets as proof (VST3 + Standalone + tests); only the VST3 ships
+# (VST3-only product ruling — Standalone is dev-testing).
+# No code signing; no installer (manual install per README).
 name: CI
 
 on:
@@ -14,36 +27,93 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up MSVC environment
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Ensure Ninja
+      - name: Ensure Ninja (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { choco install ninja -y }
           ninja --version
 
+      - name: Check Xcode toolchain + Ninja (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          xcode-select -p
+          cmake --version
+          command -v ninja >/dev/null || brew install ninja
+          ninja --version
+
+      - name: Install JUCE deps (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          DEPS="cmake ninja-build g++ libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev"
+          sudo apt-get install -y $DEPS libfreetype-dev libwebkit2gtk-4.1-dev || sudo apt-get install -y $DEPS libfreetype6-dev libwebkit2gtk-4.0-dev
+          gcc --version
+          cmake --version
+          ninja --version
+
+      - name: Assert no MinGW on PATH
+        shell: bash
+        run: |
+          if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then echo "MinGW gcc on PATH - refusing (Ruling 5)"; exit 1; fi
+          echo "no MinGW gcc on PATH"
+
       # No -DCMAKE_MAKE_PROGRAM: runner ninja is on PATH (AGENTS.md passes an
       # explicit path only because the local MSYS2 ninja isn't on PATH in cmd).
-      - name: Configure (Ninja, Release)
+      - name: "Configure (Windows: Ninja, Release, MSVC)"
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           CC: cl
           CXX: cl
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: |
+          Write-Host "CC=$env:CC CXX=$env:CXX"
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
+      - name: "Configure (macOS: Ninja, Release, universal)"
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          echo "CC=$CC CXX=$CXX"
+          "$CC" --version
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: "Configure (Linux: Ninja, Release, GCC)"
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          CC: gcc
+          CXX: g++
+        run: |
+          echo "CC=$CC CXX=$CXX"
+          "$CC" --version
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      # Default shell per runner (pwsh on Windows, bash elsewhere); both run
+      # these verbatim, matching AGENTS.md.
       - name: Build (VST3 + Standalone + tests)
-        shell: pwsh
         run: cmake --build build
 
       - name: Test
-        shell: pwsh
         run: ctest --test-dir build --output-on-failure
