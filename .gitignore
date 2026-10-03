@@ -13,3 +13,5 @@ analysis/ir_local/
 analysis/zoom_ref/
 # Belt-and-braces: no WAVs anywhere in the repo (IRs + captures are local-only)
 *.wav
+
+__pycache__/
