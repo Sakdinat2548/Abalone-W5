@@ -48,9 +48,10 @@ class AbaloneW5AudioProcessor;
 // 389.6 for 29.6, so interpolation never swings backwards; fractional
 // positions interpolate between entries). The redesigned UUV dial rings
 // print their detent ticks on a 30-degree clock grid with a decorative top
-// tick, so no linear 10-/6-position needle can land on ticks (residuals up
-// to 10 degrees); boost/tone carry tables fitted against tick centers (see
-// ui/new_ui/positions.csv), trim/OS stay linear (no printed scale).
+// tick, while the NUMERALS sit mid-sector between tick rays — so no linear
+// 10-/6-position needle can land on numerals (residuals up
+// to 10 degrees); boost/tone carry per-detent numeral-center tables
+// (see ui/new_ui/positions.csv), trim/OS stay linear (no printed scale).
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
     juce::Image bodyImage;
@@ -189,8 +190,8 @@ private:
                                // between the SIGNAL LED and the UUV oval
                                // (see CSV os_dial). Knob drag + host automation
                                // both drive it via the attachment.
-    juce::Label trimReadout;   // in-code dB readout below the trim knob (pale
-                               // on the black oval). Single-click editable: type a
+    juce::Label trimReadout;   // in-code dB readout on the silver strip below
+                               // the oval (black plate ink). Single-click editable: type a
                                // number, Enter commits (clamped -30..0), Esc cancels.
                                // Follows the param while idle (see timerCallback).
     juce::ToggleButton highcutButton;

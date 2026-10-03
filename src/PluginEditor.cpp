@@ -101,7 +101,12 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
 } // namespace
 
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (32.0f)), readoutFont (makePlateFont (9.0f))
+    // Bold system sans at plate-caption presence: baked captions are bold
+    // sans ~7px on screen; UI readouts render one step larger for legibility
+    // in the same family and ink (0xff1b1b1c), like INPUT/THRU read at a
+    // glance. Scale-aware (rebuilt in resized()).
+    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (32.0f)),
+      readoutFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")))
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
@@ -129,19 +134,18 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 
     layoutRatios = parseLayoutCsv (BinaryData::positions_csv, BinaryData::positions_csvSize);
 
-    // Needle geometry, fitted against the NEW (redesigned) dial rings
-    // (radial tick-center scans, 0.05deg steps; ring-stroke circle fits on
-    // ~7500 pixels each: boost cx=412.1 cy=324.0 r=170.6, tone cx=1554.6
-    // cy=322.5 r=173.0). Both rings print detent ticks on a 30-degree clock
-    // grid with a decorative top tick (boost: 11 ticks, tone: 7), so a
-    // linear needle cannot land on ticks — each detent gets its measured
-    // tick center instead (entries past top stored unwrapped; see
-    // PhotoDialLookAndFeel). Boost 1-10 skips the top tick (detents 210.5
-    // to 510.1=150.1); tone 1-6 likewise (270.2 to 449.6=89.6). TRIM has no
-    // printed scale at its oval spot, so it keeps the conventional
-    // 7-to-5-o'clock sweep; OS keeps the shared trim sweep.
-    boostDialLookAndFeel.detentDeg = {210.5f, 239.9f, 270.2f, 300.0f, 329.5f, 389.6f, 419.8f, 449.8f, 479.8f, 510.1f};
-    toneDialLookAndFeel.detentDeg = {270.2f, 300.1f, 330.1f, 390.0f, 419.8f, 449.6f};
+    // Needle geometry: each detent aims at its NUMERAL's middle, measured
+    // as the dark-mass centroid per dial sector on the redesigned texture
+    // (boost numerals sit mid-sector between tick rays: centroids 224.9 ..
+    // 134.8; tone likewise 285.1 .. 74.9 — entries past top stored
+    // unwrapped, see PhotoDialLookAndFeel). An earlier tick-ray fit aimed
+    // ~15 degrees off everywhere; numerals are what the eye reads, so the
+    // tables below carry numeral centers, verified within 0.4deg of exact
+    // sector midpoints. TRIM has no printed scale at its oval spot, so it
+    // keeps the conventional 7-to-5-o'clock sweep; OS keeps the shared
+    // trim sweep.
+    boostDialLookAndFeel.detentDeg = {224.9f, 254.9f, 285.0f, 314.5f, 345.0f, 374.0f, 404.6f, 434.6f, 464.4f, 494.8f};
+    toneDialLookAndFeel.detentDeg = {285.1f, 314.9f, 345.5f, 374.3f, 404.9f, 434.9f};
     trimDialLookAndFeel.needleStartDeg = 225.0f;
     trimDialLookAndFeel.needleSweepDeg = 270.0f;
 
@@ -212,7 +216,11 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // also exits editing (discards, never traps keyboard focus).
     trimReadout.setEditable (true, false, true);
     trimReadout.setJustificationType (juce::Justification::centred);
-    trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xffe9ebee));
+    // Black plate ink: the readout lives on silver below the oval (see
+    // resized()), matching the baked captions' family/weight, sized up for
+    // legibility. Editing chrome stays dark-box/light-text (readable on
+    // silver, unchanged behavior).
+    trimReadout.setColour (juce::Label::textColourId, juce::Colour (0xff1b1b1c));
     trimReadout.setColour (juce::Label::backgroundWhenEditingColourId, juce::Colour (0xff0a0b0c));
     trimReadout.setColour (juce::Label::textWhenEditingColourId, juce::Colour (0xffe9ebee));
     trimReadout.setColour (juce::Label::outlineWhenEditingColourId, juce::Colour (0xff3a3d40));
@@ -407,23 +415,23 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
 }
 
-// OS factor readout, centered UNDER the OS mini-knob: ONE live label
-// showing the current `osfactor` value only ("1x"/"2x"/"4x") in the dark
-// plate caption colour. It reads the same raw Choice index the DSP path
+// OS factor readout, centered UNDER the OS mini-knob on the silver strip
+// below the oval (black plate ink, like the trim readout — never on the
+// black oval). It reads the same raw Choice index the DSP path
 // reads (clamped identically), so the label can never disagree with the
-// audio factor. Glyph size matches the baked to-THRU caption: THRU caps
-// span 18 texture px (~6.9 editor px at 1x); a 10px default-sans face (cap
-// ratio ~0.7) lands at ~7.0px cap — same cap-height, not eyeballed.
+// audio factor. Bold system sans at readout size, matching the baked
+// caption family the way the trim readout does.
 void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knob, float scale) const
 {
     const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
     const char* text = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
-    g.setFont (juce::Font (juce::FontOptions (10.0f * scale)));
-    g.setColour (juce::Colour (0xff2e3234));
-    const int lw = juce::roundToInt (40.0f * scale);
-    const int lh = juce::roundToInt (13.0f * scale);
-    g.drawText (text, knob.getX() + knob.getWidth() / 2 - lw / 2, knob.getBottom() + juce::roundToInt (2.0f * scale),
-                lw, lh, juce::Justification::centred, false);
+    g.setFont (juce::Font (juce::FontOptions (12.0f * scale).withStyle ("Bold")));
+    g.setColour (juce::Colour (0xff1b1b1c));
+    const int lw = juce::roundToInt (90.0f * scale);
+    const int lh = juce::roundToInt (16.0f * scale);
+    const int panelH = getHeight();
+    g.drawText (text, knob.getCentreX() - lw / 2, panelH - juce::roundToInt (34.0f * scale), lw, lh,
+                juce::Justification::centred, false);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()
@@ -435,18 +443,20 @@ void AbaloneW5AudioProcessorEditor::resized ()
     // Typefaces follow the window scale (rebuilt here on the message thread,
     // never on audio).
     headerFont = makePlateFont (32.0f * scale);
-    readoutFont = makePlateFont (9.0f * scale);
+    readoutFont = juce::Font (juce::FontOptions (12.0f * scale).withStyle ("Bold"));
     trimReadout.setFont (readoutFont);
 
     boostSlider.setBounds (scaledRect (layoutRatios, "boost_dial", w, h));
     toneSlider.setBounds (scaledRect (layoutRatios, "tone_dial", w, h));
     const auto trimBounds = scaledRect (layoutRatios, "trim_dial", w, h);
     outputSlider.setBounds (trimBounds);
-    // Readout sits directly below the trim knob, wider than the knob so the
-    // "-30.0 dB" string fits; offsets scale with the window.
-    trimReadout.setBounds (trimBounds.getX() - juce::roundToInt (24.0f * scale),
-                           trimBounds.getBottom() + juce::roundToInt (2.0f * scale),
-                           trimBounds.getWidth() + juce::roundToInt (48.0f * scale), juce::roundToInt (14.0f * scale));
+    // Readout lives on the silver strip below the oval (black ink needs a
+    // light ground — never on the black oval). Rect is centered on the trim
+    // knob's x, tucked between the oval bottom edge and the panel edge;
+    // offsets scale with the window.
+    trimReadout.setBounds (trimBounds.getCentreX() - juce::roundToInt (60.0f * scale),
+                           h - juce::roundToInt (34.0f * scale), juce::roundToInt (120.0f * scale),
+                           juce::roundToInt (16.0f * scale));
     osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
     highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h));
     speakerImage.setBounds (scaledRect (layoutRatios, "speaker_button", w, h));
