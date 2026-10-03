@@ -15,3 +15,5 @@ analysis/zoom_ref/
 *.wav
 
 __pycache__/
+# Werner dissertation (large reference PDF, local-only)
+docs/refs/KurtJamesWernerDissertation-augmented.pdf

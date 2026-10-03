@@ -338,7 +338,6 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 
     // Initial veil state from the `active` param (the timer keeps it live;
     // this covers the first paint). POWER is a mains lamp — always on.
-    powerOn = true;
     powerLedImage.setImage (ledOnImage);
     if (auto* activeParam = apvts.getParameter ("active"))
     {

@@ -204,7 +204,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
 
     bool ledOn = false;
-    bool powerOn = true;
     bool dimVisible = false;
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).
