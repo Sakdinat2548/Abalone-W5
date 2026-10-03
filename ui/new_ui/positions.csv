@@ -21,5 +21,5 @@ tone_button,0.835703,0.733417,0.054850,0.075094,red TONE button under label (161
 active_button,0.742763,0.733417,0.054850,0.075094,red ACTIVE button under label (1416-1509) drives active param (power switch; THRU = internal bypass)
 signal_led,0.319959,0.733417,0.024378,0.060075,live SIGNAL LED at -2dBFS threshold under label (583-677)
 power_led,0.677755,0.733417,0.024378,0.060075,blue POWER LED always on under label (1288-1381)
-trim_dial,0.618588,0.783417,0.036567,0.090113,cut-only OUTPUT TRIM mini-knob between POWER LED (cx 1334.5) and UUV-oval right edge (1102): center-midpoint rule (Task-25 idiom); readout label below in-code (pale) values -30..0dB linear 225/270 (no printed scale)
-os_dial,0.378619,0.783417,0.036567,0.090113,3-position OS FACTOR mini-knob between SIGNAL LED (cx 630) and UUV-oval left edge (861): center-midpoint rule (Task-25 idiom); single live 1x/2x/4x label in-code UNDER knob (THRU-matched); linear 225/270
+trim_dial,0.618588,0.833417,0.036567,0.090113,cut-only OUTPUT TRIM mini-knob between POWER LED (cx 1334.5) and UUV-oval right edge (1102): center-midpoint rule (Task-25 idiom); readout label below in-code (pale) values -30..0dB linear 225/270 (no printed scale)
+os_dial,0.378619,0.833417,0.036567,0.090113,3-position OS FACTOR mini-knob between SIGNAL LED (cx 630) and UUV-oval left edge (861): center-midpoint rule (Task-25 idiom); single live 1x/2x/4x label in-code UNDER knob (THRU-matched); linear 225/270
