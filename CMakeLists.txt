@@ -78,21 +78,24 @@ target_sources(AbaloneW5 PRIVATE
 
 # UI skins + layout data, embedded as BinaryData (decoded once on the message
 # thread in the editor constructor, never on the audio thread).
-# - u5_front_clean.png: user-cleaned U5 plate (knobs/buttons/LEDs removed, dial
-#   rings + numerals + labels intact, W5 mark) drawn 1:1 as the editor faceplate.
-# - knob_boost/tone_no_pointer.png: 224x224 photo knob bodies WITHOUT pointers.
-#   NEVER rotated (baked off-axis highlights + edge numeral fragments would
-#   swing): drawn static + circular-clipped, value shown by pointer_*.png.
-# - pointer_boost/tone/trim.png: 224x224 extracted photo pointers (tight offline
-#   crop of the baked pointer from knob_boost/tone.png, straightened to 12
-#   o'clock about the rim-fit axle; trim uses a dilated tone pointer so it
-#   reads at mini size). Rotated at runtime about the measured pivot (see
-#   PluginEditor.cpp); the drawn-line needle is gone.
-# - button_on/off.png, led_on/off.png: single-frame toggle + LED skins.
-# - component_positions.csv: all live-element rects as texture ratios
-#   (Obsidian pattern — positions are data, not magic numbers; the editor parses
-#   this at construction). docs/refs/u5_front.png stays a layout reference only
-#   and is not embedded.
+# - uuv_front_clean_redesigned.png: redesigned UUV plate (ui/new_ui/, 1969x799)
+#   drawn 1:1 as the editor faceplate. TONE ring reads 1-6 (verified); both
+#   dial rings print detent ticks on a 30-degree clock grid with a decorative
+#   top tick, so boost/tone needles use exact per-detent tables (see
+#   PluginEditor.cpp) instead of a linear sweep.
+# - knob_boost/tone_no_pointer_redesigned.png: 224x224 knob bodies WITHOUT
+#   pointers (centered circular renders). NEVER rotated: drawn static +
+#   circular-clipped, value shown by pointer_*_redesigned.png.
+# - pointer_boost/tone/trim_redesigned.png: 224x224 extracted pointers,
+#   straightened to 12 o'clock about the art axle (boost axle x=106.0, tone
+#   axle x=112.2, both y=body center 111.5). Rotated at runtime about the
+#   measured pivot (see PluginEditor.cpp).
+# - button_on/off_redesigned.png, led_on/off_redesigned.png: single-frame
+#   toggle + LED skins (103x48 buttons, 48x48 LEDs, same sizes as before).
+# - new_ui/positions.csv: all live-element rects as ratios of the NEW texture
+#   (Obsidian pattern — positions are data, not magic numbers; the editor
+#   parses this at construction). OS mini-knob sits between the SIGNAL LED
+#   and the UUV oval (mode label under it); TRIM mirrors it by the POWER LED.
 # - CinzelBlack.ttf + OFL.txt: OFL Trajan-class serif face (Black 900) for
 #   the engraved masthead fallback (the shipped masthead is ui/abalone.svg)
 #   and the in-code TRIM dB readout. The footer strip is baked plate pixels,
@@ -101,21 +104,26 @@ target_sources(AbaloneW5 PRIVATE
 # - abalone.svg: user-supplied ABALONE masthead artwork (exact filename,
 #   single-e spelling), drawn centered in the header slot via a BinaryData
 #   SVG drawable; static black in every OS state.
+# Superseded (kept on disk, no longer embedded): ui/u5_front_clean.png,
+# ui/knob_boost_no_pointer.png, ui/knob_tone_no_pointer.png,
+# ui/pointer_boost.png, ui/pointer_tone.png, ui/pointer_trim.png,
+# ui/button_on.png, ui/button_off.png, ui/led_on.png, ui/led_off.png,
+# ui/component_positions.csv.
 juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
-        ui/u5_front_clean.png
-        ui/knob_boost_no_pointer.png
-        ui/knob_tone_no_pointer.png
-        ui/pointer_boost.png
-        ui/pointer_tone.png
-        ui/pointer_trim.png
-        ui/button_on.png
-        ui/button_off.png
-        ui/led_on.png
-        ui/led_off.png
-        ui/component_positions.csv
+        ui/new_ui/uuv_front_clean_redesigned.png
+        ui/new_ui/knob_boost_no_pointer_redesigned.png
+        ui/new_ui/knob_tone_no_pointer_redesigned.png
+        ui/new_ui/pointer_boost_redesigned.png
+        ui/new_ui/pointer_tone_redesigned.png
+        ui/new_ui/pointer_trim_redesigned.png
+        ui/new_ui/button_on_redesigned.png
+        ui/new_ui/button_off_redesigned.png
+        ui/new_ui/led_on_redesigned.png
+        ui/new_ui/led_off_redesigned.png
+        ui/new_ui/positions.csv
         ui/CinzelBlack.ttf
         ui/OFL.txt
         ui/abalone.svg

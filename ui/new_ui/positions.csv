@@ -1,0 +1,25 @@
+# Abalone W5 � reskinned editor geometry (Task 27).
+# All positions are ratios of the NEW base texture (ui/new_ui/uuv_front_clean_redesigned.png, 1969x799).
+# cx,cy = element center (x/1969, y/799); w,h = element size (w/1969, h/799).
+# Dial w/h is the knob frame side (square in texture pixels; the editor is
+# aspect-locked to the texture so it stays square on screen). Knob bodies are
+# NEVER rotated: the frame is drawn static and circular-clipped, an extracted
+# photo pointer (ui/new_ui/pointer_*_redesigned.png, straightened to 12 o'clock
+# about the art axle) rotates about the measured pivot (see PluginEditor.cpp).
+# Boost/tone needle angles are exact per-detent tables in code (the redesigned
+# rings print ticks on a 30-degree clock grid with a decorative top tick, so no
+# linear needle can land on ticks). Buttons/LEDs center under their plate labels
+# (label boxes measured); OS/TRIM flank the UUV oval per the layout map.
+# Supersedes ui/component_positions.csv + ui/u5_front_clean.png et al (kept on
+# disk unembedded � see CMakeLists).
+name,cx,cy,w,h,note
+boost_dial,0.209304,0.405507,0.128492,0.316646,10 detents exact-tick table in PluginEditor.cpp (ring fit cx=412.1 cy=324.0 r=170.6; ticks 30deg grid +decorative top; frame = old frame/ring ratio 0.740)
+tone_dial,0.789548,0.403630,0.128999,0.317897,6 detents exact-tick table in PluginEditor.cpp (ring fit cx=1554.6 cy=322.5 r=173.0; ticks 30deg grid +decorative top; engage_button=tone_button via toneIn param)
+highcut_button,0.163535,0.733417,0.054850,0.075094,red HIGH CUT button under label (256-388)
+speaker_button,0.255206,0.733417,0.054850,0.075094,red SPEAKER button permanent OFF image non-interactive (hardware-only tap; label 448-557)
+tone_button,0.835703,0.733417,0.054850,0.075094,red TONE button under label (1610-1681) drives toneIn param
+active_button,0.742763,0.733417,0.054850,0.075094,red ACTIVE button under label (1416-1509) drives active param (power switch; THRU = internal bypass)
+signal_led,0.319959,0.733417,0.024378,0.060075,live SIGNAL LED at -2dBFS threshold under label (583-677)
+power_led,0.677755,0.733417,0.024378,0.060075,blue POWER LED always on under label (1288-1381)
+trim_dial,0.618588,0.733417,0.036567,0.090113,cut-only OUTPUT TRIM mini-knob between POWER LED (cx 1334.5) and UUV-oval right edge (1102): center-midpoint rule (Task-25 idiom); readout label below in-code (pale) values -30..0dB linear 225/270 (no printed scale)
+os_dial,0.378619,0.733417,0.036567,0.090113,3-position OS FACTOR mini-knob between SIGNAL LED (cx 630) and UUV-oval left edge (861): center-midpoint rule (Task-25 idiom); single live 1x/2x/4x label in-code UNDER knob (THRU-matched); linear 225/270

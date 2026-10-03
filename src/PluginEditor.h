@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -31,18 +32,25 @@ class AbaloneW5AudioProcessor;
 //   LED is a mains lamp — always lit while the plugin is open, painted
 //   UNDER the veil with everything else so it dims naturally while
 //   bypassed; the SIGNAL LED follows the input peak while bypassed.
-// - Photo knob bodies (knob_*_no_pointer.png) are NEVER rotated: baked
-//   off-axis highlights + edge dial-numeral fragments would swing. Bodies
-//   are drawn static and circular-clipped; value is shown by the extracted
-//   photo pointer (pointer_*.png: tight offline crop of the baked pointer
-//   from knob_*.png, straightened to 12 o'clock, pivot = rim-fit axle)
-//   rotated about the measured pivot — true to hardware and immune to skew.
+// - Knob bodies (knob_*_no_pointer_redesigned.png) are NEVER rotated:
+//   baked highlights would swing. Bodies are drawn static and
+//   circular-clipped; value is shown by the extracted pointer
+//   (pointer_*_redesigned.png, straightened to 12 o'clock about the art
+//   axle) rotated about the measured pivot — true to hardware.
 
 // Rotary look-and-feel: static photo knob body + extracted photo pointer.
-// The slider bounds ARE the knob frame; `needleStartDeg`/`needleSweepDeg`
-// are clockwise-from-12, fitted against tick RAYS (see
-// component_positions.csv). `pivotX/Y` is the rotation axle as a fraction
-// of the slider bounds (rim-circle fit per knob art, not the frame center).
+// The slider bounds ARE the knob frame; `pivotX/Y` is the rotation axle as a
+// fraction of the slider bounds (axle fit per knob art, not the frame
+// center). Two needle modes: legacy linear (`needleStartDeg` +
+// sliderPos * `needleSweepDeg`, clockwise-from-12) when `detentDeg` is empty,
+// or an exact per-detent table (one clockwise-from-12 entry per integer
+// slider value; entries past a 0-degree crossing are stored unwrapped, e.g.
+// 389.6 for 29.6, so interpolation never swings backwards; fractional
+// positions interpolate between entries). The redesigned UUV dial rings
+// print their detent ticks on a 30-degree clock grid with a decorative top
+// tick, so no linear 10-/6-position needle can land on ticks (residuals up
+// to 10 degrees); boost/tone carry tables fitted against tick centers (see
+// ui/new_ui/positions.csv), trim/OS stay linear (no printed scale).
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
     juce::Image bodyImage;
@@ -51,6 +59,24 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
     float pivotY = 0.5f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
+    std::vector<float> detentDeg;
+
+    float needleAngleFor (float sliderPos) const
+    {
+        if (detentDeg.size() >= 2)
+        {
+            const float last = static_cast<float> (detentDeg.size() - 1);
+            const float p = juce::jlimit (0.0f, last, sliderPos * last);
+            const size_t i = static_cast<size_t> (p);
+            const size_t j = juce::jmin (i + 1, detentDeg.size() - 1);
+            const float a = detentDeg[i];
+            float b = detentDeg[j];
+            if (b < a)
+                b += 360.0f;
+            return a + (b - a) * (p - static_cast<float> (i));
+        }
+        return needleStartDeg + sliderPos * needleSweepDeg;
+    }
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                            float /*rotaryStartAngle*/, float /*rotaryEndAngle*/, juce::Slider&) override
@@ -81,7 +107,7 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
             // Extracted photo pointer, rotated about the measured axle. The
             // art points at 12 o'clock at rotation 0, so the rotation angle
             // IS the needle angle (clockwise-from-12, y-down screen space).
-            const float angle = (needleStartDeg + sliderPos * needleSweepDeg) * juce::MathConstants<float>::pi / 180.0f;
+            const float angle = needleAngleFor (sliderPos) * juce::MathConstants<float>::pi / 180.0f;
             g.saveState();
             g.addTransform (juce::AffineTransform::rotation (angle, fx + pivotX * static_cast<float> (width),
                                                              fy + pivotY * static_cast<float> (height)));
@@ -131,15 +157,14 @@ public:
 private:
     void timerCallback () override;
 
-    // OS factor label, painted in-code immediately right of the OS
-    // mini-knob: ONE live readout (current `osfactor` value only),
-    // vertically centered on the knob.
+    // OS factor label, painted in-code centered UNDER the OS mini-knob:
+    // ONE live readout (current `osfactor` value only).
     void drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knobBounds, float scale) const;
 
     // -2dBFS signal-present threshold (spec: LED is signal-present, not clip).
     static constexpr float kLedThreshold = 0.79432823f; // 10^(-2/20).
 
-    // Editor is aspect-locked to the base texture (2136x867 faceplate-only)
+    // Editor is aspect-locked to the base texture (1969x799 faceplate)
     // and corner-drag resizable from 1x to 2x; every live element lays out
     // from CSV texture ratios in resized(), so the faceplate scales clean.
     static constexpr int kEditorWidth = 748;
@@ -161,7 +186,7 @@ private:
                                // black oval right of the THRU jack (see CSV trim_dial).
     juce::Slider osSlider;     // attached to the `osfactor` Choice (1x/2x/4x);
                                // 3-position mini-knob in the trim art family,
-                               // between ACTIVE and TONE at to-THRU height
+                               // between the SIGNAL LED and the UUV oval
                                // (see CSV os_dial). Knob drag + host automation
                                // both drive it via the attachment.
     juce::Label trimReadout;   // in-code dB readout below the trim knob (pale
@@ -193,7 +218,7 @@ private:
     juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from
-    // ui/component_positions.csv (embedded as BinaryData) at construction.
+    // ui/new_ui/positions.csv (embedded as BinaryData) at construction.
     std::map<juce::String, juce::Rectangle<float>> layoutRatios;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;

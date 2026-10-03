@@ -24,7 +24,7 @@ juce::Font makePlateFont (float height)
     return juce::Font (juce::FontOptions (height));
 }
 
-// Parses the embedded ui/component_positions.csv into name -> ratio rect.
+// Parses the embedded ui/new_ui/positions.csv into name -> ratio rect.
 // Runs once on the message thread at construction; no audio-thread use.
 std::map<juce::String, juce::Rectangle<float>> parseLayoutCsv (const char* data, int size)
 {
@@ -105,47 +105,53 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
-    faceImage = imageFromBinary (BinaryData::u5_front_clean_png, BinaryData::u5_front_clean_pngSize);
-    boostDialLookAndFeel.bodyImage =
-        imageFromBinary (BinaryData::knob_boost_no_pointer_png, BinaryData::knob_boost_no_pointer_pngSize);
-    toneDialLookAndFeel.bodyImage =
-        imageFromBinary (BinaryData::knob_tone_no_pointer_png, BinaryData::knob_tone_no_pointer_pngSize);
+    faceImage =
+        imageFromBinary (BinaryData::uuv_front_clean_redesigned_png, BinaryData::uuv_front_clean_redesigned_pngSize);
+    boostDialLookAndFeel.bodyImage = imageFromBinary (BinaryData::knob_boost_no_pointer_redesigned_png,
+                                                      BinaryData::knob_boost_no_pointer_redesigned_pngSize);
+    toneDialLookAndFeel.bodyImage = imageFromBinary (BinaryData::knob_tone_no_pointer_redesigned_png,
+                                                     BinaryData::knob_tone_no_pointer_redesigned_pngSize);
     // TRIM is the one deliberate addition: a mini-knob in the same chrome
     // family (tone art scaled down) with the tone pointer.
     trimDialLookAndFeel.bodyImage = toneDialLookAndFeel.bodyImage;
     boostDialLookAndFeel.pointerImage =
-        imageFromBinary (BinaryData::pointer_boost_png, BinaryData::pointer_boost_pngSize);
-    toneDialLookAndFeel.pointerImage = imageFromBinary (BinaryData::pointer_tone_png, BinaryData::pointer_tone_pngSize);
-    trimDialLookAndFeel.pointerImage = imageFromBinary (BinaryData::pointer_trim_png, BinaryData::pointer_trim_pngSize);
-    toggleLookAndFeel.onImage = imageFromBinary (BinaryData::button_on_png, BinaryData::button_on_pngSize);
-    toggleLookAndFeel.offImage = imageFromBinary (BinaryData::button_off_png, BinaryData::button_off_pngSize);
-    ledOnImage = imageFromBinary (BinaryData::led_on_png, BinaryData::led_on_pngSize);
-    ledOffImage = imageFromBinary (BinaryData::led_off_png, BinaryData::led_off_pngSize);
+        imageFromBinary (BinaryData::pointer_boost_redesigned_png, BinaryData::pointer_boost_redesigned_pngSize);
+    toneDialLookAndFeel.pointerImage =
+        imageFromBinary (BinaryData::pointer_tone_redesigned_png, BinaryData::pointer_tone_redesigned_pngSize);
+    trimDialLookAndFeel.pointerImage =
+        imageFromBinary (BinaryData::pointer_trim_redesigned_png, BinaryData::pointer_trim_redesigned_pngSize);
+    toggleLookAndFeel.onImage =
+        imageFromBinary (BinaryData::button_on_redesigned_png, BinaryData::button_on_redesigned_pngSize);
+    toggleLookAndFeel.offImage =
+        imageFromBinary (BinaryData::button_off_redesigned_png, BinaryData::button_off_redesigned_pngSize);
+    ledOnImage = imageFromBinary (BinaryData::led_on_redesigned_png, BinaryData::led_on_redesigned_pngSize);
+    ledOffImage = imageFromBinary (BinaryData::led_off_redesigned_png, BinaryData::led_off_redesigned_pngSize);
 
-    layoutRatios = parseLayoutCsv (BinaryData::component_positions_csv, BinaryData::component_positions_csvSize);
+    layoutRatios = parseLayoutCsv (BinaryData::positions_csv, BinaryData::positions_csvSize);
 
-    // Needle sweeps, clockwise-from-12, fitted against the baked tick RAYS
-    // (re-measured fix round 3: radial min-dark scan, 0.1deg steps, r118-165;
-    // end ticks exact, detents land exactly on them with zero overtravel).
-    // Boost 1->209.0deg, 10->150.5deg (plateau centers 208.9/150.6, within
-    // 0.1deg — sub-pixel at tick radius); tone 1->268.3deg, 6->91.3deg.
-    // Photo perspective leaves mid-scale residuals a linear slider cannot
-    // follow. TRIM has no printed scale at its oval spot, so it keeps the
-    // conventional 7-to-5-o'clock sweep.
-    boostDialLookAndFeel.needleStartDeg = 209.0f;
-    boostDialLookAndFeel.needleSweepDeg = 301.5f;
-    toneDialLookAndFeel.needleStartDeg = 268.3f;
-    toneDialLookAndFeel.needleSweepDeg = 183.0f;
+    // Needle geometry, fitted against the NEW (redesigned) dial rings
+    // (radial tick-center scans, 0.05deg steps; ring-stroke circle fits on
+    // ~7500 pixels each: boost cx=412.1 cy=324.0 r=170.6, tone cx=1554.6
+    // cy=322.5 r=173.0). Both rings print detent ticks on a 30-degree clock
+    // grid with a decorative top tick (boost: 11 ticks, tone: 7), so a
+    // linear needle cannot land on ticks — each detent gets its measured
+    // tick center instead (entries past top stored unwrapped; see
+    // PhotoDialLookAndFeel). Boost 1-10 skips the top tick (detents 210.5
+    // to 510.1=150.1); tone 1-6 likewise (270.2 to 449.6=89.6). TRIM has no
+    // printed scale at its oval spot, so it keeps the conventional
+    // 7-to-5-o'clock sweep; OS keeps the shared trim sweep.
+    boostDialLookAndFeel.detentDeg = {210.5f, 239.9f, 270.2f, 300.0f, 329.5f, 389.6f, 419.8f, 449.8f, 479.8f, 510.1f};
+    toneDialLookAndFeel.detentDeg = {270.2f, 300.1f, 330.1f, 390.0f, 419.8f, 449.6f};
     trimDialLookAndFeel.needleStartDeg = 225.0f;
     trimDialLookAndFeel.needleSweepDeg = 270.0f;
 
-    // Rotation axles, fractions of the 224px knob frame (rim-circle fits of
-    // the photo art — not the frame centers — so the pointer pivots about
-    // the knob's own axle).
-    boostDialLookAndFeel.pivotX = 107.9f / 224.0f;
-    boostDialLookAndFeel.pivotY = 111.6f / 224.0f;
-    toneDialLookAndFeel.pivotX = 113.2f / 224.0f;
-    toneDialLookAndFeel.pivotY = 113.0f / 224.0f;
+    // Rotation axles, fractions of the 224px knob frame (pointer-ink axis
+    // fits: boost needle dead vertical at x=106.0 tip and tail, tone at
+    // x=112.2; body circles fit dead-center at 111.5, so y=111.5 both).
+    boostDialLookAndFeel.pivotX = 106.0f / 224.0f;
+    boostDialLookAndFeel.pivotY = 111.5f / 224.0f;
+    toneDialLookAndFeel.pivotX = 112.2f / 224.0f;
+    toneDialLookAndFeel.pivotY = 111.5f / 224.0f;
     trimDialLookAndFeel.pivotX = toneDialLookAndFeel.pivotX;
     trimDialLookAndFeel.pivotY = toneDialLookAndFeel.pivotY;
 
@@ -401,23 +407,23 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
 }
 
-// OS factor readout, immediately right of the OS mini-knob: ONE live label
-// showing the current `osfactor` value only ("1x"/"2x"/"4x"), vertically
-// centered on the knob in the dark plate caption colour. It reads the same
-// raw Choice index the DSP path reads (clamped identically), so the label
-// can never disagree with the audio factor. Glyph size matches the baked
-// to-THRU caption beside it: THRU caps span texture rows 703-720 = 18px
-// cap-height (measured), i.e. ~6.3 editor px at 1x; a 9px default-sans face
-// (cap ratio ~0.7) lands at ~6.3px cap — same cap-height, not eyeballed.
+// OS factor readout, centered UNDER the OS mini-knob: ONE live label
+// showing the current `osfactor` value only ("1x"/"2x"/"4x") in the dark
+// plate caption colour. It reads the same raw Choice index the DSP path
+// reads (clamped identically), so the label can never disagree with the
+// audio factor. Glyph size matches the baked to-THRU caption: THRU caps
+// span 18 texture px (~6.9 editor px at 1x); a 10px default-sans face (cap
+// ratio ~0.7) lands at ~7.0px cap — same cap-height, not eyeballed.
 void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knob, float scale) const
 {
     const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
     const char* text = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
-    g.setFont (juce::Font (juce::FontOptions (9.0f * scale)));
+    g.setFont (juce::Font (juce::FontOptions (10.0f * scale)));
     g.setColour (juce::Colour (0xff2e3234));
-    const int x = knob.getRight() + juce::roundToInt (4.0f * scale);
-    const int lw = juce::roundToInt (20.0f * scale);
-    g.drawText (text, x, knob.getY(), lw, knob.getHeight(), juce::Justification::centredLeft, false);
+    const int lw = juce::roundToInt (40.0f * scale);
+    const int lh = juce::roundToInt (13.0f * scale);
+    g.drawText (text, knob.getX() + knob.getWidth() / 2 - lw / 2, knob.getBottom() + juce::roundToInt (2.0f * scale),
+                lw, lh, juce::Justification::centred, false);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()
