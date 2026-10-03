@@ -81,6 +81,33 @@ float peakOf (const float* data, int n)
     return m;
 }
 
+void fillSineCont (juce::AudioBuffer<float>& buffer, int channel, double freqHz, float amp, int& phase)
+{
+    for (int i = 0; i < buffer.getNumSamples(); ++i, ++phase)
+        buffer.setSample (
+            channel, i,
+            amp * static_cast<float> (std::sin (2.0 * kPi * freqHz * static_cast<double> (phase) / kSampleRate)));
+}
+
+int gWorstBlock = -1;
+int gWorstIdx = -1;
+
+float maxStepJump (const float* data, int n, int blockIdx)
+{
+    float m = 0.0f;
+    for (int i = 1; i < n; ++i)
+    {
+        const float d = std::fabs (data[i] - data[i - 1]);
+        if (d > m)
+        {
+            m = d;
+            gWorstBlock = blockIdx;
+            gWorstIdx = i;
+        }
+    }
+    return m;
+}
+
 // Flat reference voice: boost step 1 (+3dB), tone bypass, highcut off,
 // trim 0dB — mirrors setFlatParams() below.
 void makeFlatReference (ProcessorChain& chain)
@@ -324,6 +351,69 @@ void checkActiveOffPassthrough ()
     }
 }
 
+// (f) ACTIVE toggle must not click: settle engaged on a continuous 220Hz
+// sine, flip off mid-stream and bound every sample-to-sample jump (block
+// boundary included), then flip back on and bound again. A 5ms equal-power
+// crossfade keeps the toggle near the sine's natural slope (~0.014); a hard
+// switch would jump by |wet-dry| (~0.2+).
+void checkActiveToggleNoClick ()
+{
+    AbaloneW5AudioProcessor proc; // stereo default
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged, boost step 1 (+3dB), tone bypass
+
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    int phase0 = 0;
+    int phase1 = 0;
+    for (int b = 0; b < 100; ++b) // settle ~1s engaged
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+    fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+    proc.processBlock (buffer, midi);
+    const float steadyJump = maxStepJump (buffer.getReadPointer (0), kBlock, -1);
+
+    auto runToggleBlocks = [&] (float activeValue)
+    {
+        *proc.getApvts().getRawParameterValue ("active") = activeValue;
+        float worst = 0.0f;
+        float worstEdge = 0.0f;
+        int worstEdgeBlock = -1;
+        float prevLast = buffer.getReadPointer (0)[kBlock - 1];
+        for (int b = 0; b < 4; ++b)
+        {
+            fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+            fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+            proc.processBlock (buffer, midi);
+            const float* ch0 = buffer.getReadPointer (0);
+            const float edge = std::fabs (ch0[0] - prevLast);
+            if (edge > worstEdge)
+            {
+                worstEdge = edge;
+                worstEdgeBlock = b;
+            }
+            worst = juce::jmax (worst, edge);
+            worst = juce::jmax (worst, maxStepJump (ch0, kBlock, b));
+            prevLast = ch0[kBlock - 1];
+        }
+        std::printf ("  edge-worst %.5f @blk %d\n", worstEdge, worstEdgeBlock);
+        return worst;
+    };
+
+    const float offJump = runToggleBlocks (0.0f);
+    std::printf ("active off-toggle: steady %.5f, toggle %.5f @blk %d idx %d (expect < 0.06)\n", steadyJump, offJump,
+                 gWorstBlock, gWorstIdx);
+    CHECK (offJump < 0.06f);
+
+    const float onJump = runToggleBlocks (1.0f);
+    std::printf ("active on-toggle: steady %.5f, toggle %.5f (expect < 0.06)\n", steadyJump, onJump);
+    CHECK (onJump < 0.06f);
+}
+
 } // namespace
 
 int main ()
@@ -333,6 +423,7 @@ int main ()
     checkMonoInMonoOut();
     checkHostBypass();
     checkActiveOffPassthrough();
+    checkActiveToggleNoClick();
 
     if (failures == 0)
     {

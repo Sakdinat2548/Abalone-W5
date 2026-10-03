@@ -76,6 +76,18 @@ private:
     // Input-peak accumulator for the bypassed SIGNAL LED (reset-on-read).
     // Written on the audio thread, drained on the message thread.
     mutable std::atomic<float> bypassPeak_{0.0f};
+    // Last rate from OUR prepareToPlay override (hosts also feed JUCE's base
+    // rate via setPlayConfigDetails, but headless tests only call prepare —
+    // so DSP math (bypass fade length) reads this, never getSampleRate()).
+    double preparedSampleRate_ = 48000.0;
+    // ACTIVE crossfade state: bypassMix_ is the dry weight (1 = full dry
+    // passthrough, 0 = fully engaged). Steady states take the existing fast
+    // paths untouched; only mid-transition blocks run the 5ms equal-power
+    // fade below, so idle CPU is unchanged. firstAudioBlock_ snaps the mix
+    // to the loaded state (no fade-in on plugin/preset load — fades only
+    // cover live toggles, which is the click being fixed).
+    float bypassMix_ = 0.0f;
+    bool firstAudioBlock_ = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessor)
 };

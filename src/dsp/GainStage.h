@@ -28,6 +28,10 @@ struct GainStage
     {
         setSampleRate (48000.0);
         setStep (1);
+        // Start settled at the target: no fade-in on plugin load, and every
+        // test that sets a step before processing measures exact gain from
+        // sample 0. Only mid-stream setStep calls ramp (the musical case).
+        curGainLin_ = targetGainLin_;
     }
 
     void setSampleRate (double sampleRate)
@@ -39,6 +43,11 @@ struct GainStage
         constexpr double fc = 5.0;
         constexpr double twoPi = 6.28318530717958647692;
         hpCoeff_ = static_cast<float> (1.0 - std::exp (-twoPi * fc / sampleRate_));
+        // Gain-smoothing follower, fc = 10Hz (~16ms TC, ~80ms to settle):
+        // same smoother family as the HP above. Rate changes keep the
+        // current gain (continuous); only the coefficient retunes.
+        constexpr double smoothFc = 10.0;
+        smoothCoeff_ = static_cast<float> (1.0 - std::exp (-twoPi * smoothFc / sampleRate_));
     }
 
     void setStep (int step)
@@ -50,7 +59,9 @@ struct GainStage
 
         step_ = step;
         // Order: the HP (DC-block) runs first in processSample, this gain after.
-        gainLin_ = std::pow (10.0f, getDb() / 20.0f);
+        // Target only: the per-sample gain slews toward it (see processSample),
+        // so knob twists ramp instead of jumping (no zipper noise).
+        targetGainLin_ = std::pow (10.0f, getDb() / 20.0f);
     }
 
     float getDb () const { return static_cast<float> (step_) * 3.0f; }
@@ -61,7 +72,13 @@ struct GainStage
         // Float settle: snap near-zero state to exact 0 (denormal-safe).
         if (std::fabs (lp_) < 1.0e-15f)
             lp_ = 0.0f;
-        return (x - lp_) * gainLin_;
+        // Smoothed stepped gain: one-pole follower (~16ms TC at fc = 10Hz),
+        // so 3dB step twists ramp over ~80ms instead of clicking. Snaps exact
+        // below 1e-6 so settled measurements see the textbook gain bit-exact.
+        curGainLin_ += smoothCoeff_ * (targetGainLin_ - curGainLin_);
+        if (std::fabs (targetGainLin_ - curGainLin_) < 1.0e-6f)
+            curGainLin_ = targetGainLin_;
+        return (x - lp_) * curGainLin_;
     }
 
 private:
@@ -69,5 +86,7 @@ private:
     double sampleRate_ = 48000.0;
     float hpCoeff_ = 0.0f;
     float lp_ = 0.0f;
-    float gainLin_ = 1.0f;
+    float targetGainLin_ = 1.0f;
+    float curGainLin_ = 1.0f;
+    float smoothCoeff_ = 0.0f;
 };

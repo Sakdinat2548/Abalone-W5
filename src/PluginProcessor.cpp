@@ -81,6 +81,10 @@ void AbaloneW5AudioProcessor::changeProgramName (int, const juce::String&) {}
 
 void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
 {
+    // Our own prepared rate (JUCE's base rate is host-fed via
+    // setPlayConfigDetails and reads 0 headless — never use getSampleRate()
+    // for DSP math; see the bypass-fade note in processBlock).
+    preparedSampleRate_ = (sampleRate > 0.0) ? sampleRate : 48000.0;
     // Restored oversampled sessions must report the hot-path delay from the
     // start: push the param into the chains BEFORE reading
     // getLatencySamples, or a session saved hot reports 0 until the first
@@ -155,14 +159,76 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // Re-engage settle: filters resume from the frozen state, so a brief
     // transient is possible on re-engage (authentic relay behavior), settling
     // within milliseconds as the DC-blocker re-converges.
-    if (!active)
+    // Toggle clicks are covered below by a 5ms equal-power crossfade: steady
+    // states (mix pinned at 0 or 1) take the fast paths with zero extra
+    // cost; only the transition blocks mix dry/wet per sample.
+    if (firstAudioBlock_)
     {
-        trackBypassPeak (buffer, monoDuplicate ? 1 : activeChannels, numSamples);
+        bypassMix_ = active ? 0.0f : 1.0f;
+        firstAudioBlock_ = false;
+    }
+    const float bypassTarget = active ? 0.0f : 1.0f;
+    if (bypassMix_ == bypassTarget)
+    {
+        if (bypassTarget >= 1.0f)
+        {
+            trackBypassPeak (buffer, monoDuplicate ? 1 : activeChannels, numSamples);
+            if (monoDuplicate)
+                duplicateMonoToOutputs (buffer, numSamples);
+            else
+                for (int ch = activeChannels; ch < numChannels; ++ch)
+                    buffer.clear (ch, 0, numSamples);
+            return;
+        }
+    }
+    else
+    {
+        // Mid-transition: one shared trajectory for all channels (mix
+        // advances once per sample, identical per channel, so no per-channel
+        // state can drift). Chains stay fed throughout the fade (settling
+        // while covered), then freeze once fully bypassed. Retoggle mid-fade
+        // reverses smoothly: no restart jump, the trajectory just turns.
+        pushChainParams (boostStep, tone, highcut, trimDb, osFactor, monoDuplicate ? 1 : activeChannels);
+        const int nCh = monoDuplicate ? 1 : activeChannels;
+        float* chPtr[2] = {nullptr, nullptr};
+        for (int ch = 0; ch < nCh; ++ch)
+            chPtr[ch] = buffer.getWritePointer (ch);
+        // NOTE: uses preparedSampleRate_, NOT getSampleRate(): our
+        // prepareToPlay override never feeds JUCE's base rate (only hosts do
+        // via setPlayConfigDetails), so getSampleRate() is unreliable here
+        // (0 in headless tests -> fadeStep 1.0 -> instant jump, i.e. the bug
+        // this fade exists to fix).
+        const float fadeStep = 1.0f / juce::jmax (1, static_cast<int> (0.005 * preparedSampleRate_));
+        constexpr float halfPi = 1.57079632679489661923f;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            if (bypassMix_ < bypassTarget)
+                bypassMix_ = juce::jmin (bypassTarget, bypassMix_ + fadeStep);
+            else if (bypassMix_ > bypassTarget)
+                bypassMix_ = juce::jmax (bypassTarget, bypassMix_ - fadeStep);
+            const float dryW = std::sin (halfPi * bypassMix_);
+            const float wetW = std::cos (halfPi * bypassMix_);
+            for (int ch = 0; ch < nCh; ++ch)
+            {
+                const float dry = chPtr[ch][i];
+                const float wet = chains[static_cast<size_t> (ch)].processSample (dry);
+                chPtr[ch][i] = dry * dryW + wet * wetW;
+            }
+        }
         if (monoDuplicate)
             duplicateMonoToOutputs (buffer, numSamples);
         else
             for (int ch = activeChannels; ch < numChannels; ++ch)
                 buffer.clear (ch, 0, numSamples);
+        // Same DAW-compensation reporting as the engaged path below: an
+        // osfactor flip landing in the same block as the bypass toggle must
+        // not report a block late.
+        const int transLatency = chains[0].getLatencySamples();
+        if (transLatency != lastReportedLatency_)
+        {
+            lastReportedLatency_ = transLatency;
+            setLatencySamples (transLatency);
+        }
         return;
     }
 
