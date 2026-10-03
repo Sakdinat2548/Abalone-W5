@@ -279,7 +279,8 @@ independent runs (minimax NM, Lp NM + basin-hopping, differential evolution
 ×2 incl. wide bounds with the lowshelf f0 free into the midrange, low-end
 penalty removed) all stall at 0.87–0.92 dB. Structural cause: one RBJ peak
 renders a rounded notch bottom; the CSV tip is a sharp V (−20.99 dB @
-697 Hz, itself a line-intersection reconstruction in `fit_scripts/fit.py`)
+697 Hz, itself a line-intersection reconstruction from the retired
+`fit_scripts/fit.py` (script removed in audit cuts; CSV value stands)
 with fat skirts (model too deep 0.6–0.9 dB at 540–614 Hz *and* 956–1312 Hz
 while the tip stays 0.7–0.9 shallow) — narrowing trades skirt for tip
 forever, shelves supply only tilt. The SOS reference needed five free
