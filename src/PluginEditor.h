@@ -212,10 +212,6 @@ private:
     // static black in every OS state — the Task-18 click-toggle + red
     // engaged state is gone (replaced by the `osfactor` mini-knob).
     std::unique_ptr<juce::Drawable> mastheadDrawable;
-    // Cinzel Black 900 (OFL, embedded as BinaryData) for the TRIM dB
-    // readout + the engraved masthead fallback (the shipped masthead is the
-    // SVG above). Rebuilt at the current window scale in resized().
-    juce::Font headerFont;
     juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from

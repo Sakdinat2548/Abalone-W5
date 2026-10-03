@@ -96,14 +96,11 @@ target_sources(AbaloneW5 PRIVATE
 #   (Obsidian pattern — positions are data, not magic numbers; the editor
 #   parses this at construction). OS mini-knob sits between the SIGNAL LED
 #   and the UUV oval (mode label under it); TRIM mirrors it by the POWER LED.
-# - CinzelBlack.ttf + OFL.txt: OFL Trajan-class serif face (Black 900) for
-#   the engraved masthead fallback (the shipped masthead is ui/abalone.svg)
-#   and the in-code TRIM dB readout. The footer strip is baked plate pixels,
-#   so the font is fallback+readout only. Loaded once as a single
-#   juce::Typeface at construction with a system-font fallback (never blank).
 # - abalone.svg: user-supplied ABALONE masthead artwork (exact filename,
 #   single-e spelling), drawn centered in the header slot via a BinaryData
-#   SVG drawable; static black in every OS state.
+#   SVG drawable; static black in every OS state. (A previous CinzelBlack
+#   fallback face + OFL.txt were removed: the embedded SVG cannot
+#   realistically fail to parse, so nothing falls back to it.)
 # Superseded (kept on disk, no longer embedded): ui/u5_front_clean.png,
 # ui/knob_boost_no_pointer.png, ui/knob_tone_no_pointer.png,
 # ui/pointer_boost.png, ui/pointer_tone.png, ui/pointer_trim.png,
@@ -124,8 +121,6 @@ juce_add_binary_data(AbaloneW5Assets
         ui/new_ui/led_on_redesigned.png
         ui/new_ui/led_off_redesigned.png
         ui/new_ui/positions.csv
-        ui/CinzelBlack.ttf
-        ui/OFL.txt
         ui/abalone.svg
 )
 

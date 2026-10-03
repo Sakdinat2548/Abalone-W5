@@ -10,20 +10,6 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
-// Trajan-class plate face: single Cinzel Black 900 typeface (OFL, embedded
-// as BinaryData — stroke-matched to the hardware badge, see the header
-// note). Falls back to the default system font (never blank) if the embed
-// ever fails to parse. Built once per font at editor construction. The
-// loader keys off the BinaryData symbol only, so a future face swap touches
-// just this line + CMake SOURCES.
-juce::Font makePlateFont (float height)
-{
-    if (auto face =
-            juce::Typeface::createSystemTypefaceFor (BinaryData::CinzelBlack_ttf, BinaryData::CinzelBlack_ttfSize))
-        return juce::Font (juce::FontOptions (face).withHeight (height));
-    return juce::Font (juce::FontOptions (height));
-}
-
 // Parses the embedded ui/new_ui/positions.csv into name -> ratio rect.
 // Runs once on the message thread at construction; no audio-thread use.
 std::map<juce::String, juce::Rectangle<float>> parseLayoutCsv (const char* data, int size)
@@ -105,8 +91,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // sans ~7px on screen; UI readouts render one step larger for legibility
     // in the same family and ink (0xff1b1b1c), like INPUT/THRU read at a
     // glance. Scale-aware (rebuilt in resized()).
-    : AudioProcessorEditor (&p), processor (p), headerFont (makePlateFont (32.0f)),
-      readoutFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")))
+    : AudioProcessorEditor (&p), processor (p), readoutFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")))
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
@@ -393,10 +378,11 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     else
         g.fillAll (juce::Colour (0xff1a1c20));
 
-    // ABALONE masthead, static black in every OS state: the SVG asset
-    // centered in the header slot (texture y=98.5 cap-center, ~50px cap to
-    // match the hardware badge; the slot box is padded, drawWithin centres
-    // the art). The engraved in-code fallback covers an SVG parse failure.
+    // ABALONE masthead: the SVG asset centered in the header slot (texture
+    // y=98.5 cap-center, ~50px cap to match the hardware badge; the slot box
+    // is padded, drawWithin centres the art). No fallback: the embedded SVG
+    // cannot realistically fail to parse, so a missing drawable paints
+    // nothing rather than carrying a 34KB font for a dead path.
     const float cyMid = 98.5f * static_cast<float> (h) / 867.0f;
     if (mastheadDrawable != nullptr)
     {
@@ -406,10 +392,6 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
             g,
             juce::Rectangle<float> (static_cast<float> (w) * 0.5f - slotW * 0.5f, cyMid - slotH * 0.5f, slotW, slotH),
             juce::RectanglePlacement::centred, 1.0f);
-    }
-    else
-    {
-        drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (w) * 0.5f, cyMid, 8.0f * scale);
     }
 
     drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
@@ -440,9 +422,8 @@ void AbaloneW5AudioProcessorEditor::resized ()
     const int h = getHeight();
     const float scale = static_cast<float> (w) / static_cast<float> (kEditorWidth);
 
-    // Typefaces follow the window scale (rebuilt here on the message thread,
+    // Typeface follows the window scale (rebuilt here on the message thread,
     // never on audio).
-    headerFont = makePlateFont (32.0f * scale);
     readoutFont = juce::Font (juce::FontOptions (12.0f * scale).withStyle ("Bold"));
     trimReadout.setFont (readoutFont);
 
