@@ -7,7 +7,7 @@
    PCB shots exist anywhere in-scope.
 2. Working crops under `crops/` (PIL 6x Lanczos + autocontrast + unsharp;
    each <250KB): per-resistor bands, poly-cap markings, RN1/SW1 package.
-3. Transcribed `values.csv` (41 rows: 12 clear / 10 uncertain / 19 unreadable).
+3. Transcribed `values.csv` (42 rows: 5 clear / 10 uncertain / 27 unreadable).
    Clear = refdes, package, populated/DNP, silkscreen, wire presence.
    No resistor or film-cap VALUE is clear — hues and print are ambiguous at
    640px, so none feed the derivation as fixed values (per brief discipline).
@@ -37,10 +37,12 @@ Required RC products (any candidate network must realize these):
   quite the real network there.
 - T4: dip f0 ~6kHz Q 0.54 depth 6.5dB + HF rise to +2dB.
 - T5/T6: TWO cascaded low shelves (~70Hz/-7dB + ~65-75Hz/-10dB, +2.8/+3.2dB
-  make-up) — single-shelf fit diverged 1.5-6dB, so the real low skirt is
-  2nd-order (two RC stages). T6 adds HF cut fp ~10.5kHz, -4.8dB.
+  make-up) REQUIRED by fit divergence — single-shelf fit diverged 1.5-6dB,
+  so two cascaded shelves are needed to match the curve; actual circuit
+  topology unconfirmed. T6 adds HF cut fp ~10.5kHz, -4.8dB.
 - Below 40Hz (not gated): T5/T6 CSV plunges to -22dB @10Hz, deeper than two
-  shelves render — real network cuts harder sub-40Hz (3rd order or series-HP).
+  shelves render — measured curve falls faster sub-40Hz than the fitted
+  shape; steeper-cut topology unconfirmed.
 
 ## Unknowns + sensitivity (shopping list, ranked)
 
@@ -55,7 +57,8 @@ T2 notch arms and the T5/T6 low-skirt RC.
 4. RN1/SW1 DIP marking (network vs switch array) + switch-wafer backside traces
    (settles H1/H2 in switch_map.md; a continuity beep-test on a real unit is faster).
 5. Sub-40Hz behavior: CSV vs IR disagree with 2-shelf theory — a borrowed-unit
-   LF sweep (10-40Hz, T5) separates digitization floor from real 3rd-order cut.
+   LF sweep (10-40Hz, T5) separates digitization floor from a genuinely
+   steeper LF cut (topology unconfirmed).
 
 ## Verdict for follow-up
 

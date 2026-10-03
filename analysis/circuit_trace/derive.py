@@ -1,14 +1,16 @@
 """U5 tone-board trace: first-principles passive-RC theory vs three oracles.
 
-Reads values.csv (transcription w/ confidence) + digitized CSV oracle +
-DSP biquad fits + local Tone3000 IRs (read-only), fits a minimal passive
-shelf/notch network per tone from first principles (numpy only), and writes
-one overlay PNG per tone + verdict_table.csv.
+Reads the digitized CSV oracle + DSP biquad fits + local Tone3000 IRs
+(read-only; values.csv is NOT read — no transcribed value is clear enough
+to fix a network value), fits a minimal passive shelf/notch network per
+tone from first principles (numpy only), and writes one overlay PNG per
+tone + verdict_table.csv.
 
 Unknowns stay unknown: transcribed values are NOT used as network values
 (none are `clear`); the fit instead reports the REQUIRED RC products
 (corner taus + divider ratios) each tone's network must realize, plus a
-sensitivity ranking (which param moves curves most) for evidence shopping.
+sensitivity ranking over the fitted params (which param moves curves most)
+for evidence shopping.
 """
 import csv
 import os

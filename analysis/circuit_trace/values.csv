@@ -31,7 +31,7 @@ HDR-W,filter-bottom,wire header (green/red/yellow),N/A (interconnect),clear,"col
 R1,sw-board,metal-film axial 5-band,unknown,unreadable,"blue body; bands brown-black-?-red-? hint 10k family; hue-ambiguous; needs macro"
 R2,sw-board,metal-film axial 5-band,unknown,unreadable,"blue body; dark bands hint 10k-100k family; needs macro"
 R3,sw-board,metal-film axial 5-band,unknown,uncertain,"bands brown-grey?-red-red-gold? hint 18.2k 5%; candidates: 18.2k vs 1.82k vs 182k (multiplier band ambiguous); needs macro"
-R4,sw-board,carbon(?) axial,grey body,unknown,uncertain,"GREY body unlike others (carbon film?); bands brown-red-red-?-gold hint 1.2k 5%; candidates: 1.2k vs 12k; needs macro"
+R4,sw-board,"carbon(?) axial,grey body",unknown,uncertain,"GREY body unlike others (carbon film?); bands brown-red-red-?-gold hint 1.2k 5%; candidates: 1.2k vs 12k; needs macro"
 R5,sw-board,metal-film axial 5-band,unknown,unreadable,"blue body; bands brown-black-black-red-? hint 10k; needs macro"
 R6,sw-board,metal-film axial 5-band,unknown,unreadable,"blue body; dark bands; needs macro"
 R7,sw-board,metal-film axial 5-band,unknown,unreadable,"blue body; bottom band cut off in crop; needs re-crop + macro"
