@@ -82,7 +82,7 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF. 1x/2x/4x oversampli
 
 ## References
 
-- Spec: `C:\Users\kluis\.opencode\plan\u5-spec.md`
-- Sauce: `C:\Users\kluis\Downloads\AbaloneU55SAUCE`
+- Spec: `u5-spec.md` (session plan dir — machine-local, not in repo)
+- Sauce: `AbaloneU55SAUCE/` (local reference photos — machine-local, not in repo)
 - Tone3000: https://www.tone3000.com/tones/avalon_u5-36172
 - Thread: https://www.freestompboxes.org/viewtopic.php?t=3273

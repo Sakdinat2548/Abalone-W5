@@ -2,7 +2,7 @@
 
 Source photos: `docs/refs/circuits/u5_boost.jpg` (switch board, 500x552),
 `docs/refs/circuits/u5_filter.jpg` (filter board, 640x405).
-Front panel reference: `C:\Users\kluis\Downloads\AbaloneU55SAUCE\U5_Silver_Front_On_reflection2.png`.
+Front panel reference: `U5_Silver_Front_On_reflection2.png` (local AbaloneU55SAUCE folder, machine-local).
 
 ## SEEN (photo evidence, no guessing)
 
