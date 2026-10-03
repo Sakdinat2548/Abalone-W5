@@ -30,6 +30,8 @@
 //
 // Level convention: levelDb in thdAt is peak dB relative to peak amplitude 1.0,
 // i.e. amp = 10^(levelDb/20). +10dB -> 3.1623 peak (post-Boost operating level).
+// Chain calibration (Task 29, see analysis/LEVELS.md): 0 dBFS = +24 dBu, so
+// stage dBu = input_dBFS + 24 + 3N for boost step N; k/a values frozen per map.
 //
 // Side effects of the blend (all negligible, measured):
 // - Small-signal gain = k/tanh(k) = 1.00030 (+0.0026dB ~= 1, as brief requires).

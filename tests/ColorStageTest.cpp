@@ -163,6 +163,24 @@ void checkNoAliasEnergy ()
     assert (worst / h1 < 1e-4);
 }
 
+void checkCalibratedLevelMap ()
+{
+    // Task 29 pins (0 dBFS = +24 dBu; boost step N adds 3N dB; see analysis/LEVELS.md).
+    // Quiet: boost 1 x -20 dBFS -> stage -17 dB, +7 dBu, ~= 0.0042%.
+    // Nominal: boost 5 x -10 dBFS -> stage +5 dB, +29 dBu, ~= 0.058%.
+    // Hot: boost 10 x -20 dBFS -> stage +10 dB, +34 dBu, ~= 0.121%.
+    ColorStage stage;
+    stage.setEnabled (true);
+    const float thdQuiet = stage.thdAt (1000.0f, -17.0f);
+    const float thdNominal = stage.thdAt (1000.0f, 5.0f);
+    const float thdHot = stage.thdAt (1000.0f, 10.0f);
+    std::printf ("map quiet: %0.5f%%, nominal: %0.5f%%, hot: %0.5f%%\n", 100.0 * thdQuiet, 100.0 * thdNominal,
+                 100.0 * thdHot);
+    assert (thdQuiet >= 0.00002f && thdQuiet <= 0.00007f);
+    assert (thdNominal >= 0.0004f && thdNominal <= 0.0008f);
+    assert (thdHot >= 0.0009f && thdHot <= 0.0016f);
+}
+
 } // namespace
 
 int main ()
@@ -174,6 +192,7 @@ int main ()
     checkHotInputFinite();
     checkSecondHarmonicDominates();
     checkNoAliasEnergy();
+    checkCalibratedLevelMap();
     std::puts ("ColorStageTest: all checks passed");
     return 0;
 }
