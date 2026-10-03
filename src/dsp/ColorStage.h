@@ -5,7 +5,10 @@
 // Subtle fixed Class-A color stage (Abalone W5 v1). No knob in v1.
 //
 // Chain position: Tone -> Color -> HighCut. Adds ~0.1% THD at +10dB input
-// (spec: THD 0.1% at +10dB, features <0.5%), bypassable for test.
+// (chosen operating point — see analysis/LEVELS.md honesty note; the
+// manual's "0.1% at +10dB" carries no level reference, so no spec match is
+// claimed. Features list <0.5% THD/IMD as the only hard ceiling.)
+// Bypassable for test.
 //
 // Transfer (enabled):
 //     y = tanh(k*x) / tanh(k)  +  a*x^2,   k = 0.03, a = 6e-4.

@@ -41,7 +41,7 @@ operating point) exceeds 5%, which is expected hard saturation, not a defect.
 
 - At +3 dB boost with a −20 dBFS bass, the stage sees +7 dBu and contributes ≈0.004% THD (inaudible).
 - At +15 dB boost with a −10 dBFS bass, the stage sees +29 dBu and contributes ≈0.06% THD (subtle).
-- At +30 dB boost with a −20 dBFS bass, the stage sees +34 dBu and contributes ≈0.12% THD (the spec anchor).
+- At +30 dB boost with a −20 dBFS bass, the stage sees +34 dBu and contributes ≈0.12% THD (chosen operating point — see honesty note below).
 - At +30 dB boost with a −10 dBFS bass, the stage sees +44 dBu and contributes ≈0.8% THD (audible grind).
 - At +30 dB boost with a 0 dBFS input, the stage sees +54 dBu and contributes ≈6.3% THD (documented, not assert-pinned — 30 dB past hardware max, not a sane level).
 
@@ -50,3 +50,17 @@ operating point) exceeds 5%, which is expected hard saturation, not a defect.
 - Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.0042%, pinned to [0.002%, 0.007%].
 - Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.058%, pinned to [0.040%, 0.080%].
 - Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.121%, pinned to [0.090%, 0.160%].
+
+## Honesty note: relationship to the manual's distortion spec
+
+The Avalon literature states ~0.1% THD at "+10 dB" (an older manual revision
+says 0.05%) — with no stated level reference. Two readings are defensible
+and neither is confirmable without hardware:
+(a) +10 dBu at the stage → our model reads ≈0.006% there, i.e. ~17×
+cleaner than the spec figure; (b) the +34 dBu point above → ≈0.12%,
+near the spec figure by construction, not by calibration.
+We ship (b) as a CHOSEN OPERATING POINT, not a spec match: raising drive
+17× to hit reading (a) would make every sane playing level more colored
+than the unit players describe as "clean with weight" — tuning real DSP to
+an ambiguous number with a factor-of-17 error bar. The map, pins, and math
+above are unaffected by this naming; only the claim is corrected.
