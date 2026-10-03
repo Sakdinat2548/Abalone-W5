@@ -696,10 +696,13 @@ void checkOs4xTopOctave ()
     }
 }
 
-// (p) Post-color DC discipline (Task 28): the ColorStage `a*x^2` term
-// rectifies (~3mV at +10dB, ~75mV hot). A post-color 5Hz blocker must kill
-// it before the output. (a) DC-decay guard, (b) hot-sine DC/peak gate,
-// (c) 1kHz transparency spot (the blocker must not move anything >= 20Hz).
+// (p) Post-color DC discipline (Task 28, Ruling 30: 2Hz corner, not 5Hz —
+// preserves the 5Hz-corner and 20Hz gates as-written; corner frequency only
+// sets settling speed ~0.4s, and DC itself is attenuated infinitely at 0Hz
+// regardless): the ColorStage `a*x^2` term rectifies (~3mV at +10dB, ~75mV
+// hot). A post-color 2Hz blocker must kill it before the output. (a)
+// DC-decay guard, (b) hot-sine DC/peak gate, (c) 1kHz transparency spot (the
+// blocker must not move anything >= 20Hz).
 void checkPostColorDcDecay ()
 {
     ProcessorChain chain;
@@ -779,20 +782,26 @@ void checkPostColorTransparency1k ()
 // assert — the controller rules compensate-vs-document from these numbers).
 // Per tone (boost step 1, highcut off, trim 0): raw chain magnitude at 10Hz
 // vs the absolute anchors (T1/T3/T4 -3, T2 -0.25, T5/T6 -22), with the exact
-// 5Hz-blocker loss shown separately (one column per blocker count, so the
-// same print serves the pre-fix 1-blocker and post-fix 2-blocker chain).
+// blocker losses shown separately (5Hz input blocker + 2Hz post-color
+// blocker per Ruling 30 — one column per stage, so the audit names the
+// actual chain).
 void audit10HzAnchors ()
 {
     constexpr double twoPi = 6.28318530717958647692;
     constexpr double fs = 48000.0;
-    const double a = 1.0 - std::exp (-twoPi * 5.0 / fs);
     const double w = twoPi * 10.0 / fs;
     const std::complex<double> z = std::exp (std::complex<double> (0.0, -w));
-    const std::complex<double> h = 1.0 - a / (1.0 - (1.0 - a) * z);
-    const float blockerLossDb = static_cast<float> (20.0 * std::log10 (std::abs (h)));
+    auto blockerLossDb = [&] (double fc)
+    {
+        const double a = 1.0 - std::exp (-twoPi * fc / fs);
+        const std::complex<double> h = 1.0 - a / (1.0 - (1.0 - a) * z);
+        return static_cast<float> (20.0 * std::log10 (std::abs (h)));
+    };
+    const float loss5 = blockerLossDb (5.0);
+    const float loss2 = blockerLossDb (2.0);
 
     const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -22.0f};
-    std::printf ("10Hz audit @48k (blocker loss %+0.4fdB each):\n", blockerLossDb);
+    std::printf ("10Hz audit @48k (5Hz-blocker %+0.4fdB, 2Hz-blocker %+0.4fdB):\n", loss5, loss2);
     for (int tone = 1; tone <= 6; ++tone)
     {
         ProcessorChain chain;
@@ -804,9 +813,9 @@ void audit10HzAnchors ()
         const float raw = steadyGainDb (chain, fs, 10.0, 0.1f);
         // Chain adds boost (+3dB), color small-signal gain, and the blockers.
         const float colorDb = 20.0f * std::log10 (0.03f / std::tanh (0.03f));
-        const float comp1 = raw - 3.0f - colorDb - 1.0f * blockerLossDb;
-        const float comp2 = raw - 3.0f - colorDb - 2.0f * blockerLossDb;
-        std::printf ("  T%d: raw %+0.3f | -1blk %+0.3f (d %+0.3f) | -2blk %+0.3f (d %+0.3f) | anchor %+0.2f\n", tone,
+        const float comp1 = raw - 3.0f - colorDb - loss5;
+        const float comp2 = raw - 3.0f - colorDb - loss5 - loss2;
+        std::printf ("  T%d: raw %+0.3f | -5Hz %+0.3f (d %+0.3f) | -both %+0.3f (d %+0.3f) | anchor %+0.2f\n", tone,
                      raw, comp1, comp1 - anchors[tone], comp2, comp2 - anchors[tone], anchors[tone]);
     }
     std::fflush (stdout);
