@@ -402,18 +402,23 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
 }
 
-// OS factor labels (1x/2x/4x), immediately right of the OS mini-knob:
-// three stacked rows centered on the knob, dark plate caption colour.
+// OS factor readout, immediately right of the OS mini-knob: ONE live label
+// showing the current `osfactor` value only ("1x"/"2x"/"4x"), vertically
+// centered on the knob in the dark plate caption colour. It reads the same
+// raw Choice index the DSP path reads (clamped identically), so the label
+// can never disagree with the audio factor. Glyph size matches the baked
+// to-THRU caption beside it: THRU caps span texture rows 703-720 = 18px
+// cap-height (measured), i.e. ~6.3 editor px at 1x; a 9px default-sans face
+// (cap ratio ~0.7) lands at ~6.3px cap — same cap-height, not eyeballed.
 void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knob, float scale) const
 {
-    static const char* labels[3] = {"1x", "2x", "4x"};
-    g.setFont (juce::Font (juce::FontOptions (8.0f * scale)));
+    const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
+    const char* text = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
+    g.setFont (juce::Font (juce::FontOptions (9.0f * scale)));
     g.setColour (juce::Colour (0xff2e3234));
     const int x = knob.getRight() + juce::roundToInt (4.0f * scale);
     const int lw = juce::roundToInt (20.0f * scale);
-    const int rh = knob.getHeight() / 3;
-    for (int i = 0; i < 3; ++i)
-        g.drawText (labels[i], x, knob.getY() + i * rh, lw, rh, juce::Justification::centredLeft, false);
+    g.drawText (text, x, knob.getY(), lw, knob.getHeight(), juce::Justification::centredLeft, false);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()
@@ -495,5 +500,17 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
                 trimReadout.setText (text, juce::dontSendNotification);
             }
         }
+    }
+
+    // OS factor readout follows `osfactor` (knob drag, automation, preset
+    // load all arrive via the param): repaint only on change, like TRIM.
+    // Reads the same raw Choice index the DSP path reads (same clamp), so
+    // the label can never disagree with the audio factor.
+    const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
+    const juce::String osText = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
+    if (osText != lastOsText)
+    {
+        lastOsText = osText;
+        repaint();
     }
 }

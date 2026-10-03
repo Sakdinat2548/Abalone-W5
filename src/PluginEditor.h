@@ -131,8 +131,9 @@ public:
 private:
     void timerCallback () override;
 
-    // OS factor labels (1x/2x/4x), painted in-code immediately right of the
-    // OS mini-knob, stacked and centered on the knob.
+    // OS factor label, painted in-code immediately right of the OS
+    // mini-knob: ONE live readout (current `osfactor` value only),
+    // vertically centered on the knob.
     void drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knobBounds, float scale) const;
 
     // -2dBFS signal-present threshold (spec: LED is signal-present, not clip).
@@ -206,6 +207,7 @@ private:
     bool powerOn = true;
     bool dimVisible = false;
     juce::String lastTrimText;
+    juce::String lastOsText; // cached OS factor readout (repaint only on change).
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)
 };
