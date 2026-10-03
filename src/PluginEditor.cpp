@@ -98,38 +98,6 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
     }
 }
 
-// Lit-header lettering for the oversample-engaged ABALONE wordmark: echoes
-// the lit red button face (button_on.png — warm salmon highlight over deep
-// red, sampled center-mean 240,151,138). Three passes per glyph, never a
-// flat fill: a translucent deep-red outer glow, a vertical gradient core
-// (bright top to deep bottom), and a pale 1px-up inner sheen.
-void drawHeaderLitCentred (juce::Graphics& g, const juce::Font& font, const juce::String& text, float cx, float cyMid,
-                           float trackingPx)
-{
-    const float fontSize = font.getHeight();
-    const float total = headerTextWidth (font, text, trackingPx);
-
-    float x = cx - total * 0.5f;
-    g.setFont (font);
-    for (int i = 0; i < text.length(); ++i)
-    {
-        const juce::String ch = text.substring (i, i + 1);
-        const float w = juce::GlyphArrangement::getStringWidth (font, ch);
-        const juce::Rectangle<float> r (x, cyMid - fontSize * 0.5f, w, fontSize);
-        g.setColour (juce::Colour (0x66c02718));
-        g.drawText (ch, r.translated (-1.5f, 0.0f), juce::Justification::centred, false);
-        g.drawText (ch, r.translated (1.5f, 0.0f), juce::Justification::centred, false);
-        g.drawText (ch, r.translated (0.0f, -1.5f), juce::Justification::centred, false);
-        g.drawText (ch, r.translated (0.0f, 1.5f), juce::Justification::centred, false);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff4705a), 0.0f, r.getY(), juce::Colour (0xff931c12),
-                                                 0.0f, r.getBottom(), false));
-        g.drawText (ch, r, juce::Justification::centred, false);
-        g.setColour (juce::Colour (0x55ffc9a8));
-        g.drawText (ch, r.translated (0.0f, -1.0f), juce::Justification::centred, false);
-        x += w + trackingPx;
-    }
-}
-
 } // namespace
 
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
@@ -218,6 +186,16 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
             trimReadout.hideEditor (true);
     };
     addAndMakeVisible (outputSlider);
+
+    // OS factor mini-knob in the trim art family (tone body + trim
+    // pointer via the shared trim L&F), attached to the `osfactor` Choice.
+    // Range 0..2 step 1 matches the Choice indices (1x/2x/4x); the detents
+    // make it a 3-position knob. Knob drag + host automation both drive it.
+    osSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    osSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    osSlider.setRange (0.0, 2.0, 1.0);
+    osSlider.setLookAndFeel (&trimDialLookAndFeel);
+    addAndMakeVisible (osSlider);
 
     // In-code dB readout below the trim knob, following the output param
     // (set in resized(); text refreshed in timerCallback). Pale on the black
@@ -324,6 +302,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, "boost", boostSlider);
     outputAttachment =
         std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, "output", outputSlider);
+    osAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, "osfactor", osSlider);
     highcutAttachment =
         std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, "highcut", highcutButton);
     toneInAttachment =
@@ -343,6 +322,20 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 
     setSize (kEditorWidth, kEditorHeight);
 
+    // Aspect-locked corner-drag resizable, 1x to 2x. All live elements lay
+    // out from CSV texture ratios in resized(), so everything scales; the
+    // fonts are rebuilt at the window scale there too.
+    setResizable (true, true);
+    setResizeLimits (kEditorWidth, kEditorHeight, kEditorMaxWidth, kEditorMaxHeight);
+    getConstrainer()->setFixedAspectRatio (static_cast<double> (kEditorWidth) / static_cast<double> (kEditorHeight));
+
+    // Masthead SVG (BinaryData drawable, parsed once here on the message
+    // thread); the engraved in-code fallback in paint() covers a parse
+    // failure so the header is never blank.
+    if (auto svg =
+            juce::XmlDocument::parse (juce::String::fromUTF8 (BinaryData::abalone_svg, BinaryData::abalone_svgSize)))
+        mastheadDrawable = juce::Drawable::createFromSVG (*svg);
+
     // Initial veil state from the `active` param (the timer keeps it live;
     // this covers the first paint). POWER is a mains lamp — always on.
     powerOn = true;
@@ -352,11 +345,6 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         dimVisible = activeParam->getValue() <= 0.5f;
         dimOverlay.setVisible (dimVisible);
     }
-
-    // Initial header state from the `oversample` param (the timer keeps it
-    // live; this covers the first paint).
-    if (auto* osParam = apvts.getParameter ("oversample"))
-        lastOsEngaged = osParam->getValue() > 0.5f;
 
     // Initial readout text (the timer refreshes it; this covers first paint).
     if (auto* outParam = apvts.getParameter ("output"))
@@ -377,44 +365,79 @@ AbaloneW5AudioProcessorEditor::~AbaloneW5AudioProcessorEditor ()
     boostSlider.setLookAndFeel (nullptr);
     toneSlider.setLookAndFeel (nullptr);
     outputSlider.setLookAndFeel (nullptr);
+    osSlider.setLookAndFeel (nullptr);
 }
 
 void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // Faceplate photo fills the editor 1:1 (sizes are aspect-locked).
+    const int w = getWidth();
+    const int h = getHeight();
+    const float scale = static_cast<float> (w) / static_cast<float> (kEditorWidth);
+
+    // Faceplate photo fills the editor (aspect-locked, so stretch == 1:1).
     if (faceImage.isValid())
-        g.drawImageWithin (faceImage, 0, 0, getWidth(), getHeight(), juce::RectanglePlacement::stretchToFit);
+        g.drawImageWithin (faceImage, 0, 0, w, h, juce::RectanglePlacement::stretchToFit);
     else
         g.fillAll (juce::Colour (0xff1a1c20));
 
-    // ABALONE wordmark, engraved style, optically centered across the full
-    // panel: cx is the editor's true horizontal center and the draw routine
-    // centers via the measured Cinzel Black text width. Texture y=98.5 is the
-    // measured AVALON cap-center on the cropped faceplate (caps 74-123). The
-    // editor is aspect-locked to the texture, so texture ratios map 1:1.
-    // JUCE maps font height across the full ascent+descent cell, so the
-    // measured cap at 32px is ~35px @2x = ~49px texture, matching the
-    // hardware badge cap-height (50px) with matched stroke weight.
-    const float sy = static_cast<float> (getHeight()) / 867.0f;
-    // Engaged (2x) paints the lit-red header; disengaged keeps the
-    // engraved plate look. The ACTIVE-off dim veil paints over both.
-    if (lastOsEngaged)
-        drawHeaderLitCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 98.5f * sy, 8.0f);
+    // ABALONE masthead, static black in every OS state: the SVG asset
+    // centered in the header slot (texture y=98.5 cap-center, ~50px cap to
+    // match the hardware badge; the slot box is padded, drawWithin centres
+    // the art). The engraved in-code fallback covers an SVG parse failure.
+    const float cyMid = 98.5f * static_cast<float> (h) / 867.0f;
+    if (mastheadDrawable != nullptr)
+    {
+        const float slotW = 620.0f * static_cast<float> (w) / 2136.0f;
+        const float slotH = 56.0f * static_cast<float> (h) / 867.0f;
+        mastheadDrawable->drawWithin (
+            g,
+            juce::Rectangle<float> (static_cast<float> (w) * 0.5f - slotW * 0.5f, cyMid - slotH * 0.5f, slotW, slotH),
+            juce::RectanglePlacement::centred, 1.0f);
+    }
     else
-        drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (getWidth()) * 0.5f, 98.5f * sy, 8.0f);
+    {
+        drawEngravedCentred (g, headerFont, "ABALONE", static_cast<float> (w) * 0.5f, cyMid, 8.0f * scale);
+    }
+
+    drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
+}
+
+// OS factor labels (1x/2x/4x), immediately right of the OS mini-knob:
+// three stacked rows centered on the knob, dark plate caption colour.
+void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knob, float scale) const
+{
+    static const char* labels[3] = {"1x", "2x", "4x"};
+    g.setFont (juce::Font (juce::FontOptions (8.0f * scale)));
+    g.setColour (juce::Colour (0xff2e3234));
+    const int x = knob.getRight() + juce::roundToInt (4.0f * scale);
+    const int lw = juce::roundToInt (20.0f * scale);
+    const int rh = knob.getHeight() / 3;
+    for (int i = 0; i < 3; ++i)
+        g.drawText (labels[i], x, knob.getY() + i * rh, lw, rh, juce::Justification::centredLeft, false);
 }
 
 void AbaloneW5AudioProcessorEditor::resized ()
 {
     const int w = getWidth();
     const int h = getHeight();
+    const float scale = static_cast<float> (w) / static_cast<float> (kEditorWidth);
+
+    // Typefaces follow the window scale (rebuilt here on the message thread,
+    // never on audio).
+    headerFont = makePlateFont (32.0f * scale);
+    readoutFont = makePlateFont (9.0f * scale);
+    trimReadout.setFont (readoutFont);
+
     boostSlider.setBounds (scaledRect (layoutRatios, "boost_dial", w, h));
     toneSlider.setBounds (scaledRect (layoutRatios, "tone_dial", w, h));
     const auto trimBounds = scaledRect (layoutRatios, "trim_dial", w, h);
     outputSlider.setBounds (trimBounds);
     // Readout sits directly below the trim knob, wider than the knob so the
-    // "-30.0 dB" string fits; fixed-size editor so px constants are stable.
-    trimReadout.setBounds (trimBounds.getX() - 24, trimBounds.getBottom() + 2, trimBounds.getWidth() + 48, 14);
+    // "-30.0 dB" string fits; offsets scale with the window.
+    trimReadout.setBounds (trimBounds.getX() - juce::roundToInt (24.0f * scale),
+                           trimBounds.getBottom() + juce::roundToInt (2.0f * scale),
+                           trimBounds.getWidth() + juce::roundToInt (48.0f * scale), juce::roundToInt (14.0f * scale));
+    osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
     highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h));
     speakerImage.setBounds (scaledRect (layoutRatios, "speaker_button", w, h));
     toneEngageButton.setBounds (scaledRect (layoutRatios, "tone_button", w, h));
@@ -422,35 +445,6 @@ void AbaloneW5AudioProcessorEditor::resized ()
     signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
     powerLedImage.setBounds (scaledRect (layoutRatios, "power_led", w, h));
     dimOverlay.setBounds (0, 0, w, h);
-}
-
-// ABALONE header hit-test: the painted wordmark rect plus padding, using
-// the same metrics as the paint routines (texture y=98.5 cap-center, same
-// as paint; width from the measured tracked-out string).
-juce::Rectangle<float> AbaloneW5AudioProcessorEditor::headerBounds () const
-{
-    const float sy = static_cast<float> (getHeight()) / 867.0f;
-    const float cx = static_cast<float> (getWidth()) * 0.5f;
-    const float cyMid = 98.5f * sy;
-    const float w = headerTextWidth (headerFont, "ABALONE", 8.0f);
-    const float h = headerFont.getHeight();
-    constexpr float pad = 10.0f;
-    return juce::Rectangle<float> (cx - w * 0.5f - pad, cyMid - h * 0.5f - pad, w + 2.0f * pad, h + 2.0f * pad);
-}
-
-void AbaloneW5AudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
-{
-    // Header click toggles the additive `oversample` param (2x on the
-    // ColorStage only); automation writes the param directly.
-    if (headerBounds().contains (e.position))
-        if (auto* param = processor.getApvts().getParameter ("oversample"))
-            param->setValueNotifyingHost (param->getValue() > 0.5f ? 0.0f : 1.0f);
-}
-
-void AbaloneW5AudioProcessorEditor::mouseMove (const juce::MouseEvent& e)
-{
-    setMouseCursor (headerBounds().contains (e.position) ? juce::MouseCursor::PointingHandCursor
-                                                         : juce::MouseCursor::NormalCursor);
 }
 
 void AbaloneW5AudioProcessorEditor::timerCallback ()
@@ -473,18 +467,6 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
         {
             dimVisible = shouldDim;
             dimOverlay.setVisible (dimVisible);
-        }
-    }
-
-    // Header red state follows the `oversample` param (click target,
-    // automation, presets); repaint only on change.
-    if (auto* osParam = processor.getApvts().getParameter ("oversample"))
-    {
-        const bool engaged = osParam->getValue() > 0.5f;
-        if (engaged != lastOsEngaged)
-        {
-            lastOsEngaged = engaged;
-            repaint();
         }
     }
 

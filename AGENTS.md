@@ -1,6 +1,6 @@
 # AGENTS.md — Abalone W5 v1 (read first)
 
-U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF. 2x oversampling on the Color stage only (ABALONE header toggle, additive `oversample` Bool default off, 5ms equal-power entry xfade); exact 40-sample FIR delay reported via setLatencySamples on toggle + prepare (param pushed before report).
+U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF. 1x/2x/4x oversampling on the Color stage only (OS mini-knob, additive `osfactor` Choice 1x/2x/4x default 1x, 5ms equal-power factor xfade); exact FIR delay 0/40/60 samples reported via setLatencySamples on switch + prepare (param pushed before report). Editor is aspect-locked corner-drag resizable 1x-2x (748x304 to 1496x608).
 
 ## Commands (verbatim)
 

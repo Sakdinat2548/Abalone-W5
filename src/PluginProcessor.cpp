@@ -52,12 +52,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
     // flipping a preset param; host bypass is served by processBlockBypassed.
     params.push_back (std::make_unique<juce::AudioParameterBool> ("toneIn", "Tone In", true));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("active", "Active", true));
-    // Additive quality param (default false, so states saved before it
-    // existed load as 1x — the byte-identical default path). Driven by the
-    // ABALONE header click target in the editor; automation writes it
-    // directly. 2x wraps the ColorStage only (see ProcessorChain.h); the
-    // 2x FIR delay is reported via setLatencySamples on toggle + prepare.
-    params.push_back (std::make_unique<juce::AudioParameterBool> ("oversample", "Oversample", false));
+    // Additive quality param (default 1x, so states saved before it
+    // existed load as 1x — the byte-identical default path). REPLACES the
+    // Task-18 Bool `oversample` (v1 unreleased: no in-the-wild presets to
+    // break; the id change is recorded here). Driven by the OS mini-knob in
+    // the editor (SliderAttachment: knob drag + host automation both drive
+    // it). 2x/4x wrap the ColorStage only (see ProcessorChain.h: 2x is the
+    // shipped 81-tap FIR, 4x cascades it 2x->2x); the exact FIR delay
+    // (0/40/60 samples) is reported via setLatencySamples on switch +
+    // prepare.
+    params.push_back (std::make_unique<juce::AudioParameterChoice> ("osfactor", "OS Factor",
+                                                                    juce::StringArray ({"1x", "2x", "4x"}), 0));
     return {params.begin(), params.end()};
 }
 
@@ -76,22 +81,24 @@ void AbaloneW5AudioProcessor::changeProgramName (int, const juce::String&) {}
 
 void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
 {
-    // Restored oversampled sessions must report the 2x delay from the start:
-    // push the param into the chains BEFORE reading getLatencySamples, or a
-    // session saved with oversample on reports 0 until the first processBlock
-    // push flips it (DAW compensates late -> early audio runs uncompensated).
-    // setOversampled on an already-matching target is a no-op, so repeated
-    // prepares never re-arm the entry blend; setSampleRate preserves the
-    // target (ChainTest prepare-ordering gate pins both orders, both rates).
-    const bool oversample = apvts.getRawParameterValue ("oversample")->load() > 0.5f;
+    // Restored oversampled sessions must report the hot-path delay from the
+    // start: push the param into the chains BEFORE reading
+    // getLatencySamples, or a session saved hot reports 0 until the first
+    // processBlock push flips it (DAW compensates late -> early audio runs
+    // uncompensated). setOsFactor on an already-matching target is a no-op,
+    // so repeated prepares never re-arm the entry blend; setSampleRate
+    // preserves the target (ChainTest prepare-ordering gates pin both
+    // orders, all factors, both rates).
+    const int osIndex = static_cast<int> (std::round (apvts.getRawParameterValue ("osfactor")->load()));
+    const int osFactor = (osIndex <= 0) ? 1 : (osIndex == 1) ? 2 : 4;
     for (auto& chain : chains)
     {
         chain.setSampleRate (sampleRate);
-        chain.setOversampled (oversample);
+        chain.setOsFactor (osFactor);
     }
-    // Re-report after every rate change (the 1x/2x latency is
+    // Re-report after every rate change (the 1x/2x/4x latency is
     // rate-independent, but the host still needs a fresh value on
-    // re-prepare; the toggle path in processBlock covers switches).
+    // re-prepare; the switch path in processBlock covers factor changes).
     lastReportedLatency_ = chains[0].getLatencySamples();
     setLatencySamples (lastReportedLatency_);
 }
@@ -124,7 +131,8 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const bool highcut = apvts.getRawParameterValue ("highcut")->load() > 0.5f;
     const float trimDb = apvts.getRawParameterValue ("output")->load();
     const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
-    const bool oversample = apvts.getRawParameterValue ("oversample")->load() > 0.5f;
+    const int osIndex = static_cast<int> (std::round (apvts.getRawParameterValue ("osfactor")->load()));
+    const int osFactor = (osIndex <= 0) ? 1 : (osIndex == 1) ? 2 : 4;
 
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
@@ -158,12 +166,12 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         return;
     }
 
-    pushChainParams (boostStep, tone, highcut, trimDb, oversample, monoDuplicate ? 1 : activeChannels);
+    pushChainParams (boostStep, tone, highcut, trimDb, osFactor, monoDuplicate ? 1 : activeChannels);
 
-    // DAW compensation: the 2x FIR path adds the chain's exact group delay
-    // (0 at 1x). Reported on change only; the toggle flips it here, the
-    // rate path in prepareToPlay. Both chains share the same target, so
-    // chain[0] is the source of truth.
+    // DAW compensation: the hot FIR path adds the chain's exact group delay
+    // (0 at 1x, 40 at 2x, 60 at 4x). Reported on change only; the factor
+    // switch flips it here, the rate path in prepareToPlay. Both chains
+    // share the same target, so chain[0] is the source of truth.
     const int latency = chains[0].getLatencySamples();
     if (latency != lastReportedLatency_)
     {
@@ -196,7 +204,7 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         buffer.clear (ch, 0, numSamples);
 }
 
-void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool highcut, float trimDb, bool oversample,
+void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool highcut, float trimDb, int osFactor,
                                                int activeChannels)
 {
     for (int ch = 0; ch < activeChannels; ++ch)
@@ -206,7 +214,7 @@ void AbaloneW5AudioProcessor::pushChainParams (int boostStep, int tone, bool hig
         chain.setTone (tone);
         chain.setHighcut (highcut);
         chain.setTrimDb (trimDb);
-        chain.setOversampled (oversample);
+        chain.setOsFactor (osFactor);
     }
 }
 

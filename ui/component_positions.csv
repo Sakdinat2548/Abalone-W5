@@ -21,3 +21,4 @@ active_button,0.746721,0.742791,0.050562,0.069205,red ACTIVE button bottom-right
 signal_led,0.319288,0.742791,0.022472,0.055364,live SIGNAL LED at -2dBFS threshold
 power_led,0.676966,0.739331,0.022472,0.055364,blue POWER LED always on
 trim_dial,0.613296,0.420992,0.033708,0.083045,cut-only OUTPUT TRIM mini-knob on the black oval RIGHT of the THRU jack at (1310,365) 72px texture frame (tone art scaled down + bolder trim pointer); readout label below in-code (pale on black) values -30..0dB needle_start_deg=225 sweep_deg=270 (no printed scale); clear of INPUT jack HI-Z/OUT labels and the oval edge
+os_dial,0.791432,0.821225,0.033708,0.083045,3-position OS FACTOR mini-knob (trim art family) HORIZONTALLY between ACTIVE (0.746721) and TONE (0.836142) buttons VERTICALLY level with the to-THRU caption (y 703-721 center 712); 1x/2x/4x labels in-code immediately right of knob; clears TONE button bottom (674) by 2px frame, clears caption (ends 1640) by 14px

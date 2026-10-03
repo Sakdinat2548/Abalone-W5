@@ -472,6 +472,229 @@ void checkOsPrepareOrdering ()
     }
 }
 
+// (k) 4x equivalence: 1x-vs-4x fundamental @1kHz driven to +10dB peak at
+// the color stage (same drive as (f)), both rates, within +/-0.1dB. The
+// 4x path cascades the proven 81-tap 2x filter (2x->2x), so the resampler
+// stays transparent at 4x too. Correlation magnitude is phase-independent,
+// so the 4x group delay does not enter the comparison.
+void checkOs4xEquivalence ()
+{
+    const double rates[2] = {48000.0, 44100.0};
+    const float amp = std::pow (10.0f, 7.0f / 20.0f); // +7dB in, +3dB boost -> +10dB at color.
+    for (int r = 0; r < 2; ++r)
+    {
+        ProcessorChain oneX;
+        oneX.setSampleRate (rates[r]);
+        oneX.setBoostStep (1);
+        oneX.setTone (0);
+        oneX.setHighcut (false);
+        oneX.setTrimDb (0.0f);
+        oneX.setOsFactor (1);
+        const float a1 = fundAmp (oneX, rates[r], 1000.0, amp);
+
+        ProcessorChain fourX;
+        fourX.setSampleRate (rates[r]);
+        fourX.setBoostStep (1);
+        fourX.setTone (0);
+        fourX.setHighcut (false);
+        fourX.setTrimDb (0.0f);
+        fourX.setOsFactor (4);
+        const float a2 = fundAmp (fourX, rates[r], 1000.0, amp);
+
+        const float diffDb = 20.0f * std::log10 (a2 / a1);
+        std::printf ("os 1x-vs-4x fundamental @%.0fHz/1kHz/+10dB: %+0.4fdB (expect 0 +/- 0.1)\n", rates[r], diffDb);
+        std::fflush (stdout);
+        assert (std::fabs (diffDb) < 0.1f);
+    }
+}
+
+// (l) Factor latency truth: impulse peak == reported latency per factor per
+// rate (1x->0, 2x->kOsLatencySamples=40, 4x->kOsLatency4xSamples=60). The
+// default (untouched) chain is factor 1 / zero latency, and the bool compat
+// API still maps false->1x, true->2x.
+void checkOsFactorLatencyTruth ()
+{
+    {
+        ProcessorChain fresh;
+        std::printf ("os default: factor=%d latency=%d (expect 1 0)\n", fresh.getOsFactor(), fresh.getLatencySamples());
+        assert (fresh.getOsFactor() == 1);
+        assert (fresh.getLatencySamples() == 0);
+        assert (!fresh.isOversampled());
+        ProcessorChain compat;
+        compat.setOversampled (true);
+        assert (compat.getOsFactor() == 2);
+        assert (compat.isOversampled());
+        compat.setOversampled (false);
+        assert (compat.getOsFactor() == 1);
+    }
+
+    const double rates[2] = {48000.0, 44100.0};
+    const int factors[3] = {1, 2, 4};
+    for (int r = 0; r < 2; ++r)
+    {
+        const double sampleRate = rates[r];
+        for (int f = 0; f < 3; ++f)
+        {
+            ProcessorChain chain;
+            chain.setSampleRate (sampleRate);
+            chain.setBoostStep (1);
+            chain.setTone (0);
+            chain.setHighcut (false);
+            chain.setTrimDb (0.0f);
+            chain.setOsFactor (factors[f]);
+
+            // Flush past the entry blends with silence so the impulse below
+            // exercises the steady path only (see (g)).
+            for (int n = 0; n < 4096; ++n)
+                chain.processSample (0.0f);
+
+            const int window = 256;
+            static float buf[256];
+            assert (window <= 256);
+            for (int n = 0; n < window; ++n)
+                buf[n] = chain.processSample (n == 0 ? 0.1f : 0.0f);
+
+            int peakIdx = 0;
+            float peakMag = 0.0f;
+            for (int n = 0; n < window; ++n)
+            {
+                const float m = std::fabs (buf[n]);
+                if (m > peakMag)
+                {
+                    peakMag = m;
+                    peakIdx = n;
+                }
+            }
+
+            const int reported = chain.getLatencySamples();
+            const int expected = (factors[f] == 4)   ? ProcessorChain::kOsLatency4xSamples
+                                 : (factors[f] == 2) ? ProcessorChain::kOsLatencySamples
+                                                     : 0;
+            std::printf ("os latency %dx @ %.0fHz: peak at %d, reported %d (expect %d)\n", factors[f], sampleRate,
+                         peakIdx, reported, expected);
+            std::fflush (stdout);
+            assert (reported == expected);
+            assert (peakIdx == reported);
+        }
+    }
+}
+
+// (m) Factor-toggle no-click for the adjacent pair 2<->4, both directions:
+// steady 220Hz sine, flip mid-stream; no sample-to-sample jump above 0.3x
+// local RMS in the 50ms window (5ms equal-power xfade, same idiom as (h)).
+void checkOsFactorFlip (int fromFactor, int toFactor)
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    chain.setBoostStep (1);
+    chain.setTone (3);
+    chain.setHighcut (false);
+    chain.setTrimDb (0.0f);
+    chain.setOsFactor (fromFactor);
+    // Settle past the arming-blend transient so the measured flip starts
+    // from a steady path.
+    for (int i = 0; i < 48000; ++i)
+        chain.processSample (0.5f *
+                             static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (i) / 48000.0)));
+
+    float prev = chain.processSample (
+        0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (48000) / 48000.0)));
+
+    chain.setOsFactor (toFactor);
+
+    const int window = 2400; // 50ms @48k.
+    static float buf[2400];
+    float maxJump = 0.0f;
+    for (int i = 0; i < window; ++i)
+    {
+        const float x =
+            0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (48000 + 1 + i) / 48000.0));
+        buf[i] = chain.processSample (x);
+        const float jump = std::fabs (buf[i] - prev);
+        if (jump > maxJump)
+            maxJump = jump;
+        prev = buf[i];
+    }
+
+    const float localRms = rms (buf, 0, window);
+    std::printf ("os-toggle %dx->%dx: maxJump %0.5f, localRMS %0.4f, limit %0.4f\n", fromFactor, toFactor, maxJump,
+                 localRms, 0.3f * localRms);
+    std::fflush (stdout);
+    assert (maxJump < 0.3f * localRms);
+}
+
+void checkOsFactorToggleNoClick ()
+{
+    checkOsFactorFlip (2, 4);
+    checkOsFactorFlip (4, 2);
+}
+
+// (n) 4x prepare-ordering contract (same as (j), factor 4): the toggle
+// target survives setSampleRate, so param-push before rate-change and rate
+// before param-push both report the 4x delay immediately, at both rates.
+void checkOs4xPrepareOrdering ()
+{
+    const double rates[2] = {48000.0, 44100.0};
+    for (int r = 0; r < 2; ++r)
+    {
+        {
+            ProcessorChain chain; // push param, then rate.
+            chain.setOsFactor (4);
+            chain.setSampleRate (rates[r]);
+            std::printf ("os4 prepare push-then-rate @ %.0fHz: latency %d (expect %d)\n", rates[r],
+                         chain.getLatencySamples(), ProcessorChain::kOsLatency4xSamples);
+            assert (chain.getLatencySamples() == ProcessorChain::kOsLatency4xSamples);
+        }
+        {
+            ProcessorChain chain; // rate, then push param.
+            chain.setSampleRate (rates[r]);
+            chain.setOsFactor (4);
+            std::printf ("os4 prepare rate-then-push @ %.0fHz: latency %d (expect %d)\n", rates[r],
+                         chain.getLatencySamples(), ProcessorChain::kOsLatency4xSamples);
+            assert (chain.getLatencySamples() == ProcessorChain::kOsLatency4xSamples);
+        }
+    }
+}
+
+// (o) 4x top-octave transparency: 1x-vs-4x fundamental at 15kHz and 20kHz,
+// both rates, same +10dB-at-color drive as (f), limit +/-0.5dB (same margin
+// idiom as (i); the cascade doubles the passband ripple at most).
+void checkOs4xTopOctave ()
+{
+    const double rates[2] = {48000.0, 44100.0};
+    const double freqs[2] = {15000.0, 20000.0};
+    const float amp = std::pow (10.0f, 7.0f / 20.0f); // +7dB in, +3dB boost -> +10dB at color.
+    for (int r = 0; r < 2; ++r)
+    {
+        for (int f = 0; f < 2; ++f)
+        {
+            ProcessorChain oneX;
+            oneX.setSampleRate (rates[r]);
+            oneX.setBoostStep (1);
+            oneX.setTone (0);
+            oneX.setHighcut (false);
+            oneX.setTrimDb (0.0f);
+            oneX.setOsFactor (1);
+            const float a1 = fundAmp (oneX, rates[r], freqs[f], amp);
+
+            ProcessorChain fourX;
+            fourX.setSampleRate (rates[r]);
+            fourX.setBoostStep (1);
+            fourX.setTone (0);
+            fourX.setHighcut (false);
+            fourX.setTrimDb (0.0f);
+            fourX.setOsFactor (4);
+            const float a2 = fundAmp (fourX, rates[r], freqs[f], amp);
+
+            const float diffDb = 20.0f * std::log10 (a2 / a1);
+            std::printf ("os top-octave 1x-vs-4x @ %.0fHz/%.0fkHz: %+0.4fdB (expect 0 +/- 0.5)\n", rates[r],
+                         freqs[f] / 1000.0, diffDb);
+            std::fflush (stdout);
+            assert (std::fabs (diffDb) < 0.5f);
+        }
+    }
+}
+
 } // namespace
 
 int main ()
@@ -486,6 +709,11 @@ int main ()
     checkOsToggleNoClick();
     checkOsTopOctave();
     checkOsPrepareOrdering();
+    checkOs4xEquivalence();
+    checkOsFactorLatencyTruth();
+    checkOsFactorToggleNoClick();
+    checkOs4xPrepareOrdering();
+    checkOs4xTopOctave();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }

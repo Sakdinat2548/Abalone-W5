@@ -29,43 +29,54 @@
 // No heap in the audio path: fixed members only. Trim is a plain float
 // multiply. Peak is max |post-trim| since the last getLastPeak() call.
 //
-// 2x oversampling around the ColorStage ONLY (ABALONE header toggle,
-// default off). The tanh is the sole nonlinear stage, so it alone runs at
-// 2x: zero-stuff up -> linear-phase FIR (x2 passband gain) -> the
-// ColorStage transfer at 2x -> the identical FIR -> decimate. All linear
-// stages stay at 1x: no wasted cycles, and biquads keep host-rate
-// coefficients (no tone-shape change with rate doubling).
+// 1x/2x/4x oversampling around the ColorStage ONLY (OS mini-knob,
+// `osfactor` Choice 1x/2x/4x, default 1x). The tanh is the sole nonlinear
+// stage, so it alone runs hot: zero-stuff up -> linear-phase FIR (x2
+// passband gain per doubling) -> the ColorStage transfer at the hot rate ->
+// the identical FIR -> decimate. All linear stages stay at 1x: no wasted
+// cycles, and biquads keep host-rate coefficients (no tone-shape change
+// with rate doubling).
 //
 // Filter: 81-tap windowed-sinc lowpass (Hamming, fc = 0.25 cycles/sample
-// at the 2x rate = host Nyquist, the midpoint of the pass/stop transition
-// for both 44.1k and 48k), DC gain normalized to 1. The 33-tap/0.23
+// at the hot rate = the upsampled Nyquist, the midpoint of the pass/stop
+// transition for both 44.1k and 48k), DC gain normalized to 1. The 33-tap/0.23
 // prototype drooped -3.2dB@20kHz/48k and -10.2dB@20kHz/44.1k (measured
 // linear cascade, no gate covered it); the 81-tap holds +/-0.04dB to 20kHz
-// at both rates (the ChainTest top-octave gate pins 1x-vs-2x within
-// +/-0.5dB at 15/20kHz, both rates).
-// Each FIR delays (81-1)/2 samples at the 2x rate = (81-1)/4 at the host
-// rate; up + down in series = (81-1)/2 = 40 host samples, rate-independent
-// (the cutoff is a fraction of the 2x rate, so the same taps serve 44.1k
-// and 48k). Reported via getLatencySamples() for the processor's
-// setLatencySamples; the ChainTest impulse gate pins reported == measured
-// peak == kOsLatencySamples.
+// at both rates (the ChainTest top-octave gates pin 1x-vs-2x and 1x-vs-4x
+// within +/-0.5dB at 15/20kHz, both rates).
+// The 4x path cascades 2x->2x with the SAME taps (no new filter design):
+// the second doubling needs cutoff = its own input Nyquist = 0.25 at the
+// 4x rate, which is exactly the shared fc, so the taps are correct at both
+// hot rates by construction.
+// Latency: each FIR delays (81-1)/2 samples at its hot rate. 2x: up+down
+// at 2x = (81-1)/4 each = 20+20 = 40 host samples, rate-independent.
+// 4x: up1+dn1 at 2x (20+20) plus up2+dn2 at 4x ((81-1)/8 = 10+10) = 60
+// host samples, rate-independent (cutoffs are fractions of the hot rates,
+// so the same taps serve 44.1k and 48k). Reported via getLatencySamples()
+// for the processor's setLatencySamples; the ChainTest factor-latency gate
+// pins reported == measured peak == 0/40/60 per factor per rate.
 //
-// Toggle: setOversampled() arms a 5ms equal-power crossfade (cos/sin, the
-// tone-xfade idiom) between the 1x and 2x paths from the next sample; the
-// processor calls it once per block, so the switch lands on a block
-// boundary, never mid-block. The FIR states are zeroed when a blend lands
-// back on 1x (never at arm: wiping at arm would collapse the live 2x lines
-// the fade-out source still reads), so every 1x->2x entry starts clean and
-// the fade covers the entry transient either way. 1x steady output is
-// exactly the old direct path (byte-identical default behavior).
+// Factor switching: setOsFactor() arms a 5ms equal-power crossfade
+// (cos/sin, the tone-xfade idiom) between the from-factor and to-factor
+// paths from the next sample; the processor calls it once per block, so the
+// switch lands on a block boundary, never mid-block. On landing, the delay
+// lines of every factor except the landing target are zeroed (never at arm:
+// wiping at arm would collapse the live lines the fade-out source still
+// reads), so every entry starts clean and the fade covers the entry
+// transient either way. 1x steady output is exactly the old direct path
+// (byte-identical default behavior).
+// setOversampled(bool) is the Task-18 compat shim (false->1x, true->2x);
+// new code uses setOsFactor(1/2/4).
 struct ProcessorChain
 {
     // 2x resampler taps (windowed-sinc lowpass, see note above) and the
-    // exact 2x-path group delay in host samples: each FIR delays
-    // (kOsTaps-1)/2 samples at the 2x rate = (kOsTaps-1)/4 at the host
-    // rate, so up + down in series = (kOsTaps-1)/2 = 40.
+    // exact hot-path group delays in host samples: each FIR delays
+    // (kOsTaps-1)/2 samples at its hot rate, so 2x up + down in series =
+    // (kOsTaps-1)/2 = 40, and the 4x cascade adds a second doubling at
+    // half the host-rate cost: 20+10+10+20 = 60.
     static constexpr int kOsTaps = 81;
-    static constexpr int kOsLatencySamples = (kOsTaps - 1) / 2;
+    static constexpr int kOsLatencySamples = (kOsTaps - 1) / 2;       // 2x: 40.
+    static constexpr int kOsLatency4xSamples = 3 * (kOsTaps - 1) / 4; // 4x: 60.
 
     ProcessorChain ()
     {
@@ -91,10 +102,14 @@ struct ProcessorChain
             xfadeLen_ = 1;
         if (xfadePos_ > xfadeLen_)
             xfadePos_ = xfadeLen_;
-        // Rate change flushes the 2x delay lines (content is signal
+        // Rate change flushes the hot delay lines (content is signal
         // history, meaningless across rates); taps are rate-independent.
         osUpD_.fill (0.0f);
         osDnD_.fill (0.0f);
+        os4Up1D_.fill (0.0f);
+        os4Up2D_.fill (0.0f);
+        os4Dn2D_.fill (0.0f);
+        os4Dn1D_.fill (0.0f);
         osLen_ = static_cast<int> (0.005 * sampleRate + 0.5);
         if (osLen_ < 1)
             osLen_ = 1;
@@ -125,30 +140,37 @@ struct ProcessorChain
 
     void setColorEnabled (bool enabled) { color_.setEnabled (enabled); }
 
-    // 2x toggle for the ColorStage path. Arms the 5ms equal-power xfade
-    // from the other path; a no-op when already targeted. Called once per
-    // block by the processor (never mid-block). The FIR states are NOT
-    // wiped here: wiping at arm would collapse the live 2x delay lines
-    // that the fade-out source is still reading (a full-scale jump, caught
-    // by the toggle-click gate). They are zeroed when a blend lands back
-    // on 1x instead, so every 1x->2x entry still starts from clean states
-    // and the fade covers the entry transient either way.
-    void setOversampled (bool oversampled)
+    // Oversample factor for the ColorStage path (1, 2, or 4; anything else
+    // clamps to the nearest). Arms the 5ms equal-power xfade from the
+    // previous target; a no-op when already targeted. Called once per block
+    // by the processor (never mid-block). The FIR states are NOT wiped here
+    // (see note above); they are zeroed on landing for every factor except
+    // the landing target instead.
+    void setOsFactor (int factor)
     {
-        if (oversampled == osTarget_)
+        const int target = (factor <= 1) ? 1 : (factor == 2) ? 2 : (factor < 4) ? 2 : 4;
+        if (target == osTarget_)
             return;
-        osTarget_ = oversampled;
-        osBlendFrom_ = !osTarget_;
+        osBlendFrom_ = osTarget_;
+        osTarget_ = target;
         osPos_ = 0;
         osBlending_ = true;
     }
 
-    bool isOversampled () const { return osTarget_; }
+    int getOsFactor () const { return osTarget_; }
+
+    // Task-18 compat shim: false->1x, true->2x.
+    void setOversampled (bool oversampled) { setOsFactor (oversampled ? 2 : 1); }
+
+    bool isOversampled () const { return osTarget_ != 1; }
 
     // Latency to report to the DAW: 0 at 1x, the exact FIR group delay at
-    // 2x. Follows the toggle target immediately (the 5ms entry blend is
-    // transient; the steady path carries the full delay).
-    int getLatencySamples () const { return osTarget_ ? kOsLatencySamples : 0; }
+    // 2x (40) or 4x (60). Follows the factor target immediately (the 5ms
+    // entry blend is transient; the steady path carries the full delay).
+    int getLatencySamples () const
+    {
+        return (osTarget_ == 4) ? kOsLatency4xSamples : (osTarget_ == 2) ? kOsLatencySamples : 0;
+    }
 
     void setTrimDb (float trimDb) { trimLin_ = std::pow (10.0f, trimDb / 20.0f); }
 
@@ -207,18 +229,16 @@ struct ProcessorChain
     float getLastPreTrimPeak () const { return prePeak_.exchange (0.0f, std::memory_order_relaxed); }
 
 private:
-    // Color section with the 2x toggle path. Steady state runs exactly one
+    // Color section with the hot-factor path. Steady state runs exactly one
     // path (1x direct = the historical code path); during the 5ms entry
     // blend both run and mix equal-power, old at weight cos, new at sin.
     float colorWithOsBlend (float shaped)
     {
         if (!osBlending_)
-            return osActive_ ? processOversampled (shaped) : color_.processSample (shaped);
+            return processFactor (osActive_, shaped);
 
-        const float yDirect = color_.processSample (shaped);
-        const float yOs = processOversampled (shaped);
-        const float yOld = osBlendFrom_ ? yOs : yDirect;
-        const float yNew = osBlendFrom_ ? yDirect : yOs;
+        const float yOld = processFactor (osBlendFrom_, shaped);
+        const float yNew = processFactor (osTarget_, shaped);
         ++osPos_;
         float t = static_cast<float> (osPos_) / static_cast<float> (osLen_);
         if (t > 1.0f)
@@ -229,15 +249,30 @@ private:
         {
             osBlending_ = false;
             osActive_ = osTarget_;
-            // Leaving 2x: zero the delay lines now that nothing reads them,
-            // so the next 1x->2x entry starts clean (see setOversampled).
-            if (!osTarget_)
+            // Landed: zero the delay lines of every factor except the
+            // landing target, now that nothing reads them, so the next
+            // entry into any hot factor starts clean (see setOsFactor).
+            if (osTarget_ != 2)
             {
                 osUpD_.fill (0.0f);
                 osDnD_.fill (0.0f);
             }
+            if (osTarget_ != 4)
+            {
+                os4Up1D_.fill (0.0f);
+                os4Up2D_.fill (0.0f);
+                os4Dn2D_.fill (0.0f);
+                os4Dn1D_.fill (0.0f);
+            }
         }
         return out;
+    }
+
+    float processFactor (int factor, float x)
+    {
+        return (factor == 4)   ? processOversampled4x (x)
+               : (factor == 2) ? processOversampled (x)
+                               : color_.processSample (x);
     }
 
     // One host-rate sample through the 2x color path: zero-stuff up (x2 to
@@ -259,6 +294,42 @@ private:
         return out;
     }
 
+    // One host-rate sample through the 4x color path: the 2x stage above is
+    // cascaded 2x->2x with the same taps (up1 at the 2x rate, up2/down2 at
+    // the 4x rate, dn1 at the 2x rate; x2 per zero-stuff doubling, downs
+    // unscaled). Each decimation samples the even phase (push even, dot,
+    // push odd), so the cascade delay is the integer 20+10+10+20 = 60 host
+    // samples kOsLatency4xSamples reports. Delay lines newest-at-[0];
+    // dedicated 4x lines so the 2x path is never disturbed.
+    float processOversampled4x (float x)
+    {
+        firPush (os4Up1D_, x);
+        const float u0 = 2.0f * firDot (osFir_, os4Up1D_);
+        firPush (os4Up1D_, 0.0f);
+        const float u1 = 2.0f * firDot (osFir_, os4Up1D_);
+
+        firPush (os4Up2D_, u0);
+        const float w00 = 2.0f * firDot (osFir_, os4Up2D_);
+        firPush (os4Up2D_, 0.0f);
+        const float w01 = 2.0f * firDot (osFir_, os4Up2D_);
+        firPush (os4Up2D_, u1);
+        const float w10 = 2.0f * firDot (osFir_, os4Up2D_);
+        firPush (os4Up2D_, 0.0f);
+        const float w11 = 2.0f * firDot (osFir_, os4Up2D_);
+
+        firPush (os4Dn2D_, color_.processSample (w00));
+        const float v0 = firDot (osFir_, os4Dn2D_);
+        firPush (os4Dn2D_, color_.processSample (w01));
+        firPush (os4Dn2D_, color_.processSample (w10));
+        const float v1 = firDot (osFir_, os4Dn2D_);
+        firPush (os4Dn2D_, color_.processSample (w11));
+
+        firPush (os4Dn1D_, v0);
+        const float out = firDot (osFir_, os4Dn1D_);
+        firPush (os4Dn1D_, v1);
+        return out;
+    }
+
     static float firDot (const std::array<float, kOsTaps>& h, const std::array<float, kOsTaps>& d)
     {
         float s = 0.0f;
@@ -275,8 +346,9 @@ private:
     }
 
     // Builds the shared up/down lowpass taps once (Hamming-windowed sinc,
-    // DC gain normalized to 1). Cutoff is a fraction of the 2x rate, so
-    // the taps are rate-independent; no audio-thread use after the ctor.
+    // DC gain normalized to 1). Cutoff is a fraction of the hot rate
+    // (0.25 at 2x AND at 4x, each stage's own input Nyquist), so the taps
+    // are rate-independent; no audio-thread use after the ctor.
     void initOsFir ()
     {
         constexpr double fc = 0.25;
@@ -322,15 +394,21 @@ private:
 
     static constexpr double kPiOs_ = 3.14159265358979323846;
 
-    // 2x resampler state: shared lowpass taps + per-filter delay lines
-    // (fixed size, reset by fill, never allocated on the audio path).
+    // Hot-factor resampler state: shared lowpass taps + per-filter delay
+    // lines (fixed size, reset by fill, never allocated on the audio path).
+    // The 2x path keeps its Task-18 lines; the 4x cascade has four dedicated
+    // lines (up1/dn1 at the 2x rate, up2/dn2 at the 4x rate).
     std::array<float, kOsTaps> osFir_ = {};
     std::array<float, kOsTaps> osUpD_ = {};
     std::array<float, kOsTaps> osDnD_ = {};
-    bool osTarget_ = false;
-    bool osActive_ = false;
+    std::array<float, kOsTaps> os4Up1D_ = {};
+    std::array<float, kOsTaps> os4Up2D_ = {};
+    std::array<float, kOsTaps> os4Dn2D_ = {};
+    std::array<float, kOsTaps> os4Dn1D_ = {};
+    int osTarget_ = 1;
+    int osActive_ = 1;
     bool osBlending_ = false;
-    bool osBlendFrom_ = false;
+    int osBlendFrom_ = 1;
     int osPos_ = 0;
     int osLen_ = 240; // 5ms @48k; recomputed per rate in setSampleRate.
 };

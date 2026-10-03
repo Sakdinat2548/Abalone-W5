@@ -127,27 +127,24 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized () override;
-    void mouseDown (const juce::MouseEvent&) override;
-    void mouseMove (const juce::MouseEvent&) override;
 
 private:
     void timerCallback () override;
 
-    // ABALONE wordmark hit rect (paint-space): the centered header text
-    // plus padding. The header is a click target toggling the additive
-    // `oversample` Bool (2x on the ColorStage only, default off); cursor
-    // turns to a pointing hand over it. Engaged paints lit-red
-    // (button_on.png echo: red gradient + glow, never flat); the ACTIVE-off
-    // dim veil covers it like every other control except POWER.
-    juce::Rectangle<float> headerBounds () const;
+    // OS factor labels (1x/2x/4x), painted in-code immediately right of the
+    // OS mini-knob, stacked and centered on the knob.
+    void drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knobBounds, float scale) const;
 
     // -2dBFS signal-present threshold (spec: LED is signal-present, not clip).
     static constexpr float kLedThreshold = 0.79432823f; // 10^(-2/20).
 
-    // Editor size locks to the base-texture aspect (2136x867 faceplate-only);
-    // the faceplate is drawn 1:1 with no stretching.
+    // Editor is aspect-locked to the base texture (2136x867 faceplate-only)
+    // and corner-drag resizable from 1x to 2x; every live element lays out
+    // from CSV texture ratios in resized(), so the faceplate scales clean.
     static constexpr int kEditorWidth = 748;
     static constexpr int kEditorHeight = 304;
+    static constexpr int kEditorMaxWidth = 1496;
+    static constexpr int kEditorMaxHeight = 608;
 
     AbaloneW5AudioProcessor& processor;
 
@@ -161,6 +158,11 @@ private:
     juce::Slider toneSlider;   // manual: values 1-6, never engages (see note above).
     juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob on the
                                // black oval right of the THRU jack (see CSV trim_dial).
+    juce::Slider osSlider;     // attached to the `osfactor` Choice (1x/2x/4x);
+                               // 3-position mini-knob in the trim art family,
+                               // between ACTIVE and TONE at to-THRU height
+                               // (see CSV os_dial). Knob drag + host automation
+                               // both drive it via the attachment.
     juce::Label trimReadout;   // in-code dB readout below the trim knob (pale
                                // on the black oval). Single-click editable: type a
                                // number, Enter commits (clamped -30..0), Esc cancels.
@@ -177,15 +179,15 @@ private:
     juce::Image ledOnImage;
     juce::Image ledOffImage;
 
-    // Trajan-class header face: Cinzel Black 900 (OFL, embedded as
-    // BinaryData) for the in-code ABALONE wordmark + TRIM dB readout.
-    // Cinzel Black is the user's final call (fix round 4): legally-available
-    // OFL, supersedes the Eurostile-class round. Stroke-matched against the
-    // hardware AVALON badge in docs/refs/u5_front.png at matched cap-height
-    // (AVALON cap 50px texture, stems 14-15px; Cinzel Black at the same cap
-    // renders stems 15-16px — no faux-bold anywhere). Single static 900
-    // weight. Single typeface built once at construction; system-font
-    // fallback if the embed ever fails to parse.
+    // Masthead: the user-supplied ui/abalone.svg (BinaryData drawable),
+    // drawn centered in the header slot; the in-code engraved Cinzel
+    // fallback paints only if the SVG ever fails to parse. The masthead is
+    // static black in every OS state — the Task-18 click-toggle + red
+    // engaged state is gone (replaced by the `osfactor` mini-knob).
+    std::unique_ptr<juce::Drawable> mastheadDrawable;
+    // Cinzel Black 900 (OFL, embedded as BinaryData) for the TRIM dB
+    // readout + the engraved masthead fallback (the shipped masthead is the
+    // SVG above). Rebuilt at the current window scale in resized().
     juce::Font headerFont;
     juce::Font readoutFont;
 
@@ -195,6 +197,7 @@ private:
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> osAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> highcutAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toneInAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
@@ -202,7 +205,6 @@ private:
     bool ledOn = false;
     bool powerOn = true;
     bool dimVisible = false;
-    bool lastOsEngaged = false; // mirrors the `oversample` param (header red state).
     juce::String lastTrimText;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)

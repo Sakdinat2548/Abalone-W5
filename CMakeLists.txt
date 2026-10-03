@@ -94,11 +94,13 @@ target_sources(AbaloneW5 PRIVATE
 #   this at construction). docs/refs/u5_front.png stays a layout reference only
 #   and is not embedded.
 # - CinzelBlack.ttf + OFL.txt: OFL Trajan-class serif face (Black 900) for
-#   the in-code ABALONE header (stroke-matched to the hardware badge's
-#   Trajan caps at matched cap-height) and the in-code TRIM dB readout.
-#   The footer strip is baked plate pixels, so the font is header+readout
-#   only. Loaded once as a single juce::Typeface at construction with a
-#   system-font fallback (never blank).
+#   the engraved masthead fallback (the shipped masthead is ui/abalone.svg)
+#   and the in-code TRIM dB readout. The footer strip is baked plate pixels,
+#   so the font is fallback+readout only. Loaded once as a single
+#   juce::Typeface at construction with a system-font fallback (never blank).
+# - abalone.svg: user-supplied ABALONE masthead artwork (exact filename,
+#   single-e spelling), drawn centered in the header slot via a BinaryData
+#   SVG drawable; static black in every OS state.
 juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
@@ -116,6 +118,7 @@ juce_add_binary_data(AbaloneW5Assets
         ui/component_positions.csv
         ui/CinzelBlack.ttf
         ui/OFL.txt
+        ui/abalone.svg
 )
 
 target_compile_definitions(AbaloneW5
