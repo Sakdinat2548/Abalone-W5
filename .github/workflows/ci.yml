@@ -1,0 +1,49 @@
+# CI: Windows build + tests (Release only, one runner).
+#
+# Toolchain: any recent MSVC via ilammy/msvc-dev-cmd (sets up the full cl
+# environment Ninja needs; microsoft/setup-msbuild only puts msbuild on PATH,
+# which Ninja builds don't use) + Ninja (preinstalled on windows-latest;
+# choco fallback if ever missing) + MSYS2-free configure.
+# Ruling 5: NO MinGW on PATH — CC=cl/CXX=cl forced explicitly.
+# No code signing (known limitation); no installer (manual install per README).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Ensure Ninja
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { choco install ninja -y }
+          ninja --version
+
+      # No -DCMAKE_MAKE_PROGRAM: runner ninja is on PATH (AGENTS.md passes an
+      # explicit path only because the local MSYS2 ninja isn't on PATH in cmd).
+      - name: Configure (Ninja, Release)
+        shell: pwsh
+        env:
+          CC: cl
+          CXX: cl
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (VST3 + Standalone + tests)
+        shell: pwsh
+        run: cmake --build build
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build --output-on-failure
