@@ -43,9 +43,9 @@ inside its ±1.0 anchor gate, so document as accepted deviation. If <0.5 is
 ever demanded on T2: 5th section (~27 Hz hump) vs accepted deviation —
 controller's call, not implemented here.
 
-Note: the in-binary `audit10HzAnchors` print still assumes 5 Hz-each
-(`tests/ChainTest.cpp` untouched per Ruling 30's no-gate-edits rule), so
-its −2blk column reads +0.80 high — the table above is authoritative.
+Note: the in-binary `audit10HzAnchors` print now emits separate 5 Hz and
+2 Hz columns matching the actual chain (fixed alongside Ruling 30) — the
+table above and the print agree; no authoritative-override needed.
 
 ### Task 24 (tight RBJ fit: metric fix + 0.15/0.05 gates) PARTIAL — T2/T3/T5 pass, T1/T4/T6 recorded deviations
 
