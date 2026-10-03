@@ -14,7 +14,7 @@
 // full chain without a plugin host. The processor delegates per sample.
 //
 // Chain order: GainStage (boost + 5Hz DC-block) -> ToneBank A/B xfade ->
-// ColorStage -> HighCut -> trim gain -> peak tracker.
+// ColorStage -> post-color 2Hz DC-block -> HighCut -> trim gain -> peak tracker.
 //
 // Tone xfade: two ToneBank instances (active + shadow). On
 // setTone(new) != target, the shadow takes the new tone from a clean state
@@ -97,6 +97,11 @@ struct ProcessorChain
         banks_[0].setSampleRate (sampleRate);
         banks_[1].setSampleRate (sampleRate);
         highcut_.setSampleRate (sampleRate);
+        // Post-color DC-block retune (same smoother family as GainStage).
+        // 2Hz not 5Hz: gates pass as-written, DC dies the same (corner only sets ~0.4s settling).
+        constexpr double postFc = 2.0;
+        constexpr double postTwoPi = 6.28318530717958647692;
+        postHpCoeff_ = static_cast<float> (1.0 - std::exp (-postTwoPi * postFc / sampleRate_));
         xfadeLen_ = static_cast<int> (0.01 * sampleRate + 0.5);
         if (xfadeLen_ < 1)
             xfadeLen_ = 1;
@@ -201,7 +206,15 @@ struct ProcessorChain
         }
 
         const float colored = colorWithOsBlend (shaped);
-        const float cut = highcut_.processSample (colored);
+        // Post-color DC-block: kills the ColorStage `a*x^2` rectification
+        // (~3mV at +10dB, hot above) before it reaches the output. One-pole
+        // 2Hz highpass, same smoother form as the input block (deliberately
+        // copied, not shared: two uses do not earn an abstraction).
+        postLp_ += postHpCoeff_ * (colored - postLp_);
+        if (std::fabs (postLp_) < 1.0e-15f)
+            postLp_ = 0.0f;
+        const float deblocked = colored - postLp_;
+        const float cut = highcut_.processSample (deblocked);
         const float out = cut * trimLin_;
 
         // Pre-trim tap (post-HighCut, pre-trim-gain peak) for the SIGNAL LED:
@@ -381,6 +394,8 @@ private:
     GainStage gain_;
     ToneBank banks_[2];
     ColorStage color_;
+    float postHpCoeff_ = 0.0f;
+    float postLp_ = 0.0f;
     HighCut highcut_;
     float trimLin_ = 1.0f;
     mutable std::atomic<float> peak_{0.0f};

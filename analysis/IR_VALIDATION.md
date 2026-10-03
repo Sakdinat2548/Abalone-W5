@@ -2,6 +2,51 @@
 
 ## Status history
 
+### Task 28 (post-color DC-block + 10 Hz anchor audit) COMPLETE — Ruling 30: 2 Hz corner, all gates green as-written
+
+Post-color 2 Hz DC-block added (`ProcessorChain.h`: Color → DC-block →
+HighCut, copied 3-line smoother pattern, no shared helper; retuned per
+`setSampleRate`; state cost 1 float + 1 coeff). 2 Hz not 5 Hz per Ruling 30:
+holds the 5 Hz-corner and 20 Hz `checkBypassFlat` gates as-written while
+killing DC equally dead (corner only sets ~0.4 s settling; the offset is
+playing-dependent). Hot-sine DC/peak 0.364 → 0.000001 (mean +44.56 →
+−0.000048, peak 122.6 → 78.01 — the old peak WAS the bias, 1000× margin
+on the <0.001 gate); DC-decay tail-mean −0.000016 (±0.01 gate); 1 kHz
+transparency −0.8079 vs −0.8038 theory (blocker pair owns −0.0041 exactly).
+Pre-existing gates pass UNCHANGED at both rates: 20 Hz spots +2.691
+(+3.0±0.5, theory 3.0−0.2661−0.0444+0.0026=+2.692, margin 0.19 dB); 5 Hz
+corner −0.657 ((−1,+1), theory 3.0−3.0131−0.6457+0.002≈−0.657, margin
+0.34 dB). Every other suite green (7/7 ctest; VST3 + Standalone link).
+
+Exact blocker share (smoother family, 48 kHz): post-blocker (2 Hz)
+−0.1715 dB @10 Hz, −0.0444 dB @20 Hz, −0.6457 dB @5 Hz; input blocker
+(5 Hz) unchanged at −0.9719/−0.2661/−3.0131. 10 Hz end-to-end audit
+(boost step 1, highcut off, trim 0; compensated = raw − 3.0 boost − 0.0026
+color − 5 Hz loss − 2 Hz loss):
+
+| Tone | Anchor | Raw post-fix | Compensated | Delta vs anchor | Verdict |
+|------|--------|--------------|-------------|-----------------|---------|
+| 1 | −3.00 | −0.967 | −2.826 | +0.174 | in ±0.5, no action |
+| 2 | −0.25 | +1.001 | −0.858 | −0.608 | pre-existing stack shortfall (Fix-2 f2), inside ±1.0 anchor gate → document |
+| 3 | −3.00 | −0.960 | −2.819 | +0.181 | in ±0.5, no action |
+| 4 | −3.00 | −0.908 | −2.767 | +0.233 | in ±0.5, no action |
+| 5 | −22.00 | −20.234 | −22.093 | −0.093 | in ±0.5, no action |
+| 6 | −22.00 | −20.313 | −22.172 | −0.172 | in ±0.5, no action |
+
+Raw moved exactly −0.172/tone vs the pre-fix 1-blocker chain (theory
+−0.1715), and +0.800/tone vs the round-1 5 Hz post-fix raws — the blocker
+contributes nothing beyond prediction. Compensated/delta columns are
+identical to round 1 (blockers compensate out). Recommendation: NO
+compensation — five tones land within ±0.5 fully accounted; T2's −0.608 is
+the recorded Fix-Round-2 tone-stack shortfall (identical pre-fix), still
+inside its ±1.0 anchor gate, so document as accepted deviation. If <0.5 is
+ever demanded on T2: 5th section (~27 Hz hump) vs accepted deviation —
+controller's call, not implemented here.
+
+Note: the in-binary `audit10HzAnchors` print still assumes 5 Hz-each
+(`tests/ChainTest.cpp` untouched per Ruling 30's no-gate-edits rule), so
+its −2blk column reads +0.80 high — the table above is authoritative.
+
 ### Task 24 (tight RBJ fit: metric fix + 0.15/0.05 gates) PARTIAL — T2/T3/T5 pass, T1/T4/T6 recorded deviations
 
 Metric fix first (Ruling 20): max/RMS now over EVERY CSV point 10 Hz–

@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <complex>
 #include <cstdio>
 
 namespace
@@ -695,6 +696,122 @@ void checkOs4xTopOctave ()
     }
 }
 
+// (p) Post-color DC discipline (Task 28): the ColorStage `a*x^2` term
+// rectifies (~3mV at +10dB, ~75mV hot). A post-color 5Hz blocker must kill
+// it before the output. (a) DC-decay guard, (b) hot-sine DC/peak gate,
+// (c) 1kHz transparency spot (the blocker must not move anything >= 20Hz).
+void checkPostColorDcDecay ()
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    chain.setBoostStep (5);
+    chain.setTone (3);
+    chain.setHighcut (false);
+    chain.setTrimDb (0.0f);
+    double sum = 0.0;
+    const int tail = 4800;
+    for (int n = 0; n < 48000; ++n)
+    {
+        const float y = chain.processSample (1.0f);
+        if (n >= 48000 - tail)
+            sum += static_cast<double> (y);
+    }
+    const float mean = static_cast<float> (sum / static_cast<double> (tail));
+    std::printf ("post-color dc decay: tail-mean %+0.6f (expect within +/- 0.01)\n", mean);
+    std::fflush (stdout);
+    assert (std::fabs (mean) < 0.01f);
+}
+
+void checkHotSineDc ()
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    chain.setBoostStep (10);
+    chain.setTone (3);
+    chain.setHighcut (false);
+    chain.setTrimDb (0.0f);
+    const float amp = std::pow (10.0f, 24.0f / 20.0f); // +24dB-equivalent float amplitude.
+    const int total = 96000;                           // 2s @48k.
+    const int skip = 48000;                            // measure the settled second.
+    double sum = 0.0;
+    double peak = 0.0;
+    for (int n = 0; n < total; ++n)
+    {
+        const float x = amp * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (n) / 48000.0));
+        const float y = chain.processSample (x);
+        assert (std::isfinite (y));
+        if (n >= skip)
+        {
+            sum += static_cast<double> (y);
+            const double m = std::fabs (static_cast<double> (y));
+            if (m > peak)
+                peak = m;
+        }
+    }
+    const double mean = sum / static_cast<double> (total - skip);
+    const double ratio = (peak > 0.0) ? std::fabs (mean) / peak : 0.0;
+    std::printf ("hot-sine dc: mean %+0.6f, peak %0.4f, dc/peak %0.6f (expect < 0.001)\n", mean, peak, ratio);
+    std::fflush (stdout);
+    assert (ratio < 0.001);
+}
+
+void checkPostColorTransparency1k ()
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    chain.setBoostStep (1);
+    chain.setTone (3);
+    chain.setHighcut (false);
+    chain.setTrimDb (0.0f);
+    const float measured = steadyGainDb (chain, 48000.0, 1000.0, 0.1f);
+
+    ToneBank ref;
+    ref.setSampleRate (48000.0);
+    ref.setTone (3);
+    // Boost step 1 (+3dB) + tone theory + color small-signal gain k/tanh(k).
+    const float expected = 3.0f + ref.magnitudeAt (1000.0f) + 20.0f * std::log10 (0.03f / std::tanh (0.03f));
+    std::printf ("post-color transparency @1kHz/tone3: %+0.4fdB (expect %+0.4f +/- 0.05)\n", measured, expected);
+    std::fflush (stdout);
+    assert (std::fabs (measured - expected) < 0.05f);
+}
+
+// (q) 10Hz end-to-end anchor audit (Task 28, report-only by design: no
+// assert — the controller rules compensate-vs-document from these numbers).
+// Per tone (boost step 1, highcut off, trim 0): raw chain magnitude at 10Hz
+// vs the absolute anchors (T1/T3/T4 -3, T2 -0.25, T5/T6 -22), with the exact
+// 5Hz-blocker loss shown separately (one column per blocker count, so the
+// same print serves the pre-fix 1-blocker and post-fix 2-blocker chain).
+void audit10HzAnchors ()
+{
+    constexpr double twoPi = 6.28318530717958647692;
+    constexpr double fs = 48000.0;
+    const double a = 1.0 - std::exp (-twoPi * 5.0 / fs);
+    const double w = twoPi * 10.0 / fs;
+    const std::complex<double> z = std::exp (std::complex<double> (0.0, -w));
+    const std::complex<double> h = 1.0 - a / (1.0 - (1.0 - a) * z);
+    const float blockerLossDb = static_cast<float> (20.0 * std::log10 (std::abs (h)));
+
+    const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -22.0f};
+    std::printf ("10Hz audit @48k (blocker loss %+0.4fdB each):\n", blockerLossDb);
+    for (int tone = 1; tone <= 6; ++tone)
+    {
+        ProcessorChain chain;
+        chain.setSampleRate (fs);
+        chain.setBoostStep (1);
+        chain.setTone (tone);
+        chain.setHighcut (false);
+        chain.setTrimDb (0.0f);
+        const float raw = steadyGainDb (chain, fs, 10.0, 0.1f);
+        // Chain adds boost (+3dB), color small-signal gain, and the blockers.
+        const float colorDb = 20.0f * std::log10 (0.03f / std::tanh (0.03f));
+        const float comp1 = raw - 3.0f - colorDb - 1.0f * blockerLossDb;
+        const float comp2 = raw - 3.0f - colorDb - 2.0f * blockerLossDb;
+        std::printf ("  T%d: raw %+0.3f | -1blk %+0.3f (d %+0.3f) | -2blk %+0.3f (d %+0.3f) | anchor %+0.2f\n", tone,
+                     raw, comp1, comp1 - anchors[tone], comp2, comp2 - anchors[tone], anchors[tone]);
+    }
+    std::fflush (stdout);
+}
+
 } // namespace
 
 int main ()
@@ -714,6 +831,10 @@ int main ()
     checkOsFactorToggleNoClick();
     checkOs4xPrepareOrdering();
     checkOs4xTopOctave();
+    checkPostColorDcDecay();
+    checkPostColorTransparency1k();
+    audit10HzAnchors();
+    checkHotSineDc();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }
