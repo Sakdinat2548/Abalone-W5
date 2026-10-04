@@ -46,11 +46,11 @@ Requires MSVC 2019 BuildTools, JUCE 8.0.15 (FetchContent), C++17. See `AGENTS.md
 
 ## Validation
 
-- Per-stage CTest gates (`tests/`): bypass flat 5 Hz–100 kHz ±0.5 dB, tones fit to digitized curves within ±0.5 dB, boost +3 dB/step with no clip, highcut −3 dB @ 8 kHz, THD ~0.1%.
+- Per-stage CTest gates (`tests/`): bypass flat 20 Hz–15 kHz ±0.5 dB (±0.1 at 1 kHz; the owned 5 Hz −3 dB DC-block corner is by design), tones fit to digitized curves within ±0.5 dB, boost +3 dB/step with no clip, highcut −3 dB @ 8 kHz, THD ~0.1%.
 - Tone shapes cross-checked against IR measurements ([tone curves](docs/tone-curves.png), [signal flow](docs/signal-flow.png)).
 
 ![Abalone W5 tone bank — all 6 tones, highcut off/on](docs/tone-curves-12panel.png)
-- Passes pluginval at strictness 5.
+- Passes pluginval at strictness 5 and 10 (logs: `docs/pluginval/strictness-5.txt`, `docs/pluginval/strictness-10.txt`).
 
 ## License
 
