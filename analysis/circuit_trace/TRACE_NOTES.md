@@ -122,9 +122,31 @@ elsewhere. Outcome per tone (win-nodal max / CSV-damage gate max):
 | 5 | 0.39 | 2.41 | win small, damage fatal |
 | 6 | 0.68 | 4.73 | win small, damage fatal |
 
-Poles 0.9996–0.9998 (thinner than shipped), T1 rate 0.174 over budget.
+Poles 0.9996-0.9998 (thinner than shipped), T1 rate 0.174 over budget.
 Splitting the 1–4 dB chart-vs-hardware difference gets the worst of both —
 a move needs a ruling to ABANDON chart agreement in that zone (new gates),
 not a compromise fit. Unconstrained run (fit to nodal everywhere) also
 recorded: pathological params (gains ±10 dB, bound-riding Q, T2 tip
 destroyed) — chasing nodal modeling noise, rejected.
+
+## Zone-targeted refits, user-ruled zones (FINAL: DSP stays on all 6)
+
+v1 (10 Hz-floored zones) appeared to win T5/T6 low ends — then inspection
+showed the wins came from sub-40 Hz features (T5 +5.3 dB micro-peak at
+9.7 Hz) chasing nodal's least-trustworthy octave (open-output assumption,
+Ruling-B band). v2 floored all zones at 40 Hz and widened T4 dip travel
+to x[0.5,2.0]:
+
+| Tone | Zone target | v2 zone err | v2 CSV damage | Outcome |
+|------|-------------|-------------|---------------|---------|
+| T4 dip→8.1k | 3-12k nodal | 1.52 | 1.52 | dip peak stuck at 5.6k (needs role change, not numbers); LS hit Q floor |
+| T5 LF | 40-300 nodal | 1.09 | 1.09 | worse than v1; 40-63 hardware gap structurally unrenderable jointly with 100-300 |
+| T6 LF+HF | 40-300, 3-16k nodal | 2.10 | 2.10 | worse than v1; micro-peak pathology persists at the 40 Hz edge |
+| T1 HF / T2 HF | ruled zones | worse/diverged | — | rejected earlier, shipped stands |
+
+With honest ≥40 Hz zones, no same-budget position beats shipped anywhere
+without ≥1 dB CSV damage. The remaining gaps are STRUCTURAL (T5/T6
+sub-40 steepness, T4 dip role, T2 shoulder section, T1/T6 top-octave
+chart-vs-hardware split) — a numbers-only refit cannot close them.
+Hardware-truth promotion now requires topology decisions (+sections or
+re-roled stages) plus new gates, i.e. a full re-spec task, not a fit.
