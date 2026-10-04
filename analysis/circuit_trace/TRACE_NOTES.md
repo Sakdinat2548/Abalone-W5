@@ -92,3 +92,17 @@ and ~0.3–0.8 dB probe-loading modeling uncertainty, quantified in-script),
 not fit errors. Promoting the sim over the chart would be a re-spec
 decision; the per-frequency deltas for it are in the script output, not
 acted on.
+
+## v2 axis-corrected oracle (printed-tick distortion removed — wash, no retune)
+
+`redigit_tone.py` replicates Claude's trace extraction (v1 replica matches
+the repo CSV to 0.007 dB except the hand-fixed T2 tip) and re-maps x with
+true-log positions from the 10/100/1k/10k ticks, ignoring the drawn 20 kHz
+tick (documented ~2x too wide in claudeoutput.txt). Output
+`u5_tone_curves_digitized_v2.csv` is a RESEARCH oracle: v1 stays binding,
+no gate points at v2. Top-octave v1→v2 shifts: T1 −0.9/−0.5, T4 −1.5/−1.6,
+T6 +1.1/+3.1 dB @15k/20k (T2/T3/T5 ≤0.4). Validation vs nodal is a wash:
+v2 closes ~40% of the T4 nodal gap but moves away on T6/T1, inside nodal's
+own ±0.5–1 dB modeling uncertainty — so v2 does NOT promote over v1 and no
+biquad moves on it. Decisive top-octave data would be digitized GroupDIY
+Keysight photos (bot-walled for fetchers; needs a logged-in browser).
