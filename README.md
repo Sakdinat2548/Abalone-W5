@@ -8,7 +8,7 @@ Inspired by the Avalon U5. Not affiliated with or endorsed by Avalon Design.
 
 ## What it is
 
-Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> HighCut -> Trim + LED` —
+Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> DC-block -> HighCut -> Trim + LED` —
 built with JUCE 8 biquads/gain only. 0 dBFS = +24 dBu (hardware max in);
 +4 dBu nominal = −20 dBFS (see `analysis/LEVELS.md`).
 
@@ -16,13 +16,13 @@ built with JUCE 8 biquads/gain only. 0 dBFS = +24 dBu (hardware max in);
 
 | Control | Values |
 |---|---|
-| Boost | 1–10 stepped, 3 dB/step (~+3 to +30 dB), default 3 |
+| Boost | 1–10 stepped, 3 dB/step (~+3 to +30 dB), default 1 |
 | Tone | Bypass + 1–6, default Tone 3 (10 ms xfade on switch) |
 | TONE button | Tone in/out (default in) |
 | ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active) |
 | HighCut | On/off, −3 dB at 8 kHz, 1-pole min-phase (default off) |
 | TRIM | Cut-only −30..0 dB (default 0) |
-| SIGNAL LED | Signal-present at −2 dBFS |
+| SIGNAL LED | Signal-present at −2 dBFS, pre-trim tap (follows Boost staging, unaffected by TRIM) |
 | OS mini-knob | 1x/2x/4x oversampling on the Color stage only, default 1x (exact FIR delay 0/40/60 samples via `setLatencySamples`) |
 
 Editor is aspect-locked, corner-drag resizable 1x–2x (748x304 to 1496x608).
@@ -46,7 +46,7 @@ Requires MSVC 2019 BuildTools, JUCE 8.0.15 (FetchContent), C++17. See `AGENTS.md
 
 ## Validation
 
-- Per-stage CTest gates (`tests/`): bypass flat 5 Hz–100 kHz ±0.5 dB, tones ±1 dB 40 Hz–15 kHz, boost +3 dB/step with no clip, highcut −3 dB @ 8 kHz, THD ~0.1%.
+- Per-stage CTest gates (`tests/`): bypass flat 5 Hz–100 kHz ±0.5 dB, tones fit to digitized curves within ±0.5 dB, boost +3 dB/step with no clip, highcut −3 dB @ 8 kHz, THD ~0.1%.
 - Tone shapes cross-checked against IR measurements ([tone curves](docs/tone-curves.png), [12-panel](docs/tone-curves-12panel.png), [signal flow](docs/signal-flow.png)).
 - Passes pluginval at strictness 5.
 
