@@ -106,3 +106,25 @@ v2 closes ~40% of the T4 nodal gap but moves away on T6/T1, inside nodal's
 own ±0.5–1 dB modeling uncertainty — so v2 does NOT promote over v1 and no
 biquad moves on it. Decisive top-octave data would be digitized GroupDIY
 Keysight photos (bot-walled for fetchers; needs a logged-in browser).
+
+## Constrained hardware refinement (PROVEN: no joint position — DSP stays)
+
+`fit_hardware.py`: same shipped types/counts, bounded moves (f0 ±40%,
+gain ±4 dB) toward nodal ONLY in the 27 IR-confirmed win zones, CSV kept
+elsewhere. Outcome per tone (win-nodal max / CSV-damage gate max):
+
+| Tone | Win-nodal | CSV damage | Notes |
+|------|-----------|------------|-------|
+| 1 | 0.91 | 0.92 | no better than shipped either way |
+| 2 | 7.17 DIVERGED | 6.83 | optimizer unstable; disregard except as no-solution proof |
+| 3 | 0.80 | 0.92 | marginal both sides |
+| 4 | 1.52 | 2.55 | worst of both |
+| 5 | 0.39 | 2.41 | win small, damage fatal |
+| 6 | 0.68 | 4.73 | win small, damage fatal |
+
+Poles 0.9996–0.9998 (thinner than shipped), T1 rate 0.174 over budget.
+Splitting the 1–4 dB chart-vs-hardware difference gets the worst of both —
+a move needs a ruling to ABANDON chart agreement in that zone (new gates),
+not a compromise fit. Unconstrained run (fit to nodal everywhere) also
+recorded: pathological params (gains ±10 dB, bound-riding Q, T2 tip
+destroyed) — chasing nodal modeling noise, rejected.
