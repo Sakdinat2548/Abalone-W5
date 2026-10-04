@@ -1,5 +1,3 @@
-# Abalone W5 — release notes
-
 ## Platform support (standing caveat)
 
 - **Windows (VST3):** host-tested by the author. Primary supported platform.
