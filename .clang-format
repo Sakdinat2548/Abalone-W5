@@ -1,0 +1,20 @@
+# Abalone-U55 clang-format: LLVM-based, C++17, JUCE-compatible.
+# JUCE style = 4-space indent, Allman braces, space between function names
+# and non-empty parens (`void foo (int x)`, but `foo()` when empty).
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++17
+ColumnLimit: 120
+IndentWidth: 4
+AccessModifierOffset: -4
+PointerAlignment: Left
+DerivePointerAlignment: false
+BreakBeforeBraces: Allman
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterFunctionDeclarationName: true
+  AfterFunctionDefinitionName: true
+  BeforeNonEmptyParentheses: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never

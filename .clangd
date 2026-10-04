@@ -1,0 +1,17 @@
+# Abalone-U55 clangd: compilation database lives in build-ide/.
+# build-ide/ is a secondary Ninja+MSVC configure that emits compile_commands.json
+# (the VS generator in build/ never emits one). See AGENTS.md setup.
+CompileFlags:
+  CompilationDatabase: build-ide
+  # MSVC STL + Windows SDK system includes: clangd's automatic VS detection
+  # misses these (it falls back to ancient VS8/9/10 paths), so list them
+  # explicitly. Refresh the version numbers if BuildTools/SDK are updated.
+  # NOTE: combined -I<path> form (not `-isystem <path>` as two args) — the
+  # CDB uses --driver-mode=cl and split -isystem breaks its arg parsing.
+  Add:
+    - '-IC:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Tools/MSVC/14.29.30133/include'
+    - '-IC:/Program Files (x86)/Windows Kits/10/Include/10.0.19041.0/ucrt'
+    - '-IC:/Program Files (x86)/Windows Kits/10/Include/10.0.19041.0/um'
+    - '-IC:/Program Files (x86)/Windows Kits/10/Include/10.0.19041.0/shared'
+Index:
+  Background: Build
