@@ -1,3 +1,7 @@
+// Abalone W5 - U5-inspired clean bass DI.
+// Copyright (C) 2026 Sakdinat2548.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Task 11: mono/dual-mono channel handling + host bypass, driven through the
 // REAL AbaloneW5AudioProcessor headless (JUCE AudioBuffer, no host needed).
 //

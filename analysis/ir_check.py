@@ -1,3 +1,7 @@
+# Abalone W5 - U5-inspired clean bass DI.
+# Copyright (C) 2026 Sakdinat2548.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """IR validation harness for Abalone W5 v1 (Task 8).
 
 Compares real Avalon U5 impulse responses (Tone3000, gitignored local dir)
