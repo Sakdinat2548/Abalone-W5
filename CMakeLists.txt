@@ -152,7 +152,10 @@ target_link_libraries(AbaloneW5
 # and NDEBUG-independent, so they stay live under ctest either way.
 add_executable(ProcessorIOTest tests/ProcessorIOTest.cpp src/PluginProcessor.cpp src/PluginEditor.cpp)
 target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5")
+target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5"
+    # Same as the plugin target below: no web browser in the test binary, so
+    # juce_gui_extra compiles without its gtk/webkit Linux system deps.
+    JUCE_WEB_BROWSER=0)
 target_link_libraries(ProcessorIOTest PRIVATE
     AbaloneW5Assets
     juce::juce_audio_utils
