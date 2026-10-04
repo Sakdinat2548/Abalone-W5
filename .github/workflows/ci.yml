@@ -70,24 +70,12 @@ jobs:
           cmake --version
           ninja --version
 
-      # Runner images ship their own MinGW (e.g. C:\mingw64 on Windows latest),
-      # which is not ours to refuse — the project only requires MinGW never
-      # *compile* anything (Ruling 5: enforced by CC/CXX pins per leg). So
-      # scrub MinGW dirs from PATH first (persisted via GITHUB_ENV for all
-      # later steps), then assert the scrub worked. POSIX-only tools
-      # (tr/sed/grep) so this runs identically on GNU, BSD/macOS, and Git Bash.
-      - name: Scrub MinGW from PATH, then assert none
-        shell: bash
-        run: |
-          CLEAN=$(echo "$PATH" | tr ':' '\n' | grep -v -i -e '^/c/mingw64/bin$' -e 'strawberry/c/bin' | tr '\n' ':' | sed 's/:$//')
-          {
-            echo "PATH<<__ABALONE_EOF__"
-            echo "$CLEAN"
-            echo "__ABALONE_EOF__"
-          } >> "$GITHUB_ENV"
-          export PATH="$CLEAN"
-          if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then echo "MinGW gcc still on PATH after scrub - refusing (Ruling 5)"; exit 1; fi
-          echo "no MinGW gcc on PATH"
+      # Ruling 5 (no MinGW compiler) is enforced by the per-leg CC/CXX pins on
+      # every configure step below — CMake uses exactly those compilers, so a
+      # MinGW on PATH can never leak into a build. (An earlier revision of
+      # this workflow scrubbed MinGW out of PATH globally; that broke Windows
+      # because bash-form paths poisoned later pwsh steps. Pins, not PATH
+      # surgery — recorded so nobody re-adds it.)
 
       # No -DCMAKE_MAKE_PROGRAM: runner ninja is on PATH (AGENTS.md passes an
       # explicit path only because the local MSYS2 ninja isn't on PATH in cmd).

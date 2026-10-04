@@ -155,7 +155,10 @@ target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5"
     # Same as the plugin target below: no web browser in the test binary, so
     # juce_gui_extra compiles without its gtk/webkit Linux system deps.
-    JUCE_WEB_BROWSER=0)
+    JUCE_WEB_BROWSER=0
+    # Same as the plugin target: no curl networking in the test binary, so
+    # juce_core links without libcurl on Linux (JUCE loads WinHTTP on
+    # Windows, which is why this only ever bites the Ubuntu leg).
 target_link_libraries(ProcessorIOTest PRIVATE
     AbaloneW5Assets
     juce::juce_audio_utils
