@@ -64,16 +64,29 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          DEPS="cmake ninja-build g++ libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev"
+          DEPS="cmake ninja-build g++ libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfontconfig1-dev libgtk-3-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev"
           sudo apt-get install -y $DEPS libfreetype-dev libwebkit2gtk-4.1-dev || sudo apt-get install -y $DEPS libfreetype6-dev libwebkit2gtk-4.0-dev
           gcc --version
           cmake --version
           ninja --version
 
-      - name: Assert no MinGW on PATH
+      # Runner images ship their own MinGW (e.g. C:\mingw64 on Windows latest),
+      # which is not ours to refuse — the project only requires MinGW never
+      # *compile* anything (Ruling 5: enforced by CC/CXX pins per leg). So
+      # scrub MinGW dirs from PATH first (persisted via GITHUB_ENV for all
+      # later steps), then assert the scrub worked.
+      - name: Scrub MinGW from PATH, then assert none
         shell: bash
         run: |
-          if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then echo "MinGW gcc on PATH - refusing (Ruling 5)"; exit 1; fi
+          CLEAN=$(echo "$PATH" | tr ':' '\n' | grep -v -i -e '^/c/mingw64/bin$' -e 'strawberry/c/bin' | paste -sd:)
+          echo "$CLEAN" > "$GITHUB_ENV.tmp_path" 2>/dev/null || true
+          {
+            echo "PATH<<__ABALONE_EOF__"
+            echo "$CLEAN"
+            echo "__ABALONE_EOF__"
+          } >> "$GITHUB_ENV"
+          export PATH="$CLEAN"
+          if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then echo "MinGW gcc still on PATH after scrub - refusing (Ruling 5)"; exit 1; fi
           echo "no MinGW gcc on PATH"
 
       # No -DCMAKE_MAKE_PROGRAM: runner ninja is on PATH (AGENTS.md passes an
