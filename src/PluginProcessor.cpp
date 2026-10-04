@@ -36,7 +36,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
-        "boost", "Boost", juce::StringArray ({"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}), 2));
+        "boost", "Boost", juce::StringArray ({"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}), 0));
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         "tone", "Tone", juce::StringArray ({"Bypass", "Tone 1", "Tone 2", "Tone 3", "Tone 4", "Tone 5", "Tone 6"}), 3));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("highcut", "High Cut", false));
