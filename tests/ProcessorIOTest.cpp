@@ -364,8 +364,14 @@ void checkActiveToggleNoClick ()
 
     juce::AudioBuffer<float> buffer (2, kBlock);
     juce::MidiBuffer midi;
-    int phase0 = 0;
-    int phase1 = 0;
+    // Toggle-phase discipline: the off-toggle must land near a sine PEAK so
+    // the old-code hard switch actually jumps (phase-lucky zero-crossing
+    // toggles pass even unfixed). 220Hz/48k advances 11/2400 cycles/sample;
+    // peak needs total P = 51712 + P0 with P0 = 488 (52200 mod 2400 = 1800 =
+    // quarter-cycle). The on-toggle then lands at 0.64 cycle (0.41 x 0.38
+    // amplitude = 0.16 jump on old code) — still discriminating.
+    int phase0 = 488;
+    int phase1 = 488;
     for (int b = 0; b < 100; ++b) // settle ~1s engaged
     {
         fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
