@@ -76,7 +76,7 @@ stay inside the standing 0.3 gate. 96 kHz verify-only: max 0.52/0.23/0.35/
 warped at 48k/44.1k; inherent, reported not gated).)
 
 Deviations (structural evidence + probe numbers in
-`.superpowers/sdd/2026-10-02-abalone-u55-plan/task-24-report.md`):
+`.superpowers/sdd/2026-10-02-abalone-w5-plan/task-24-report.md`):
 - T1: 6-sec floor 0.168 (10 rounds); all five user bands fixed (worst
   +0.124); 7th-peak probe (@58.7/0.55/+1.98, NOT shipped) lands max
   0.119/0.121 rms 0.039/0.040 — but probes stay 0.103. Ruling: 7th
@@ -130,7 +130,7 @@ T6 0.097 (0.1); eye low-end green except T6 slope 1.270 (1.3 DEVIATION);
 either-oracle advisory 0.195/0.092/0.137/0.176/0.119/0.199 — all pass.)
 
 Recorded deviations (structural evidence + probe numbers in
-`.superpowers/sdd/2026-10-02-abalone-u55-plan/task-22-report.md`):
+`.superpowers/sdd/2026-10-02-abalone-w5-plan/task-22-report.md`):
 - T1 RMS 0.101/0.11 (scoop-entry see-saw needs a 6th section; 6th-peak probe
   lands rms 0.065/max 0.144 — ruling: budget+1 vs accepted deviation).
 - T6 eye slope 1.270/1.3 (LS+HS foot renders ~4.05 vs T5-red 5.284; 5th-peak

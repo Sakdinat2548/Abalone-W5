@@ -1,10 +1,16 @@
 # Abalone W5
 
-U5-inspired clean bass DI — VST3 for Windows. (A Standalone test build exists for developers; the product is the VST3.)
+[![CI](https://github.com/Sakdinat2548/Abalone-W5/actions/workflows/ci.yml/badge.svg)](https://github.com/Sakdinat2548/Abalone-W5/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+U5-inspired clean DI — free VST3 (Windows, macOS, Linux).
+Windows is host-tested; macOS/Linux builds are CI-tested only.
 
 ![Abalone W5 UI](docs/ui-preview.png)
 
 Inspired by the Avalon U5. Not affiliated with or endorsed by Avalon Design.
+
+[Download latest release](https://github.com/Sakdinat2548/Abalone-W5/releases/latest)
 
 ## What it is
 

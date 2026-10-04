@@ -1,4 +1,4 @@
-# Abalone-U55 clang-format: LLVM-based, C++17, JUCE-compatible.
+# Abalone-W5 clang-format: LLVM-based, C++17, JUCE-compatible.
 # JUCE style = 4-space indent, Allman braces, space between function names
 # and non-empty parens (`void foo (int x)`, but `foo()` when empty).
 BasedOnStyle: LLVM

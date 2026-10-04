@@ -10,6 +10,8 @@
 # is dev-testing and is NOT released. VST3 bundle name follows PRODUCT_NAME
 # ("Abalone-W5.vst3" since the SA48/AbW5 identity commit; the old
 # "Abalone W5.vst3" dir lingering in local build/ output is pre-rename stale).
+# Release notes are edited by hand on the GitHub release page (no body_path:
+# automation kept overwriting manual edits).
 # Standing caveat: only Windows is host-tested by the author.
 # No AU, no code signing, no installer (all prior rulings stand).
 name: Release

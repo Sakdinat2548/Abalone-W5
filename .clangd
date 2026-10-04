@@ -1,4 +1,4 @@
-# Abalone-U55 clangd: compilation database lives in build-ide/.
+# Abalone-W5 clangd: compilation database lives in build-ide/.
 # build-ide/ is a secondary Ninja+MSVC configure that emits compile_commands.json
 # (the VS generator in build/ never emits one). See AGENTS.md setup.
 CompileFlags:

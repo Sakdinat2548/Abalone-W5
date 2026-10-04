@@ -1,4 +1,4 @@
-# Abalone-U55 clang-tidy: minimal gate; JUCE wrapper best-effort (warnings recorded, not gating).
+# Abalone-W5 clang-tidy: minimal gate; JUCE wrapper best-effort (warnings recorded, not gating).
 Checks: 'bugprone-*,modernize-use-override,readability-braces-around-statements'
 WarningsAsErrors: ''
 HeaderFilterRegex: 'src/.*'
