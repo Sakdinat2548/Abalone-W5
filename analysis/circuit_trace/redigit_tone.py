@@ -1,6 +1,6 @@
 """Re-digitize the U5 manual tone pictures with a CORRECTED log x-axis.
 
-Provenance (read before trusting): analysis/u5_tone_curves_digitized.csv
+Provenance (read before trusting): analysis/u5_tone_curves_from_claude.csv
 (v1) is Claude's eyeball digitization of docs/refs/Tone+images.png, and it
 bakes in a known axis distortion — the printed 20 kHz tick sits ~2x wider
 than true log scale, and v1 follows the drawn ticks (see Downloads/
@@ -78,7 +78,7 @@ def extract(fix):
 
 
 repo_f, repo = [], {}
-with open(os.path.join(REPO, "analysis", "u5_tone_curves_digitized.csv"),
+with open(os.path.join(REPO, "analysis", "u5_tone_curves_from_claude.csv"),
           newline="") as fh:
     for row in csv.DictReader(fh):
         repo_f.append(float(row["freq_hz"]))

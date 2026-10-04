@@ -45,7 +45,7 @@ add_dsp_test(ToneTargetsTest tests/ToneTargetsTest.cpp)
 
 add_dsp_test(ToneBankTest tests/ToneBankTest.cpp)
 target_compile_definitions(ToneBankTest PRIVATE
-    TONE_CSV_PATH="${CMAKE_CURRENT_SOURCE_DIR}/analysis/u5_tone_curves_digitized.csv")
+    TONE_CSV_PATH="${CMAKE_CURRENT_SOURCE_DIR}/analysis/u5_tone_curves_from_claude.csv")
 
 add_dsp_test(GainStageTest tests/GainStageTest.cpp)
 

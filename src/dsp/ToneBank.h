@@ -7,7 +7,7 @@
 #include <cmath>
 
 // Tone-bank biquads, Abalone W5 v1 Task-24 tight fit to the digitized gray
-// — analysis/u5_tone_curves_digitized.csv (121 log-spaced points, 10 Hz-20
+// — analysis/u5_tone_curves_from_claude.csv (121 log-spaced points, 10 Hz-20
 // kHz) is the SOLE binding target over EVERY point 10 Hz-20 kHz inclusive
 // (Ruling 20 — the old 40 Hz+ window under-reported the 10-40 Hz band by up
 // to 0.6 dB). Supersedes all Task-22 numbers; keeps anchor/highcut rulings.

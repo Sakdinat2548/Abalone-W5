@@ -72,7 +72,7 @@ for t, m in zip(range(1,7), [-18.62,-18.58,-19.16,-18.26,-35.98,-37.36]):
 
 # CSV oracle
 cf, cc = [], {t: [] for t in range(1, 7)}
-with open(os.path.join(HERE, "..", "u5_tone_curves_digitized.csv"),
+with open(os.path.join(HERE, "..", "u5_tone_curves_from_claude.csv"),
           newline="") as fh:
     for row in csv.DictReader(fh):
         cf.append(float(row["freq_hz"]))

@@ -253,7 +253,7 @@ gate); chart either-oracle (advisory, ±1.0) 0.26/0.71/0.30/0.32/0.17/0.14 →
 0.53/0.44/0.18/0.43/0.23/0.30 (all pass); port GREEN (worst diff 0.005 dB);
 user-complaint directions held (T1 scoop depth now within 0.55 dB at the
 anchor-constrained foot, T3 dip present, T3/T4 non-twins — verified on the
-regen plot vs `u5_tone_fit_check.png`).
+regen plot vs `u5_tone_fit_check_from_claude.png`).
 
 **T1 recorded deviation** (dense gate 0.6, low-end gate 0.6 — anchor wins per
 tie-break): the −3 dB anchor pins the highpass at ~14.9 Hz while the CSV foot
@@ -286,11 +286,11 @@ report-only).
 ### Task 20 full-band fit to the digitized CSV COMPLETE — CSV binding ±0.5 dB
 
 User-directed (recreate the fit-check): the tone bank now tracks
-`analysis/u5_tone_curves_digitized.csv` within **±0.5 dB over 40 Hz–15 kHz
+`analysis/u5_tone_curves_from_claude.csv` within **±0.5 dB over 40 Hz–15 kHz
 at every CSV point** on every tone except T2 (recorded deviation, below).
 Hierarchy (user ruling, supersedes Tasks 12/15/17): **digitized CSV binding
 full-band; eye-read header advisory; IR shapes advisory (reported, not
-gated)** — the user judges the CSV + `docs/refs/u5_tone_fit_check.png`
+gated)** — the user judges the CSV + `docs/refs/u5_tone_fit_check_from_claude.png`
 truer than both the eye-reads and the captures. Low end keeps Task-17
 gates ([40,200] Hz ±0.3 dB, T2 ±0.5); 10–40 Hz stays excluded (chart-noise
 floor); highcut-ON captures stay non-adjudicating (Ruling A); HighCut.h
@@ -333,7 +333,7 @@ sections for 0.44 dB here. Pending user ruling: topology change vs accepted
 deviation. No gate loosened silently, no role changed.
 
 Known user complaints verified on the regen `docs/tone-curves.png` against
-`docs/refs/u5_tone_fit_check.png` panel by panel: T1 scoop bottom tracks the
+`docs/refs/u5_tone_fit_check_from_claude.png` panel by panel: T1 scoop bottom tracks the
 picture's dip depth (−7.18 dB @ 697 Hz within 0.28 dB); T3 keeps its slight
 low-end dip (tracked, visibly not flat); T3/T4 read as non-twins (gentle
 scoop vs flat shelf + 6 kHz dip). Sub-40 Hz divergences (HP plunge on

@@ -149,7 +149,7 @@ def fit_tone(sections, tgt_nodal, tgt_csv, zm):
 
 def main():
     cf, cc = [], {}
-    with open(os.path.join(REPO, "analysis", "u5_tone_curves_digitized.csv"),
+    with open(os.path.join(REPO, "analysis", "u5_tone_curves_from_claude.csv"),
               newline="") as fh:
         import csv as _csv
         for row in _csv.DictReader(fh):

@@ -31,7 +31,7 @@ int gFailures = 0;
     } while (0)
 
 #if !defined(TONE_CSV_PATH)
-#define TONE_CSV_PATH "../analysis/u5_tone_curves_digitized.csv"
+#define TONE_CSV_PATH "../analysis/u5_tone_curves_from_claude.csv"
 #endif
 
 struct DenseCurve
