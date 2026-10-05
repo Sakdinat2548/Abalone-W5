@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneW5 VERSION 1.0.0)
+project(AbaloneW5 VERSION 1.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -64,6 +64,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(AbaloneW5
+    VERSION ${PROJECT_VERSION}
     COMPANY_NAME "Sakdinat2548"
     PLUGIN_MANUFACTURER_CODE SA48
     PLUGIN_CODE AbW5
@@ -145,7 +146,7 @@ target_link_libraries(AbaloneW5
 # Task 11 headless channel-layout test: drives the REAL processor. Linking the
 # juce:: modules compiles their sources into this target (JUCE INTERFACE
 # sources), so src/PluginProcessor.cpp + src/PluginEditor.cpp build here too;
-# only JucePlugin_Name is needed (the sole JucePlugin_* macro used in src/).
+# only JucePlugin_Name/VersionString are needed (the sole JucePlugin_* macros used in src/).
 # Deliberately NOT via add_dsp_test(): that helper undefines NDEBUG, which
 # would enable JUCE_DEBUG (leak-checker statics, extra debug paths) inside a
 # headless pass/fail binary. The checks in ProcessorIOTest.cpp are explicit
@@ -153,6 +154,7 @@ target_link_libraries(AbaloneW5
 add_executable(ProcessorIOTest tests/ProcessorIOTest.cpp src/PluginProcessor.cpp src/PluginEditor.cpp)
 target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5"
+    JucePlugin_VersionString="${PROJECT_VERSION}")
     # Same as the plugin target below: no web browser in the test binary, so
     # juce_gui_extra compiles without its gtk/webkit Linux system deps.
     JUCE_WEB_BROWSER=0

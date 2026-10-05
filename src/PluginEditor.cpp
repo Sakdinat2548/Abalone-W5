@@ -382,6 +382,14 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     else
         g.fillAll (juce::Colour (0xff1a1c20));
 
+    // Version stamp, bottom-left corner (small, dim — never on a control).
+    // From juce_add_plugin(VERSION) / test-target definitions, both fed by
+    // CMake project() VERSION — single source, bump there on release.
+    g.setFont (juce::Font (juce::FontOptions (11.0f * scale)));
+    g.setColour (juce::Colour (0xff8a8f96));
+    g.drawText ("v" JucePlugin_VersionString, juce::roundToInt (8.0f * scale), h - juce::roundToInt (20.0f * scale),
+                juce::roundToInt (120.0f * scale), juce::roundToInt (14.0f * scale), juce::Justification::left, false);
+
     // ABALONE masthead: the SVG asset centered in the header slot (texture
     // y=98.5 cap-center, ~50px cap to match the hardware badge; the slot box
     // is padded, drawWithin centres the art). No fallback: the embedded SVG
