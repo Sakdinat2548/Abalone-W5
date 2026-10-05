@@ -92,12 +92,22 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 
         if (bodyImage.isValid())
         {
+            // Knob well: dark recess ring + 1px top-light arc under the
+            // knob PNG, so it sits IN the panel instead of on it.
+            const float cx = fx + static_cast<float> (width) * 0.5f;
+            const float cy = fy + static_cast<float> (height) * 0.5f;
+            const float wr = side * 0.52f;
+            g.setColour (juce::Colour (0x99000000));
+            g.fillEllipse (cx - wr, cy - wr, wr * 2.0f, wr * 2.0f);
+            juce::Path hiArc;
+            hiArc.addArc (cx - wr, cy - wr, wr * 2.0f, wr * 2.0f, juce::MathConstants<float>::pi * 1.15f,
+                          juce::MathConstants<float>::pi * 1.85f, true);
+            g.setColour (juce::Colour (0x59ffffff));
+            g.strokePath (hiArc, juce::PathStrokeType (juce::jmax (1.0f, side * 0.006f)));
             // Circular clip keeps the photo frame's square corners (and any
             // surround plate/numeral fragments) off the faceplate. The knob
             // bevel sits at ~102/224 of the frame half-side; the clip at
             // 108/224 keeps the dark outline ring and drops the surround.
-            const float cx = fx + static_cast<float> (width) * 0.5f;
-            const float cy = fy + static_cast<float> (height) * 0.5f;
             juce::Path clip;
             clip.addEllipse (cx - side * 0.4821f, cy - side * 0.4821f, side * 0.9642f, side * 0.9642f);
             g.saveState();
