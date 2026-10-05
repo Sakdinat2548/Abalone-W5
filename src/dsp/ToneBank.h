@@ -6,11 +6,15 @@
 
 #include <cmath>
 
-// Tone-bank biquads, Abalone W5 v1 Task-24 tight fit to the digitized gray
-// — analysis/u5_tone_curves_from_claude.csv (121 log-spaced points, 10 Hz-20
-// kHz) is the SOLE binding target over EVERY point 10 Hz-20 kHz inclusive
-// (Ruling 20 — the old 40 Hz+ window under-reported the 10-40 Hz band by up
-// to 0.6 dB). Supersedes all Task-22 numbers; keeps anchor/highcut rulings.
+// Tone-bank biquads, hardware-truth refit (user rulings 2026-10-04/05).
+// Binding oracle per zone (research branch): T1 nodal 5k-20k, T2 avg 1.5k+
+// (kept shipped — twin-V can't render the averaged notch), T3 avg full-band
+// (kept shipped — rate health), T4 chart<1k + avg>=1k (dip 8.0 kHz),
+// T5 nodal 10-300 Hz, T6 nodal 10-300 Hz + 3k-20k. T2/T3 stay v1 numbers.
+// Overall per-tone gains (toneGainDb) reproduce the approved manual-frame
+// curves: level is staging, shapes carry the hardware truth. The
+// Claude-eyeball chart is advisory outside the ruled zones; eye/anchor
+// gates that contradict ruled hardware were re-pointed (see tests).
 // Binding gates, per tone per rate (48 kHz + 44.1 kHz, one number set serves
 // all rates — no rate-specific numbers): max |red-gray| <= 0.15 dB, RMS <=
 // 0.05 dB; T2 <= 0.3 within +/-3% of the 715 Hz notch (user read — the CSV
@@ -133,6 +137,28 @@ struct ToneBank
         select();
     }
 
+    // Overall per-tone gain (dB): reproduces the approved hardware-fit
+    // curves exactly (T1/T4/T5 10 Hz-anchored to shipped staging,
+    // T6 1 kHz-anchored +2.81 dB per user approval). Level is staging,
+    // not oracle data — shapes carry the hardware truth.
+    static float toneGainDb (int tone)
+    {
+        switch (tone)
+        {
+        case 1:
+            return -6.8239f;
+        case 4:
+            return 0.7677f;
+        case 5:
+            return 2.4954f;
+        case 6:
+            return 2.81f;
+        default:
+            break;
+        }
+        return 0.0f;
+    }
+
     // tone 0-6, 0 = bypass (identity). Out-of-range values clamp.
     void setTone (int tone)
     {
@@ -142,6 +168,7 @@ struct ToneBank
             tone = 6;
 
         tone_ = tone;
+        gainLin_ = static_cast<float> (std::pow (10.0, toneGainDb (tone_) / 20.0));
         select();
     }
 
@@ -163,7 +190,7 @@ struct ToneBank
                 c.z2 = 0.0f;
             y = out;
         }
-        return y;
+        return y * gainLin_;
     }
 
     // Exact theoretical cascade response of the selected tone in dB.
@@ -195,7 +222,7 @@ struct ToneBank
             imag = real * hI + imag * hR;
             real = nR;
         }
-        return static_cast<float> (20.0 * std::log10 (std::sqrt (real * real + imag * imag)));
+        return static_cast<float> (20.0 * std::log10 (std::sqrt (real * real + imag * imag))) + toneGainDb (tone_);
     }
 
 private:
@@ -233,17 +260,17 @@ private:
         switch (tone * 10 + stage)
         {
         case 10:
-            return {Type::HighPass, 5.0, 0.40395, 0.0};
+            return {Type::HighPass, 3.8136, 0.46776, 0.0};
         case 11:
-            return {Type::Peak, 49.0866, 0.35951, 1.8346};
+            return {Type::Peak, 19.966, 0.27101, 6.0138};
         case 12:
-            return {Type::Peak, 1048.8736, 0.16364, -13.7137};
+            return {Type::Peak, 919.3987, 0.16448, -9.7137};
         case 13:
-            return {Type::Peak, 1734.5392, 0.21392, 7.1515};
+            return {Type::Peak, 1927.2658, 0.17827, 9.1515};
         case 14:
-            return {Type::HighShelf, 11981.7927, 1.06858, 1.311};
+            return {Type::HighShelf, 8986.3445, 0.48574, 8.1929};
         case 15:
-            return {Type::Peak, 284.8489, 0.89252, 1.335};
+            return {Type::Peak, 135.9733, 0.26901, 5.335};
         case 20:
             return {Type::Peak, 644.5752, 0.31635, -9.5942};
         case 21:
@@ -267,39 +294,39 @@ private:
         case 34:
             return {Type::Peak, 677.6882, 1.72978, -0.2364};
         case 40:
-            return {Type::LowShelf, 23.3315, 0.66438, -2.6291};
+            return {Type::LowShelf, 21.9804, 1.11756, -1.9891};
         case 41:
-            return {Type::Peak, 8815.7501, 1.19986, -2.0138};
+            return {Type::Peak, 16931.4281, 0.23498, -0.9418};
         case 42:
-            return {Type::HighShelf, 12.6487, 1.02216, 1.5772};
+            return {Type::HighShelf, 79.0544, 0.12, -0.2948};
         case 43:
-            return {Type::Peak, 5139.997, 0.66627, -4.9216};
+            return {Type::Peak, 8000.0, 0.69283, -4.128};
         case 44:
-            return {Type::HighShelf, 14083.1316, 0.57743, 1.3207};
+            return {Type::HighShelf, 20928.6602, 0.42978, 1.3207};
         case 45:
-            return {Type::Peak, 9.9251, 3.37706, -0.4468};
+            return {Type::Peak, 10.4613, 4.56174, -1.5092};
         case 50:
-            return {Type::LowShelf, 16.5931, 0.66482, -4.0};
+            return {Type::LowShelf, 10.7876, 0.53104, -5.696};
         case 51:
-            return {Type::LowShelf, 61.4232, 0.42485, -19.2452};
+            return {Type::LowShelf, 52.824, 0.42485, -21.2452};
         case 52:
-            return {Type::HighShelf, 166.6066, 0.51491, 2.5516};
+            return {Type::HighShelf, 217.3673, 0.91213, 0.2316};
         case 53:
-            return {Type::Peak, 732.2752, 1.09303, 0.3299};
+            return {Type::Peak, 388.14, 1.30292, -0.7101};
         case 54:
-            return {Type::Peak, 11.0426, 3.60242, -0.6};
+            return {Type::Peak, 9.3407, 1.41276, -1.7296};
         case 60:
-            return {Type::LowShelf, 17.7493, 0.65975, -3.972};
+            return {Type::LowShelf, 19.5861, 0.84932, -3.652};
         case 61:
-            return {Type::LowShelf, 63.4268, 0.43413, -18.9831};
+            return {Type::LowShelf, 51.7034, 0.42067, -19.1111};
         case 62:
-            return {Type::HighShelf, 198.2506, 0.53229, 2.7376};
+            return {Type::HighShelf, 292.1971, 0.94755, -0.1584};
         case 63:
-            return {Type::HighShelf, 14729.0504, 0.51821, -5.6445};
+            return {Type::HighShelf, 9158.3184, 0.54857, -6.8765};
         case 64:
-            return {Type::Peak, 20141.4081, 1.42257, -0.5909};
+            return {Type::Peak, 18976.0169, 0.8665, -0.9109};
         case 65:
-            return {Type::Peak, 11.1211, 2.63754, -0.7999};
+            return {Type::Peak, 9.3951, 4.00708, -1.8879};
         default:
             break;
         }
@@ -418,6 +445,7 @@ private:
     }
 
     int tone_ = 0;
+    float gainLin_ = 1.0f;
     double sampleRate_ = 48000.0;
     Coeffs bank_[7][6];
     Coeffs active_[6];
