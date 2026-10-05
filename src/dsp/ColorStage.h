@@ -40,6 +40,12 @@
 // Chain calibration (Task 29, see analysis/LEVELS.md): 0 dBFS = +24 dBu, so
 // stage dBu = input_dBFS + 24 + 3N for boost step N; k/a values frozen per map.
 //
+// XLR-cancellation caveat (web research 2026-10-05): the hardware's twin
+// balanced Class-A outputs may partially cancel even-order harmonics at the
+// XLR (matching-dependent, unknown amount). Our H2 level is therefore an
+// upper bound on what the outputs deliver — modeled, not measured. No
+// published H2/H3 spectrum exists to check against.
+//
 // Side effects of the blend (all negligible, measured):
 // - Small-signal gain = k/tanh(k) = 1.00030 (+0.0026dB ~= 1, as brief requires).
 // - DC offset = a*A^2/2: 3.0mV at +10dB, 75mV at +24dB hot. Hardware U5 output
