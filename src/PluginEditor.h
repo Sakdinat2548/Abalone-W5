@@ -96,8 +96,8 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
             // knob PNG, so it sits IN the panel instead of on it.
             const float cx = fx + static_cast<float> (width) * 0.5f;
             const float cy = fy + static_cast<float> (height) * 0.5f;
-            const float wr = side * 0.52f;
-            g.setColour (juce::Colour (0x99000000));
+            const float wr = side * 0.50f;
+            g.setColour (juce::Colour (0x55000000));
             g.fillEllipse (cx - wr, cy - wr, wr * 2.0f, wr * 2.0f);
             juce::Path hiArc;
             hiArc.addArc (cx - wr, cy - wr, wr * 2.0f, wr * 2.0f, juce::MathConstants<float>::pi * 1.15f,
