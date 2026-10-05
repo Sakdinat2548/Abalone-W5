@@ -382,27 +382,6 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     else
         g.fillAll (juce::Colour (0xff1a1c20));
 
-    // Room light: single top-down gradient + edge vignette over the plate
-    // (runtime depth cue — one fill, negligible cost; knobs are child
-    // components so they paint above this, unaffected).
-    {
-        juce::ColourGradient light (juce::Colour (0x0fffffff), 0.0f, 0.0f, juce::Colour (0x00000000), 0.0f,
-                                    static_cast<float> (h) * 0.30f, false);
-        light.addColour (0.55, juce::Colour (0x00000000));
-        light.addColour (1.0, juce::Colour (0x2e000000));
-        g.setGradientFill (light);
-        g.fillRect (0, 0, w, h);
-        const float edge = 46.0f * scale;
-        const juce::Colour edgeCol (0x28000000);
-        juce::ColourGradient left (edgeCol, 0.0f, 0.0f, juce::Colour (0x00000000), edge, 0.0f, false);
-        g.setGradientFill (left);
-        g.fillRect (0, 0, juce::roundToInt (edge), h);
-        juce::ColourGradient right (edgeCol, static_cast<float> (w), 0.0f, juce::Colour (0x00000000),
-                                    static_cast<float> (w) - edge, 0.0f, false);
-        g.setGradientFill (right);
-        g.fillRect (w - juce::roundToInt (edge), 0, juce::roundToInt (edge), h);
-    }
-
     // Version stamp, bottom-left corner (small, dim — never on a control).
     // From juce_add_plugin(VERSION) / test-target definitions, both fed by
     // CMake project() VERSION — single source, bump there on release.
@@ -447,9 +426,6 @@ void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Recta
     const int panelH = getHeight();
     const int tx = knob.getCentreX() - lw / 2;
     const int ty = panelH - juce::roundToInt (34.0f * scale);
-    // Embossed ink: light offset copy first, dark text on top.
-    g.setColour (juce::Colour (0xb3ffffff));
-    g.drawText (text, tx, ty + juce::roundToInt (1.0f * scale), lw, lh, juce::Justification::centred, false);
     g.setColour (juce::Colour (0xff1b1b1c));
     g.drawText (text, tx, ty, lw, lh, juce::Justification::centred, false);
 }
