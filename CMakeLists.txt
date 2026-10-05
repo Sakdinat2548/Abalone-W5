@@ -154,7 +154,7 @@ target_link_libraries(AbaloneW5
 add_executable(ProcessorIOTest tests/ProcessorIOTest.cpp src/PluginProcessor.cpp src/PluginEditor.cpp)
 target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5"
-    JucePlugin_VersionString="${PROJECT_VERSION}")
+    JucePlugin_VersionString="${PROJECT_VERSION}"
     # Same as the plugin target below: no web browser in the test binary, so
     # juce_gui_extra compiles without its gtk/webkit Linux system deps.
     JUCE_WEB_BROWSER=0
