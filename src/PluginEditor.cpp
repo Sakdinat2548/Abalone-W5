@@ -49,6 +49,22 @@ juce::Rectangle<int> scaledRect (const std::map<juce::String, juce::Rectangle<fl
                                  juce::roundToInt (r.getHeight() * static_cast<float> (h)));
 }
 
+// Float twin of scaledRect: the TRUE slot rect with no int rounding. Slot-art
+// controls (FloatArtButton/Led) draw their 1:1 PNGs at this rect (minus the
+// component origin), so art registers sub-pixel-exact on the stretched plate.
+juce::Rectangle<float> scaledRectF (const std::map<juce::String, juce::Rectangle<float>>& layout,
+                                    const juce::String& name, int w, int h)
+{
+    const auto it = layout.find (name);
+    jassert (it != layout.end());
+    if (it == layout.end())
+        return {};
+    const auto& r = it->second;
+    const float fw = static_cast<float> (w), fh = static_cast<float> (h);
+    return juce::Rectangle<float> ((r.getX() - r.getWidth() * 0.5f) * fw, (r.getY() - r.getHeight() * 0.5f) * fh,
+                                   r.getWidth() * fw, r.getHeight() * fh);
+}
+
 // Measured width of the tracked-out header string (shared by the paint
 // routines and the click hit-test so the rect always matches the art).
 float headerTextWidth (const juce::Font& font, const juce::String& text, float trackingPx)
@@ -111,17 +127,24 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         imageFromBinary (BinaryData::V110small_pointer_png, BinaryData::V110small_pointer_pngSize);
     boostDialLookAndFeel.dialSidePx = 420.0f;
     boostDialLookAndFeel.needleWPx = 18.0f;
-    boostDialLookAndFeel.needleHPx = 61.0f;
+    boostDialLookAndFeel.needleHPx = 113.0f;
     toneDialLookAndFeel.dialSidePx = 420.0f;
     toneDialLookAndFeel.needleWPx = 18.0f;
-    toneDialLookAndFeel.needleHPx = 61.0f;
+    toneDialLookAndFeel.needleHPx = 113.0f;
     trimDialLookAndFeel.dialSidePx = 110.0f;
     trimDialLookAndFeel.needleWPx = 6.0f;
-    trimDialLookAndFeel.needleHPx = 20.0f;
-    toggleLookAndFeel.onImage = imageFromBinary (BinaryData::V110button_on_png, BinaryData::V110button_on_pngSize);
-    toggleLookAndFeel.offImage = imageFromBinary (BinaryData::V110button_off_png, BinaryData::V110button_off_pngSize);
-    ledOnImage = imageFromBinary (BinaryData::V110led_on_png, BinaryData::V110led_on_pngSize);
-    ledOffImage = imageFromBinary (BinaryData::V110led_off_png, BinaryData::V110led_off_pngSize);
+    trimDialLookAndFeel.needleHPx = 33.0f;
+    // Slot art is 1:1 with the plate (buttons 103x48, LED globes 47x48), so
+    // every slot control shares the same pair; float dest rects in resized()
+    // land them sub-pixel-exact with no scaling (see FloatArtButton).
+    highcutButton.onImage = imageFromBinary (BinaryData::V110button_on_png, BinaryData::V110button_on_pngSize);
+    highcutButton.offImage = imageFromBinary (BinaryData::V110button_off_png, BinaryData::V110button_off_pngSize);
+    toneEngageButton.onImage = highcutButton.onImage;
+    toneEngageButton.offImage = highcutButton.offImage;
+    activeButton.onImage = highcutButton.onImage;
+    activeButton.offImage = highcutButton.offImage;
+    signalLedImage.onImage = imageFromBinary (BinaryData::V110led_on_png, BinaryData::V110led_on_pngSize);
+    signalLedImage.offImage = imageFromBinary (BinaryData::V110led_off_png, BinaryData::V110led_off_pngSize);
 
     layoutRatios = parseLayoutCsv (BinaryData::positions_csv, BinaryData::positions_csvSize);
 
@@ -260,25 +283,19 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     };
     addAndMakeVisible (trimReadout);
 
-    highcutButton.setLookAndFeel (&toggleLookAndFeel);
     highcutButton.setClickingTogglesState (true);
     addAndMakeVisible (highcutButton);
 
     // Both red buttons are plain attachments: TONE drives `toneIn`, ACTIVE
     // drives `active`. Sync (incl. first paint) is the attachments' job;
     // the timer never touches them.
-    toneEngageButton.setLookAndFeel (&toggleLookAndFeel);
     toneEngageButton.setClickingTogglesState (true);
     addAndMakeVisible (toneEngageButton);
 
-    activeButton.setLookAndFeel (&toggleLookAndFeel);
     activeButton.setClickingTogglesState (true);
     addAndMakeVisible (activeButton);
 
-    signalLedImage.setImage (ledOffImage);
-    // stretchToFit: the globe art (47x48) is 1px narrower than its 48x48
-    // red slot, so centred placement would leave a red sliver.
-    signalLedImage.setImagePlacement (juce::RectanglePlacement::stretchToFit);
+    signalLedImage.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (signalLedImage);
 
     // Lights-off veil LAST so it paints over every control including POWER.
@@ -348,9 +365,6 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 AbaloneW5AudioProcessorEditor::~AbaloneW5AudioProcessorEditor ()
 {
     stopTimer();
-    highcutButton.setLookAndFeel (nullptr);
-    toneEngageButton.setLookAndFeel (nullptr);
-    activeButton.setLookAndFeel (nullptr);
     boostSlider.setLookAndFeel (nullptr);
     toneSlider.setLookAndFeel (nullptr);
     outputSlider.setLookAndFeel (nullptr);
@@ -440,24 +454,35 @@ void AbaloneW5AudioProcessorEditor::resized ()
                            h - juce::roundToInt (34.0f * scale), juce::roundToInt (120.0f * scale),
                            juce::roundToInt (16.0f * scale));
     osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
-    // Buttons/LED over red placeholders: +1px all round so int-rounded
-    // bounds can never leave a red fringe (art stretches, 1:1 by design).
-    highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h).expanded (1));
-    toneEngageButton.setBounds (scaledRect (layoutRatios, "tone_button", w, h).expanded (1));
-    activeButton.setBounds (scaledRect (layoutRatios, "active_button", w, h).expanded (1));
-    signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h).expanded (1));
+    // Slot-art controls: integer bounds for hit-testing, float dest rects
+    // for the art — 1:1 PNGs land sub-pixel-exact on the red slots, never
+    // scaled up or overlapped (see FloatArtButton).
+    const auto placeButton = [this, w, h] (FloatArtButton& b, const juce::String& name)
+    {
+        b.setBounds (scaledRect (layoutRatios, name, w, h));
+        b.dest = scaledRectF (layoutRatios, name, w, h) - b.getPosition().toFloat();
+    };
+    placeButton (highcutButton, "highcut_button");
+    placeButton (toneEngageButton, "tone_button");
+    placeButton (activeButton, "active_button");
+    {
+        signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
+        const auto origin = signalLedImage.getPosition().toFloat();
+        const auto slot = scaledRectF (layoutRatios, "signal_led", w, h);
+        signalLedImage.offDest = slot - origin;
+        // ON art's top-left light spill skews its globe ~1.2 texture-px up
+        // (measured bright-centroid delta), so its dest shifts down to land
+        // both lenses on the same center.
+        signalLedImage.onDest =
+            slot.translated (0.3f * static_cast<float> (w) / 1969.0f, 1.2f * static_cast<float> (h) / 799.0f) - origin;
+    }
     dimOverlay.setBounds (0, 0, w, h);
 }
 
 void AbaloneW5AudioProcessorEditor::timerCallback ()
 {
     const float peak = processor.getSignalPeak();
-    const bool shouldBeOn = peak >= kLedThreshold;
-    if (shouldBeOn != ledOn)
-    {
-        ledOn = shouldBeOn;
-        signalLedImage.setImage (ledOn ? ledOnImage : ledOffImage);
-    }
+    signalLedImage.setLit (peak >= kLedThreshold);
 
     // Lights-off veil follows ACTIVE (lifts instantly on re-engage),
     // driven here on the existing 30Hz timer — no new threads, no fading.

@@ -114,21 +114,48 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
     }
 };
 
-// Toggle look-and-feel driven by the user's button_on/off.png pair (loaded
-// once in the editor constructor, never on the audio thread).
-struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
+// Slot-art control: draws its PNG at a float dest rect (set in resized())
+// instead of integer component bounds, so 1:1-exported art registers
+// exactly with the stretched baked plate — no scaling, no cover-up overlap.
+// The art is slot-sized by design, so dest size == true slot size; only the
+// position is sub-pixel. Plain ToggleButton otherwise (attachments stay).
+struct FloatArtButton : public juce::ToggleButton
 {
-    juce::Image onImage;
-    juce::Image offImage;
+    juce::Image onImage, offImage;
+    juce::Rectangle<float> dest;
 
-    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
+    void paint (juce::Graphics& g) override
     {
-        const juce::Image& img = button.getToggleState() ? onImage : offImage;
-        if (img.isValid())
-            // stretchToFit (not centred): art is exactly slot-sized, so any
-            // int-rounding sliver of the red placeholder stays covered.
-            g.drawImageWithin (img, 0, 0, button.getWidth(), button.getHeight(),
-                               juce::RectanglePlacement::stretchToFit);
+        const juce::Image& img = getToggleState() ? onImage : offImage;
+        if (img.isValid() && !dest.isEmpty())
+            g.drawImage (img, dest);
+    }
+};
+
+// Same float-dest idea for the SIGNAL LED (non-interactive). The ON art
+// carries a top-left light spill that skews its globe ~1.2px up vs OFF, so
+// the ON dest is shifted down to land the lenses on each other (see ctor).
+struct FloatArtLed : public juce::Component
+{
+    juce::Image onImage, offImage;
+    juce::Rectangle<float> offDest, onDest;
+    bool lit = false;
+
+    void setLit (bool shouldBeOn)
+    {
+        if (shouldBeOn != lit)
+        {
+            lit = shouldBeOn;
+            repaint();
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const juce::Image& img = lit ? onImage : offImage;
+        const auto& d = lit ? onDest : offDest;
+        if (img.isValid() && !d.isEmpty())
+            g.drawImage (img, d);
     }
 };
 
@@ -190,15 +217,11 @@ private:
                                // the oval (black plate ink). Single-click editable: type a
                                // number, Enter commits (clamped -30..0), Esc cancels.
                                // Follows the param while idle (see timerCallback).
-    juce::ToggleButton highcutButton;
-    juce::ToggleButton toneEngageButton; // attached to `toneIn`.
-    juce::ToggleButton activeButton;     // attached to `active` (power switch).
-    juce::ImageComponent signalLedImage;
+    FloatArtButton highcutButton;
+    FloatArtButton toneEngageButton; // attached to `toneIn`.
+    FloatArtButton activeButton;     // attached to `active` (power switch).
+    FloatArtLed signalLedImage;
     DimOverlay dimOverlay; // lights-off veil, visible only while ACTIVE is off.
-
-    PngToggleLookAndFeel toggleLookAndFeel;
-    juce::Image ledOnImage;
-    juce::Image ledOffImage;
 
     // Masthead: the user-supplied ui/abalone.svg (BinaryData drawable),
     // drawn centered in the header slot; the in-code engraved Cinzel
@@ -219,7 +242,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toneInAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
 
-    bool ledOn = false;
     bool dimVisible = false;
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).
