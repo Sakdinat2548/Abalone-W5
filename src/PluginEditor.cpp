@@ -460,10 +460,10 @@ void AbaloneW5AudioProcessorEditor::resized ()
     // Slot-art controls: bounds fit the ART (not the slot) so spillover like
     // the LED glow is never clipped by the component frame; the art itself
     // draws at its float dest, 1:1 and unscaled (see FloatArtButton). Slots
-    // nudge +1 texture-px right / +1 down: pixel-aligned art read a hair
+    // nudge +0.5 texture-px right / +0.5 down: pixel-aligned art read a hair
     // up-left of the slots. Single constants — adjust on visual check.
-    const float nudgeX = 1.0f * static_cast<float> (w) / 1969.0f;
-    const float nudgeY = 1.0f * static_cast<float> (h) / 799.0f;
+    const float nudgeX = 0.5f * static_cast<float> (w) / 1969.0f;
+    const float nudgeY = 0.5f * static_cast<float> (h) / 799.0f;
     const auto placeButton = [this, w, h, nudgeX, nudgeY] (FloatArtButton& b, const juce::String& name)
     {
         const auto dest = scaledRectF (layoutRatios, name, w, h).translated (nudgeX, nudgeY);
