@@ -59,13 +59,15 @@ class AbaloneW5AudioProcessor;
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
     // v110: knob bodies live in the baked plate — code draws ONLY the
-    // needle (straight-up 12 o'clock art), pivot at needle-art
-    // bottom-center, sized in texture px (dialSidePx square) so it scales
-    // with the aspect-locked window.
+    // needle (straight-up 12 o'clock art) at NATURAL art size (never
+    // stretched: needleWPx/HPx == PNG px). It sits outer-rim like a tire
+    // tread — tip at rimPx from the axle, butt floating over the face —
+    // rotating about the axle (dial center).
     juce::Image needleImage;
     float dialSidePx = 420.0f;
-    float needleWPx = 15.0f;
-    float needleHPx = 95.0f;
+    float needleWPx = 18.0f;
+    float needleHPx = 61.0f;
+    float rimPx = 113.0f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
     std::vector<float> detentDeg;
@@ -96,19 +98,21 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 
         if (needleImage.isValid())
         {
-            // Needle only (bodies live in the baked plate): fixed texture-px
-            // size, art bottom (= pivot) on the dial center, pointing at 12
-            // o'clock at rotation 0. Rotation angle IS the needle angle
-            // (clockwise-from-12, y-down screen space).
+            // Needle only (bodies live in the baked plate), drawn UNSTRETCHED
+            // at natural art size: tip at rimPx from the axle, butt floating
+            // over the face (tire-tread, never spanning the radius). Art
+            // points at 12 o'clock at rotation 0; rotation angle IS the
+            // needle angle (clockwise-from-12, y-down screen space).
             const float k = side / dialSidePx;
             const float pw = needleWPx * k;
             const float ph = needleHPx * k;
+            const float rim = rimPx * k;
             const float cx = fx + static_cast<float> (width) * 0.5f;
             const float cy = fy + static_cast<float> (height) * 0.5f;
             const float angle = needleAngleFor (sliderPos) * juce::MathConstants<float>::pi / 180.0f;
             g.saveState();
             g.addTransform (juce::AffineTransform::rotation (angle, cx, cy));
-            g.drawImage (needleImage, juce::Rectangle<float> (cx - pw * 0.5f, cy - ph, pw, ph));
+            g.drawImage (needleImage, juce::Rectangle<float> (cx - pw * 0.5f, cy - rim, pw, ph));
             g.restoreState();
         }
     }
@@ -132,9 +136,9 @@ struct FloatArtButton : public juce::ToggleButton
     }
 };
 
-// Same float-dest idea for the SIGNAL LED (non-interactive). The ON art
-// carries a top-left light spill that skews its globe ~1.2px up vs OFF, so
-// the ON dest is shifted down to land the lenses on each other (see ctor).
+// Same float-dest idea for the SIGNAL LED (non-interactive). ON/OFF arts
+// are globe-matched by construction (same crop geometry), so both states
+// share one dest and the lens never jumps.
 struct FloatArtLed : public juce::Component
 {
     juce::Image onImage, offImage;

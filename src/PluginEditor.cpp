@@ -127,13 +127,16 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         imageFromBinary (BinaryData::V110small_pointer_png, BinaryData::V110small_pointer_pngSize);
     boostDialLookAndFeel.dialSidePx = 420.0f;
     boostDialLookAndFeel.needleWPx = 18.0f;
-    boostDialLookAndFeel.needleHPx = 113.0f;
+    boostDialLookAndFeel.needleHPx = 61.0f;
+    boostDialLookAndFeel.rimPx = 113.0f;
     toneDialLookAndFeel.dialSidePx = 420.0f;
     toneDialLookAndFeel.needleWPx = 18.0f;
-    toneDialLookAndFeel.needleHPx = 113.0f;
+    toneDialLookAndFeel.needleHPx = 61.0f;
+    toneDialLookAndFeel.rimPx = 113.0f;
     trimDialLookAndFeel.dialSidePx = 110.0f;
     trimDialLookAndFeel.needleWPx = 6.0f;
-    trimDialLookAndFeel.needleHPx = 33.0f;
+    trimDialLookAndFeel.needleHPx = 20.0f;
+    trimDialLookAndFeel.rimPx = 33.0f;
     // Slot art is 1:1 with the plate (buttons 103x48, LED globes 47x48), so
     // every slot control shares the same pair; float dest rects in resized()
     // land them sub-pixel-exact with no scaling (see FloatArtButton).
@@ -456,11 +459,13 @@ void AbaloneW5AudioProcessorEditor::resized ()
     osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
     // Slot-art controls: integer bounds for hit-testing, float dest rects
     // for the art — 1:1 PNGs land sub-pixel-exact on the red slots, never
-    // scaled up or overlapped (see FloatArtButton).
-    const auto placeButton = [this, w, h] (FloatArtButton& b, const juce::String& name)
+    // scaled up or overlapped (see FloatArtButton). All four slots nudge +2
+    // texture-px right: pixel-aligned art read a hair left of the slots.
+    const auto nudgeX = 2.0f * static_cast<float> (w) / 1969.0f;
+    const auto placeButton = [this, w, h, nudgeX] (FloatArtButton& b, const juce::String& name)
     {
         b.setBounds (scaledRect (layoutRatios, name, w, h));
-        b.dest = scaledRectF (layoutRatios, name, w, h) - b.getPosition().toFloat();
+        b.dest = scaledRectF (layoutRatios, name, w, h).translated (nudgeX, 0.0f) - b.getPosition().toFloat();
     };
     placeButton (highcutButton, "highcut_button");
     placeButton (toneEngageButton, "tone_button");
@@ -468,13 +473,10 @@ void AbaloneW5AudioProcessorEditor::resized ()
     {
         signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
         const auto origin = signalLedImage.getPosition().toFloat();
-        const auto slot = scaledRectF (layoutRatios, "signal_led", w, h);
-        signalLedImage.offDest = slot - origin;
-        // ON art's top-left light spill skews its globe ~1.2 texture-px up
-        // (measured bright-centroid delta), so its dest shifts down to land
-        // both lenses on the same center.
-        signalLedImage.onDest =
-            slot.translated (0.3f * static_cast<float> (w) / 1969.0f, 1.2f * static_cast<float> (h) / 799.0f) - origin;
+        // ON art is globe-matched to OFF by construction (same 47x48 crop
+        // geometry), so both states share one dest — no lens skew.
+        signalLedImage.offDest = scaledRectF (layoutRatios, "signal_led", w, h).translated (nudgeX, 0.0f) - origin;
+        signalLedImage.onDest = signalLedImage.offDest;
     }
     dimOverlay.setBounds (0, 0, w, h);
 }
