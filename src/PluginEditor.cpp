@@ -276,6 +276,9 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     addAndMakeVisible (activeButton);
 
     signalLedImage.setImage (ledOffImage);
+    // stretchToFit: the globe art (47x48) is 1px narrower than its 48x48
+    // red slot, so centred placement would leave a red sliver.
+    signalLedImage.setImagePlacement (juce::RectanglePlacement::stretchToFit);
     addAndMakeVisible (signalLedImage);
 
     // Lights-off veil LAST so it paints over every control including POWER.
@@ -437,10 +440,12 @@ void AbaloneW5AudioProcessorEditor::resized ()
                            h - juce::roundToInt (34.0f * scale), juce::roundToInt (120.0f * scale),
                            juce::roundToInt (16.0f * scale));
     osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
-    highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h));
-    toneEngageButton.setBounds (scaledRect (layoutRatios, "tone_button", w, h));
-    activeButton.setBounds (scaledRect (layoutRatios, "active_button", w, h));
-    signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
+    // Buttons/LED over red placeholders: +1px all round so int-rounded
+    // bounds can never leave a red fringe (art stretches, 1:1 by design).
+    highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h).expanded (1));
+    toneEngageButton.setBounds (scaledRect (layoutRatios, "tone_button", w, h).expanded (1));
+    activeButton.setBounds (scaledRect (layoutRatios, "active_button", w, h).expanded (1));
+    signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h).expanded (1));
     dimOverlay.setBounds (0, 0, w, h);
 }
 

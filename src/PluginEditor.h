@@ -125,7 +125,10 @@ struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
     {
         const juce::Image& img = button.getToggleState() ? onImage : offImage;
         if (img.isValid())
-            g.drawImageWithin (img, 0, 0, button.getWidth(), button.getHeight(), juce::RectanglePlacement::centred);
+            // stretchToFit (not centred): art is exactly slot-sized, so any
+            // int-rounding sliver of the red placeholder stays covered.
+            g.drawImageWithin (img, 0, 0, button.getWidth(), button.getHeight(),
+                               juce::RectanglePlacement::stretchToFit);
     }
 };
 
