@@ -13,9 +13,9 @@
 name,cx,cy,w,h,note
 boost_dial,0.226507,0.444305,0.213311,0.525657,big baked knob (ring fit), needle 15x95 pivot bottom-center, 10 detents exact-tick table in PluginEditor.cpp
 tone_dial,0.765363,0.440551,0.213311,0.525657,big baked knob, needle 15x95 pivot bottom-center, 6 detents exact-tick table in PluginEditor.cpp
-highcut_button,0.164044,0.734043,0.051802,0.058823,red HIGH CUT slot 272-374 x 563-610
-active_button,0.742512,0.734043,0.051802,0.058823,red ACTIVE slot 1411-1513 x 563-610 drives active param (power switch; THRU = internal bypass)
-tone_button,0.836461,0.734043,0.051802,0.058823,red TONE slot 1596-1698 x 563-610 drives toneIn param
-signal_led,0.319959,0.733417,0.023868,0.058823,live SIGNAL LED at -2dBFS threshold, red circle d47 at (630,586)
+highcut_button,0.164044,0.734043,0.052311,0.060075,red HIGH CUT slot, art 103x48 natural centered
+active_button,0.742512,0.734043,0.052311,0.060075,red ACTIVE slot, art 103x48 natural centered
+tone_button,0.836461,0.734043,0.052311,0.060075,red TONE slot, art 103x48 natural centered
+signal_led,0.319959,0.733417,0.023868,0.060075,live SIGNAL LED, art 47x48 globe in 48x48 slot at (630,586)
 trim_dial,0.622654,0.818523,0.055863,0.137672,small baked knob right (1226,654) r~38, needle 5x30 pivot bottom-center, cut-only OUTPUT TRIM -30..0dB linear 225/270, readout label below in-code
 os_dial,0.369222,0.816020,0.055863,0.137672,small baked knob left (727,652) r~38, needle 5x30 pivot bottom-center, 3-position OS FACTOR 1x/2x/4x linear 225/270, readout label below in-code

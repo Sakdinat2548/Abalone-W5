@@ -95,7 +95,9 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // sans ~7px on screen; UI readouts render one step larger for legibility
     // in the same family and ink (0xff1b1b1c), like INPUT/THRU read at a
     // glance. Scale-aware (rebuilt in resized()).
-    : AudioProcessorEditor (&p), processor (p), readoutFont (juce::Font (juce::FontOptions (12.0f).withStyle ("Bold")))
+    // Readout cap-height matches the baked plate captions (~18px at
+    // 1969px texture width): 9.5px Bold system sans at 1x scale.
+    : AudioProcessorEditor (&p), processor (p), readoutFont (juce::Font (juce::FontOptions (9.5f).withStyle ("Bold")))
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
@@ -108,14 +110,14 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     trimDialLookAndFeel.needleImage =
         imageFromBinary (BinaryData::V110small_pointer_png, BinaryData::V110small_pointer_pngSize);
     boostDialLookAndFeel.dialSidePx = 420.0f;
-    boostDialLookAndFeel.needleWPx = 15.0f;
-    boostDialLookAndFeel.needleHPx = 95.0f;
+    boostDialLookAndFeel.needleWPx = 18.0f;
+    boostDialLookAndFeel.needleHPx = 61.0f;
     toneDialLookAndFeel.dialSidePx = 420.0f;
-    toneDialLookAndFeel.needleWPx = 15.0f;
-    toneDialLookAndFeel.needleHPx = 95.0f;
+    toneDialLookAndFeel.needleWPx = 18.0f;
+    toneDialLookAndFeel.needleHPx = 61.0f;
     trimDialLookAndFeel.dialSidePx = 110.0f;
-    trimDialLookAndFeel.needleWPx = 5.0f;
-    trimDialLookAndFeel.needleHPx = 30.0f;
+    trimDialLookAndFeel.needleWPx = 6.0f;
+    trimDialLookAndFeel.needleHPx = 20.0f;
     toggleLookAndFeel.onImage = imageFromBinary (BinaryData::V110button_on_png, BinaryData::V110button_on_pngSize);
     toggleLookAndFeel.offImage = imageFromBinary (BinaryData::V110button_off_png, BinaryData::V110button_off_pngSize);
     ledOnImage = imageFromBinary (BinaryData::V110led_on_png, BinaryData::V110led_on_pngSize);
@@ -389,17 +391,6 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     }
 
     drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
-
-    // OS/TRIM captions above the mini-knobs (the v110 plate prints none;
-    // same ink as the baked captions, bold system sans).
-    g.setFont (juce::Font (juce::FontOptions (13.0f * scale).withStyle ("Bold")));
-    g.setColour (juce::Colour (0xff1b1b1c));
-    const auto osBox = scaledRect (layoutRatios, "os_dial", w, h);
-    const auto trimBox = scaledRect (layoutRatios, "trim_dial", w, h);
-    g.drawText ("OS", osBox.getX(), osBox.getY() - juce::roundToInt (26.0f * scale), osBox.getWidth(),
-                juce::roundToInt (18.0f * scale), juce::Justification::centred, false);
-    g.drawText ("TRIM", trimBox.getX(), trimBox.getY() - juce::roundToInt (26.0f * scale), trimBox.getWidth(),
-                juce::roundToInt (18.0f * scale), juce::Justification::centred, false);
 }
 
 // OS factor readout, centered UNDER the OS mini-knob on the silver strip
@@ -412,7 +403,7 @@ void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Recta
 {
     const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
     const char* text = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
-    g.setFont (juce::Font (juce::FontOptions (12.0f * scale).withStyle ("Bold")));
+    g.setFont (juce::Font (juce::FontOptions (9.5f * scale).withStyle ("Bold")));
     g.setColour (juce::Colour (0xff1b1b1c));
     const int lw = juce::roundToInt (90.0f * scale);
     const int lh = juce::roundToInt (16.0f * scale);
@@ -431,7 +422,7 @@ void AbaloneW5AudioProcessorEditor::resized ()
 
     // Typeface follows the window scale (rebuilt here on the message thread,
     // never on audio).
-    readoutFont = juce::Font (juce::FontOptions (12.0f * scale).withStyle ("Bold"));
+    readoutFont = juce::Font (juce::FontOptions (9.5f * scale).withStyle ("Bold"));
     trimReadout.setFont (readoutFont);
 
     boostSlider.setBounds (scaledRect (layoutRatios, "boost_dial", w, h));
