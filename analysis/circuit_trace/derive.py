@@ -20,7 +20,8 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-CSV_ORACLE = os.path.join(REPO, "analysis", "u5_tone_curves_digitized.csv")
+CSV_ORACLE = os.path.join(REPO, "analysis", "u5_tone_curves_from_claude.csv")
+CSV_V2 = os.path.join(REPO, "analysis", "u5_tone_curves_digitized_v2.csv")
 BIQUADS = os.path.join(REPO, "analysis", "u5_tone_biquads.json")
 IR_DIR = os.path.join(REPO, "analysis", "ir_local")
 
@@ -62,6 +63,21 @@ def db(x):
 def load_csv():
     d = np.genfromtxt(CSV_ORACLE, delimiter=",", skip_header=1)
     return d[:, 0], {n + 1: d[:, n + 1] for n in range(6)}
+
+
+def load_csv_v2():
+    d = np.genfromtxt(CSV_V2, delimiter=",", skip_header=1)
+    return d[:, 0], {n + 1: d[:, n + 1] for n in range(6)}
+
+
+def nodal_response(fgrid):
+    """Traced-netlist nodal sim (nodal_tone.py NETS), dB per tone same grid."""
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import nodal_tone
+    V = nodal_tone.solve(fgrid)
+    H = 20 * np.log10(np.maximum(V, 1e-30))
+    return {n + 1: H[n] for n in range(6)}
 
 
 def dsp_response(sections, f, fs=48000.0):
@@ -207,8 +223,10 @@ def fit_tone(blocks, p0, f, target):
 
 def main():
     ff, curves = load_csv()
+    ff2, curves2 = load_csv_v2()
     dsp = load_dsp()
     fgrid = np.logspace(np.log10(40), np.log10(15000), 200)
+    nodal = nodal_response(fgrid)
     thr, dth, ith = [], [], []
     have_ir = os.path.isdir(IR_DIR) and any(
         os.path.exists(os.path.join(IR_DIR, "AVALON_TONE%d.wav" % n)) for n in range(7)
@@ -270,11 +288,20 @@ def main():
             ("worst@%.0fHz" % fgrid[np.argmax(np.abs(e))] if vt == "DIVERGE" else "")))
         if do_plot:
             fig, ax = plt.subplots(figsize=(7, 4))
-            ax.semilogx(ff, curves[n], ".", ms=2, label="CSV oracle")
-            ax.semilogx(fgrid, theo, label="passive theory")
-            ax.semilogx(fgrid, dd, label="DSP biquads 48k")
+            ax.semilogx(ff, curves[n], ".", ms=2,
+                        label="Manual chart v1 (Claude eyeball, BINDING)")
+            ax.semilogx(fgrid, np.interp(fgrid, ff2, curves2[n]),
+                        label="Manual chart v2 (axis-corrected re-digitization)",
+                        lw=1.2, ls=(0, (3, 2)), color="dimgray")
+            ax.semilogx(fgrid, theo, label="Passive RC-block theory (fit to chart)")
+            ax.semilogx(fgrid, dd, label="Plugin DSP biquads @48k (shipped)")
             if have_ir and np.isfinite(imax):
-                ax.semilogx(fgrid, ir + np.interp(1000.0, fgrid, tgt), label="IR ratio re 1kHz")
+                ax.semilogx(fgrid, ir + np.interp(1000.0, fgrid, tgt),
+                            label="T3K IR ratio vs TONE0 (measured)")
+            ax.semilogx(fgrid, nodal[n] - np.interp(1000.0, fgrid, nodal[n])
+                        + np.interp(1000.0, fgrid, tgt),
+                        label="Nodal sim (traced RC values)", lw=1.1,
+                        ls=(0, (1, 1)), color="tab:green")
             ax.set_title("Tone %d theory vs oracles (max %.2fdB)" % (n, tmax))
             ax.set_xlabel("Hz")
             ax.set_ylabel("dB")

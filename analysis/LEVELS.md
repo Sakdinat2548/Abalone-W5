@@ -64,3 +64,24 @@ We ship (b) as a CHOSEN OPERATING POINT, not a spec match: raising drive
 than the unit players describe as "clean with weight" — tuning real DSP to
 an ambiguous number with a factor-of-17 error bar. The map, pins, and math
 above are unaffected by this naming; only the claim is corrected.
+
+## Web-research cross-check (2026-10-05, no model change)
+
+- 0 dBFS = +24 dBu VERIFIED (official max input, 12.28 Vrms); +4 dBu → −20
+  dBFS is the self-consistent SMPTE alignment (−18 would imply +22 max,
+  contradicting the spec). Calibration stands as written.
+- Boost 3N dB/step CONFIRMED (manual + current spec + 10-detent/9-resistor
+  hardware). The manual's "+2…+32 dB" needs 11 detents — stale rev, ignore.
+- THD spec drifted between revs: 0.05% (old manual) vs 0.1% (current site),
+  both at "+10 dB" with no level/load/frequency stated. Our 0.12% point
+  sits inside either reading; no evidence forces a move.
+- HEADROOM NOTE: max Class-A output is +30 dBu = +6 dBFS — 6 dB above
+  digital clip. Hot boost + hot input (e.g. the +44/+54 dBu map corners)
+  can exceed 0 dBFS inside the chain before Trim; that is modeled
+  headroom behavior, not a defect. Downstream hosts/clippers own it.
+
+## Open measurement items (need hardware — not inferable)
+
+- Mic-vs-line output offset (pad value unpublished).
+- Boost position-1 absolute gain (+3 vs the stale manual's +2).
+- Headphone tap point (pre/post tone unspecified).

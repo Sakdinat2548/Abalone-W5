@@ -1,6 +1,6 @@
 Started validating: C:\Users\kluis\Code\Abalone-W5\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\Contents\x86_64-win\Abalone-W5.vst3
 Started validating: C:\Users\kluis\Code\Abalone-W5\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\Contents\x86_64-win\Abalone-W5.vst3
-Random seed: 0x5d304a9
+Random seed: 0x7c1a037
 Validation started
 Strictness level: 10
 -----------------------------------------------------------------
@@ -8,7 +8,7 @@ Starting tests in: pluginval / Scan for plugins located in: C:\Users\kluis\Code\
 Num plugins found: 1
 
 Testing plugin: VST3-Abalone W5-882aad26-a4afbb87
-Sakdinat2548: Abalone W5 v1.0.0
+Sakdinat2548: Abalone W5 v1.1.0
 Completed tests in pluginval / Scan for plugins located in: C:\Users\kluis\Code\Abalone-W5\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\Contents\x86_64-win\Abalone-W5.vst3
 -----------------------------------------------------------------
 Starting tests in: pluginval / Open plugin (cold)...

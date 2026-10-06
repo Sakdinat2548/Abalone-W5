@@ -542,7 +542,7 @@ def main():
     ap.add_argument("--ir-dir", default=os.path.join(HERE, "ir_local"))
     ap.add_argument("--zoom-dir", default=os.path.join(HERE, "zoom_ref"))
     ap.add_argument("--csv", default=os.path.join(HERE,
-                                                  "u5_tone_curves_digitized.csv"))
+                                                  "u5_tone_curves_from_claude.csv"))
     ap.add_argument("--header-targets", default=os.path.join(HERE,
                                                              "tone_targets.h"))
     args = ap.parse_args()

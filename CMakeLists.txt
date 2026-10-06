@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneW5 VERSION 1.0.0)
+project(AbaloneW5 VERSION 1.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,7 +45,7 @@ add_dsp_test(ToneTargetsTest tests/ToneTargetsTest.cpp)
 
 add_dsp_test(ToneBankTest tests/ToneBankTest.cpp)
 target_compile_definitions(ToneBankTest PRIVATE
-    TONE_CSV_PATH="${CMAKE_CURRENT_SOURCE_DIR}/analysis/u5_tone_curves_digitized.csv")
+    TONE_CSV_PATH="${CMAKE_CURRENT_SOURCE_DIR}/analysis/u5_tone_curves_from_claude.csv")
 
 add_dsp_test(GainStageTest tests/GainStageTest.cpp)
 
@@ -64,6 +64,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(AbaloneW5
+    VERSION ${PROJECT_VERSION}
     COMPANY_NAME "Sakdinat2548"
     PLUGIN_MANUFACTURER_CODE SA48
     PLUGIN_CODE AbW5
@@ -79,24 +80,21 @@ target_sources(AbaloneW5 PRIVATE
 
 # UI skins + layout data, embedded as BinaryData (decoded once on the message
 # thread in the editor constructor, never on the audio thread).
-# - uuv_front_clean_redesigned.png: redesigned UUV plate (ui/new_ui/, 1969x799)
-#   drawn 1:1 as the editor faceplate. TONE ring reads 1-6 (verified); both
-#   dial rings print detent ticks on a 30-degree clock grid with a decorative
-#   top tick, so boost/tone needles use exact per-detent tables (see
-#   PluginEditor.cpp) instead of a linear sweep.
-# - knob_boost/tone_no_pointer_redesigned.png: 224x224 knob bodies WITHOUT
-#   pointers (centered circular renders). NEVER rotated: drawn static +
-#   circular-clipped, value shown by pointer_*_redesigned.png.
-# - pointer_boost/tone/trim_redesigned.png: 224x224 extracted pointers,
-#   straightened to 12 o'clock about the art axle (boost axle x=106.0, tone
-#   axle x=112.2, both y=body center 111.5). Rotated at runtime about the
-#   measured pivot (see PluginEditor.cpp).
-# - button_on/off_redesigned.png, led_on/off_redesigned.png: single-frame
-#   toggle + LED skins (103x48 buttons, 48x48 LEDs, same sizes as before).
-# - new_ui/positions.csv: all live-element rects as ratios of the NEW texture
-#   (Obsidian pattern — positions are data, not magic numbers; the editor
-#   parses this at construction). OS mini-knob sits between the SIGNAL LED
-#   and the UUV oval (mode label under it); TRIM mirrors it by the POWER LED.
+# - V110Bakedbackground.png: v110 faceplate (ui/v110ui/, 1969x799) drawn 1:1;
+#   knob bodies, captions, and button/LED slots all baked in. The dial rings
+#   print ticks/numerals on an exact 30-degree clock grid, so boost/tone
+#   needles use exact per-detent tables (see PluginEditor.cpp) instead of a
+#   linear sweep.
+# - V110big/small_pointer.png: straight-up 12 o'clock needles (18x61 /
+#   6x20), drawn at natural size with the tip at the face rim, rotated about
+#   the measured axle (see PluginEditor.cpp). Never stretched.
+# - V110button_on/off.png (103x48), V110led_off.png (48px core),
+#   V110led_on.png (79px: 48px core + spill): slot art drawn 1:1 at
+#   float-exact slot rects (see FloatArtButton/FloatArtLed in PluginEditor.h).
+# - v110ui/positions.csv: all live-element rects as texture ratios
+#   (positions are data, not magic numbers; the editor parses this at
+#   construction). OS/TRIM are small baked knobs flanking the UUV oval, with
+#   in-code readouts below them.
 # - abalone.svg: user-supplied ABALONE masthead artwork (exact filename,
 #   single-e spelling), drawn centered in the header slot via a BinaryData
 #   SVG drawable; static black in every OS state. (A previous CinzelBlack
@@ -111,17 +109,14 @@ juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
-        ui/new_ui/uuv_front_clean_redesigned.png
-        ui/new_ui/knob_boost_no_pointer_redesigned.png
-        ui/new_ui/knob_tone_no_pointer_redesigned.png
-        ui/new_ui/pointer_boost_redesigned.png
-        ui/new_ui/pointer_tone_redesigned.png
-        ui/new_ui/pointer_trim_redesigned.png
-        ui/new_ui/button_on_redesigned.png
-        ui/new_ui/button_off_redesigned.png
-        ui/new_ui/led_on_redesigned.png
-        ui/new_ui/led_off_redesigned.png
-        ui/new_ui/positions.csv
+        ui/v110ui/V110Bakedbackground.png
+        ui/v110ui/V110big_pointer.png
+        ui/v110ui/V110small_pointer.png
+        ui/v110ui/V110button_on.png
+        ui/v110ui/V110button_off.png
+        ui/v110ui/V110led_on.png
+        ui/v110ui/V110led_off.png
+        ui/v110ui/positions.csv
         ui/abalone.svg
 )
 
@@ -145,7 +140,7 @@ target_link_libraries(AbaloneW5
 # Task 11 headless channel-layout test: drives the REAL processor. Linking the
 # juce:: modules compiles their sources into this target (JUCE INTERFACE
 # sources), so src/PluginProcessor.cpp + src/PluginEditor.cpp build here too;
-# only JucePlugin_Name is needed (the sole JucePlugin_* macro used in src/).
+# only JucePlugin_Name/VersionString are needed (the sole JucePlugin_* macros used in src/).
 # Deliberately NOT via add_dsp_test(): that helper undefines NDEBUG, which
 # would enable JUCE_DEBUG (leak-checker statics, extra debug paths) inside a
 # headless pass/fail binary. The checks in ProcessorIOTest.cpp are explicit
@@ -153,6 +148,7 @@ target_link_libraries(AbaloneW5
 add_executable(ProcessorIOTest tests/ProcessorIOTest.cpp src/PluginProcessor.cpp src/PluginEditor.cpp)
 target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5"
+    JucePlugin_VersionString="${PROJECT_VERSION}"
     # Same as the plugin target below: no web browser in the test binary, so
     # juce_gui_extra compiles without its gtk/webkit Linux system deps.
     JUCE_WEB_BROWSER=0

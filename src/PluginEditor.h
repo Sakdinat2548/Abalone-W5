@@ -30,38 +30,38 @@ class AbaloneW5AudioProcessor;
 // - NEW additive Bool `active` (default true, red ACTIVE button) is the
 //   power switch: ACTIVE-to-THRU is a TRUE bypass (see processBlock) — zero
 //   DSP, chain states frozen, buffer untouched; a brief relay-style settle
-//   transient is possible on re-engage. Old states load as active. SPEAKER
-//   is hardware-only: it renders as a permanent OFF image and is
-//   non-interactive. ACTIVE off veils the panel (DimOverlay); the POWER
-//   LED is a mains lamp — always lit while the plugin is open, painted
-//   UNDER the veil with everything else so it dims naturally while
-//   bypassed; the SIGNAL LED follows the input peak while bypassed.
-// - Knob bodies (knob_*_no_pointer_redesigned.png) are NEVER rotated:
-//   baked highlights would swing. Bodies are drawn static and
-//   circular-clipped; value is shown by the extracted pointer
-//   (pointer_*_redesigned.png, straightened to 12 o'clock about the art
-//   axle) rotated about the measured pivot — true to hardware.
+//   transient is possible on re-engage. Old states load as active. The
+//   v110 plate bakes SPEAKER + POWER in the ON look — code owns no part for
+//   them. ACTIVE off veils the panel (DimOverlay); the SIGNAL LED follows
+//   the input peak while bypassed.
+// - Knob bodies live in the baked v110 plate (never drawn/rotated by code):
+//   value is shown by the needle PNGs (V110big/small_pointer, straight up at
+//   12 o'clock) drawn at natural art size, tip at the face rim, rotating
+//   about the measured axle — true to hardware.
 
-// Rotary look-and-feel: static photo knob body + extracted photo pointer.
-// The slider bounds ARE the knob frame; `pivotX/Y` is the rotation axle as a
-// fraction of the slider bounds (axle fit per knob art, not the frame
-// center). Two needle modes: legacy linear (`needleStartDeg` +
-// sliderPos * `needleSweepDeg`, clockwise-from-12) when `detentDeg` is empty,
-// or an exact per-detent table (one clockwise-from-12 entry per integer
-// slider value; entries past a 0-degree crossing are stored unwrapped, e.g.
-// 389.6 for 29.6, so interpolation never swings backwards; fractional
-// positions interpolate between entries). The redesigned UUV dial rings
-// print their detent ticks on a 30-degree clock grid with a decorative top
-// tick, while the NUMERALS sit mid-sector between tick rays — so no linear
-// 10-/6-position needle can land on numerals (residuals up
-// to 10 degrees); boost/tone carry per-detent numeral-center tables
-// (see ui/new_ui/positions.csv), trim/OS stay linear (no printed scale).
+// Rotary look-and-feel: baked knob body + natural-size needle.
+// The slider bounds center IS the rotation axle (tick-arc / face fit per
+// dial, see ui/v110ui/positions.csv). Two needle modes: legacy linear
+// (`needleStartDeg` + sliderPos * `needleSweepDeg`, clockwise-from-12) when
+// `detentDeg` is empty, or an exact per-detent table (one clockwise-from-12
+// entry per integer slider value; entries past a 0-degree crossing are
+// stored unwrapped, e.g. 389.6 for 29.6, so interpolation never swings
+// backwards; fractional positions interpolate between entries). The v110
+// dial rings print ticks/numerals on an exact 30-degree clock grid, so
+// boost/tone carry 30-degree detent tables (visually verified against the
+// baked numerals); trim/OS stay linear (no printed scale).
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
-    juce::Image bodyImage;
-    juce::Image pointerImage;
-    float pivotX = 0.5f;
-    float pivotY = 0.5f;
+    // v110: knob bodies live in the baked plate — code draws ONLY the
+    // needle (straight-up 12 o'clock art) at NATURAL art size (never
+    // stretched: needleWPx/HPx == PNG px). It sits outer-rim like a tire
+    // tread — tip at rimPx from the axle, butt floating over the face —
+    // rotating about the axle (dial center).
+    juce::Image needleImage;
+    float dialSidePx = 420.0f;
+    float needleWPx = 18.0f;
+    float needleHPx = 61.0f;
+    float rimPx = 113.0f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
     std::vector<float> detentDeg;
@@ -90,61 +90,79 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
         const float fx = static_cast<float> (x);
         const float fy = static_cast<float> (y);
 
-        if (bodyImage.isValid())
+        if (needleImage.isValid())
         {
-            // Circular clip keeps the photo frame's square corners (and any
-            // surround plate/numeral fragments) off the faceplate. The knob
-            // bevel sits at ~102/224 of the frame half-side; the clip at
-            // 108/224 keeps the dark outline ring and drops the surround.
+            // Needle only (bodies live in the baked plate), drawn UNSTRETCHED
+            // at natural art size: tip at rimPx from the axle, butt floating
+            // over the face (tire-tread, never spanning the radius). Art
+            // points at 12 o'clock at rotation 0; rotation angle IS the
+            // needle angle (clockwise-from-12, y-down screen space).
+            const float k = side / dialSidePx;
+            const float pw = needleWPx * k;
+            const float ph = needleHPx * k;
+            const float rim = rimPx * k;
             const float cx = fx + static_cast<float> (width) * 0.5f;
             const float cy = fy + static_cast<float> (height) * 0.5f;
-            juce::Path clip;
-            clip.addEllipse (cx - side * 0.4821f, cy - side * 0.4821f, side * 0.9642f, side * 0.9642f);
-            g.saveState();
-            g.reduceClipRegion (clip);
-            g.drawImage (bodyImage,
-                         juce::Rectangle<float> (fx, fy, static_cast<float> (width), static_cast<float> (height)));
-            g.restoreState();
-        }
-
-        if (pointerImage.isValid())
-        {
-            // Extracted photo pointer, rotated about the measured axle. The
-            // art points at 12 o'clock at rotation 0, so the rotation angle
-            // IS the needle angle (clockwise-from-12, y-down screen space).
             const float angle = needleAngleFor (sliderPos) * juce::MathConstants<float>::pi / 180.0f;
             g.saveState();
-            g.addTransform (juce::AffineTransform::rotation (angle, fx + pivotX * static_cast<float> (width),
-                                                             fy + pivotY * static_cast<float> (height)));
-            g.drawImage (pointerImage,
-                         juce::Rectangle<float> (fx, fy, static_cast<float> (width), static_cast<float> (height)));
+            g.addTransform (juce::AffineTransform::rotation (angle, cx, cy));
+            g.drawImage (needleImage, juce::Rectangle<float> (cx - pw * 0.5f, cy - rim, pw, ph));
             g.restoreState();
         }
     }
 };
 
-// Toggle look-and-feel driven by the user's button_on/off.png pair (loaded
-// once in the editor constructor, never on the audio thread).
-struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
+// Slot-art control: draws its PNG at a float dest rect (set in resized())
+// instead of integer component bounds, so 1:1-exported art registers
+// exactly with the stretched baked plate — no scaling, no cover-up overlap.
+// The art is slot-sized by design, so dest size == true slot size; only the
+// position is sub-pixel. Plain ToggleButton otherwise (attachments stay).
+struct FloatArtButton : public juce::ToggleButton
 {
-    juce::Image onImage;
-    juce::Image offImage;
+    juce::Image onImage, offImage;
+    juce::Rectangle<float> dest;
 
-    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
+    void paint (juce::Graphics& g) override
     {
-        const juce::Image& img = button.getToggleState() ? onImage : offImage;
-        if (img.isValid())
-            g.drawImageWithin (img, 0, 0, button.getWidth(), button.getHeight(), juce::RectanglePlacement::centred);
+        const juce::Image& img = getToggleState() ? onImage : offImage;
+        if (img.isValid() && !dest.isEmpty())
+            g.drawImage (img, dest);
+    }
+};
+
+// Same float-dest idea for the SIGNAL LED (non-interactive). OFF art is
+// the bare 48px core (= slot size); ON art is 79px (48px core + light
+// spill, core center at (42,43) of the file). Each dest lands its CORE on
+// the slot center — art is never cropped, resized, or recentered.
+struct FloatArtLed : public juce::Component
+{
+    juce::Image onImage, offImage;
+    juce::Rectangle<float> offDest, onDest;
+    bool lit = false;
+
+    void setLit (bool shouldBeOn)
+    {
+        if (shouldBeOn != lit)
+        {
+            lit = shouldBeOn;
+            repaint();
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const juce::Image& img = lit ? onImage : offImage;
+        const auto& d = lit ? onDest : offDest;
+        if (img.isValid() && !d.isEmpty())
+            g.drawImage (img, d);
     }
 };
 
 // Lights-off overlay: ACTIVE off darkens the whole panel with a translucent
-// fill. Painted LAST so it veils every control including the POWER LED
-// (the mains lamp dims naturally with the panel, like hardware). Ordered
-// above every other control; non-interactive so drags pass through;
-// visibility flips instantly on re-engage from the existing 30Hz timer (no
-// new threads, no fade animation). POWER's image is set once and never
-// driven dark.
+// fill. Painted LAST so it veils every control (baked lamps dim naturally
+// with the panel, like hardware). Ordered above every other control;
+// non-interactive so drags pass through; visibility flips instantly on
+// re-engage from the existing 30Hz timer (no new threads, no fade animation).
 struct DimOverlay : public juce::Component
 {
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0x99000000)); }
@@ -198,17 +216,11 @@ private:
                                // the oval (black plate ink). Single-click editable: type a
                                // number, Enter commits (clamped -30..0), Esc cancels.
                                // Follows the param while idle (see timerCallback).
-    juce::ToggleButton highcutButton;
-    juce::ToggleButton toneEngageButton; // attached to `toneIn`.
-    juce::ToggleButton activeButton;     // attached to `active` (power switch).
-    juce::ImageComponent speakerImage;   // permanent OFF, non-interactive (hardware-only tap).
-    juce::ImageComponent signalLedImage;
-    juce::ImageComponent powerLedImage;
+    FloatArtButton highcutButton;
+    FloatArtButton toneEngageButton; // attached to `toneIn`.
+    FloatArtButton activeButton;     // attached to `active` (power switch).
+    FloatArtLed signalLedImage;
     DimOverlay dimOverlay; // lights-off veil, visible only while ACTIVE is off.
-
-    PngToggleLookAndFeel toggleLookAndFeel;
-    juce::Image ledOnImage;
-    juce::Image ledOffImage;
 
     // Masthead: the user-supplied ui/abalone.svg (BinaryData drawable),
     // drawn centered in the header slot; the in-code engraved Cinzel
@@ -219,7 +231,7 @@ private:
     juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from
-    // ui/new_ui/positions.csv (embedded as BinaryData) at construction.
+    // ui/v110ui/positions.csv (embedded as BinaryData, v110 geometry) at construction.
     std::map<juce::String, juce::Rectangle<float>> layoutRatios;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;
@@ -229,7 +241,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> toneInAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
 
-    bool ledOn = false;
     bool dimVisible = false;
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).

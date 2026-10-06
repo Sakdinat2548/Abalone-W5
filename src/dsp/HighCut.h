@@ -30,6 +30,15 @@
 // the +/-0.3dB test tolerance and off the "-3dB at 8kHz" spec. The exact-match
 // coefficient above keeps the identical filter structure and meets spec.
 //
+// CORNER DISPUTE (web research 2026-10-05, Ruling A stands: 8 kHz ships):
+// three numbers exist and no measurement adjudicates — current spec/literature
+// say 8 kHz, the 2002 manual says 1.8 kHz (confirmed in 3 extractions, quoted
+// by users at the time), and our own T0 on/off capture pair fits ~3.65 kHz.
+// No order/slope/values are published anywhere ("minimum phase" is
+// content-free marketing for "analog"); 1-pole is a hypothesis from "gentle
+// roll off", not a fact. The coefficient stays one trivially-retunable float;
+// settling this needs one on/off capture at bypass + tones 2/4 on hardware.
+//
 // Header-only, dependency-free C++17 (<cmath> only). No new/heap in the audio
 // path. Denormal-safe by construction: state snaps to 0 below 1e-15.
 // setEnabled clears the state, but only on transitions, so a per-block
