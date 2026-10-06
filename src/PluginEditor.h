@@ -58,10 +58,14 @@ class AbaloneW5AudioProcessor;
 // (see ui/new_ui/positions.csv), trim/OS stay linear (no printed scale).
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
-    juce::Image bodyImage;
-    juce::Image pointerImage;
-    float pivotX = 0.5f;
-    float pivotY = 0.5f;
+    // v110: knob bodies live in the baked plate — code draws ONLY the
+    // needle (straight-up 12 o'clock art), pivot at needle-art
+    // bottom-center, sized in texture px (dialSidePx square) so it scales
+    // with the aspect-locked window.
+    juce::Image needleImage;
+    float dialSidePx = 420.0f;
+    float needleWPx = 15.0f;
+    float needleHPx = 95.0f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
     std::vector<float> detentDeg;
@@ -90,36 +94,21 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
         const float fx = static_cast<float> (x);
         const float fy = static_cast<float> (y);
 
-        if (bodyImage.isValid())
+        if (needleImage.isValid())
         {
-            // Knob well: dark recess ring + 1px top-light arc under the
-            // knob PNG, so it sits IN the panel instead of on it.
+            // Needle only (bodies live in the baked plate): fixed texture-px
+            // size, art bottom (= pivot) on the dial center, pointing at 12
+            // o'clock at rotation 0. Rotation angle IS the needle angle
+            // (clockwise-from-12, y-down screen space).
+            const float k = side / dialSidePx;
+            const float pw = needleWPx * k;
+            const float ph = needleHPx * k;
             const float cx = fx + static_cast<float> (width) * 0.5f;
             const float cy = fy + static_cast<float> (height) * 0.5f;
-            // Circular clip keeps the photo frame's square corners (and any
-            // surround plate/numeral fragments) off the faceplate. The knob
-            // bevel sits at ~102/224 of the frame half-side; the clip at
-            // 108/224 keeps the dark outline ring and drops the surround.
-            juce::Path clip;
-            clip.addEllipse (cx - side * 0.4821f, cy - side * 0.4821f, side * 0.9642f, side * 0.9642f);
-            g.saveState();
-            g.reduceClipRegion (clip);
-            g.drawImage (bodyImage,
-                         juce::Rectangle<float> (fx, fy, static_cast<float> (width), static_cast<float> (height)));
-            g.restoreState();
-        }
-
-        if (pointerImage.isValid())
-        {
-            // Extracted photo pointer, rotated about the measured axle. The
-            // art points at 12 o'clock at rotation 0, so the rotation angle
-            // IS the needle angle (clockwise-from-12, y-down screen space).
             const float angle = needleAngleFor (sliderPos) * juce::MathConstants<float>::pi / 180.0f;
             g.saveState();
-            g.addTransform (juce::AffineTransform::rotation (angle, fx + pivotX * static_cast<float> (width),
-                                                             fy + pivotY * static_cast<float> (height)));
-            g.drawImage (pointerImage,
-                         juce::Rectangle<float> (fx, fy, static_cast<float> (width), static_cast<float> (height)));
+            g.addTransform (juce::AffineTransform::rotation (angle, cx, cy));
+            g.drawImage (needleImage, juce::Rectangle<float> (cx - pw * 0.5f, cy - ph, pw, ph));
             g.restoreState();
         }
     }
@@ -141,12 +130,10 @@ struct PngToggleLookAndFeel : public juce::LookAndFeel_V4
 };
 
 // Lights-off overlay: ACTIVE off darkens the whole panel with a translucent
-// fill. Painted LAST so it veils every control including the POWER LED
-// (the mains lamp dims naturally with the panel, like hardware). Ordered
-// above every other control; non-interactive so drags pass through;
-// visibility flips instantly on re-engage from the existing 30Hz timer (no
-// new threads, no fade animation). POWER's image is set once and never
-// driven dark.
+// fill. Painted LAST so it veils every control (baked lamps dim naturally
+// with the panel, like hardware). Ordered above every other control;
+// non-interactive so drags pass through; visibility flips instantly on
+// re-engage from the existing 30Hz timer (no new threads, no fade animation).
 struct DimOverlay : public juce::Component
 {
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0x99000000)); }
@@ -203,9 +190,7 @@ private:
     juce::ToggleButton highcutButton;
     juce::ToggleButton toneEngageButton; // attached to `toneIn`.
     juce::ToggleButton activeButton;     // attached to `active` (power switch).
-    juce::ImageComponent speakerImage;   // permanent OFF, non-interactive (hardware-only tap).
     juce::ImageComponent signalLedImage;
-    juce::ImageComponent powerLedImage;
     DimOverlay dimOverlay; // lights-off veil, visible only while ACTIVE is off.
 
     PngToggleLookAndFeel toggleLookAndFeel;
@@ -221,7 +206,7 @@ private:
     juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from
-    // ui/new_ui/positions.csv (embedded as BinaryData) at construction.
+    // ui/new_ui/positions.csv (embedded as BinaryData, v110 geometry) at construction.
     std::map<juce::String, juce::Rectangle<float>> layoutRatios;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;

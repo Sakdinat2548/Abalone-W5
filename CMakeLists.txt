@@ -112,16 +112,13 @@ juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
-        ui/new_ui/uuv_front_clean_redesigned.png
-        ui/new_ui/knob_boost_no_pointer_redesigned.png
-        ui/new_ui/knob_tone_no_pointer_redesigned.png
-        ui/new_ui/pointer_boost_redesigned.png
-        ui/new_ui/pointer_tone_redesigned.png
-        ui/new_ui/pointer_trim_redesigned.png
-        ui/new_ui/button_on_redesigned.png
-        ui/new_ui/button_off_redesigned.png
-        ui/new_ui/led_on_redesigned.png
-        ui/new_ui/led_off_redesigned.png
+        ui/v110ui/V110Bakedbackground.png
+        ui/v110ui/V110big_pointer.png
+        ui/v110ui/V110small_pointer.png
+        ui/v110ui/V110button_on.png
+        ui/v110ui/V110button_off.png
+        ui/v110ui/V110led_on.png
+        ui/v110ui/V110led_off.png
         ui/new_ui/positions.csv
         ui/abalone.svg
 )

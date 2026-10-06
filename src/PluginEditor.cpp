@@ -99,27 +99,27 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
-    faceImage =
-        imageFromBinary (BinaryData::uuv_front_clean_redesigned_png, BinaryData::uuv_front_clean_redesigned_pngSize);
-    boostDialLookAndFeel.bodyImage = imageFromBinary (BinaryData::knob_boost_no_pointer_redesigned_png,
-                                                      BinaryData::knob_boost_no_pointer_redesigned_pngSize);
-    toneDialLookAndFeel.bodyImage = imageFromBinary (BinaryData::knob_tone_no_pointer_redesigned_png,
-                                                     BinaryData::knob_tone_no_pointer_redesigned_pngSize);
-    // TRIM is the one deliberate addition: a mini-knob in the same chrome
-    // family (tone art scaled down) with the tone pointer.
-    trimDialLookAndFeel.bodyImage = toneDialLookAndFeel.bodyImage;
-    boostDialLookAndFeel.pointerImage =
-        imageFromBinary (BinaryData::pointer_boost_redesigned_png, BinaryData::pointer_boost_redesigned_pngSize);
-    toneDialLookAndFeel.pointerImage =
-        imageFromBinary (BinaryData::pointer_tone_redesigned_png, BinaryData::pointer_tone_redesigned_pngSize);
-    trimDialLookAndFeel.pointerImage =
-        imageFromBinary (BinaryData::pointer_trim_redesigned_png, BinaryData::pointer_trim_redesigned_pngSize);
-    toggleLookAndFeel.onImage =
-        imageFromBinary (BinaryData::button_on_redesigned_png, BinaryData::button_on_redesigned_pngSize);
-    toggleLookAndFeel.offImage =
-        imageFromBinary (BinaryData::button_off_redesigned_png, BinaryData::button_off_redesigned_pngSize);
-    ledOnImage = imageFromBinary (BinaryData::led_on_redesigned_png, BinaryData::led_on_redesigned_pngSize);
-    ledOffImage = imageFromBinary (BinaryData::led_off_redesigned_png, BinaryData::led_off_redesigned_pngSize);
+    faceImage = imageFromBinary (BinaryData::V110Bakedbackground_png, BinaryData::V110Bakedbackground_pngSize);
+    // v110: knob bodies are BAKED (never drawn by code) — only the needles
+    // rotate, pivot at needle-art bottom-center (12 o'clock art).
+    boostDialLookAndFeel.needleImage =
+        imageFromBinary (BinaryData::V110big_pointer_png, BinaryData::V110big_pointer_pngSize);
+    toneDialLookAndFeel.needleImage = boostDialLookAndFeel.needleImage;
+    trimDialLookAndFeel.needleImage =
+        imageFromBinary (BinaryData::V110small_pointer_png, BinaryData::V110small_pointer_pngSize);
+    boostDialLookAndFeel.dialSidePx = 420.0f;
+    boostDialLookAndFeel.needleWPx = 15.0f;
+    boostDialLookAndFeel.needleHPx = 95.0f;
+    toneDialLookAndFeel.dialSidePx = 420.0f;
+    toneDialLookAndFeel.needleWPx = 15.0f;
+    toneDialLookAndFeel.needleHPx = 95.0f;
+    trimDialLookAndFeel.dialSidePx = 110.0f;
+    trimDialLookAndFeel.needleWPx = 5.0f;
+    trimDialLookAndFeel.needleHPx = 30.0f;
+    toggleLookAndFeel.onImage = imageFromBinary (BinaryData::V110button_on_png, BinaryData::V110button_on_pngSize);
+    toggleLookAndFeel.offImage = imageFromBinary (BinaryData::V110button_off_png, BinaryData::V110button_off_pngSize);
+    ledOnImage = imageFromBinary (BinaryData::V110led_on_png, BinaryData::V110led_on_pngSize);
+    ledOffImage = imageFromBinary (BinaryData::V110led_off_png, BinaryData::V110led_off_pngSize);
 
     layoutRatios = parseLayoutCsv (BinaryData::positions_csv, BinaryData::positions_csvSize);
 
@@ -138,15 +138,10 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     trimDialLookAndFeel.needleStartDeg = 225.0f;
     trimDialLookAndFeel.needleSweepDeg = 270.0f;
 
-    // Rotation axles, fractions of the 224px knob frame (pointer-ink axis
-    // fits: boost needle dead vertical at x=106.0 tip and tail, tone at
-    // x=112.2; body circles fit dead-center at 111.5, so y=111.5 both).
-    boostDialLookAndFeel.pivotX = 106.0f / 224.0f;
-    boostDialLookAndFeel.pivotY = 111.5f / 224.0f;
-    toneDialLookAndFeel.pivotX = 112.2f / 224.0f;
-    toneDialLookAndFeel.pivotY = 111.5f / 224.0f;
-    trimDialLookAndFeel.pivotX = toneDialLookAndFeel.pivotX;
-    trimDialLookAndFeel.pivotY = toneDialLookAndFeel.pivotY;
+    // Rotation axles: needles are straight-up 12 o'clock art; rotation
+    // angle IS the needle angle (clockwise-from-12, y-down screen space).
+    // Boost/tone numeral tables below carry numeral centers; trim/OS stay
+    // linear (no printed scale).
 
     boostSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     boostSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -278,20 +273,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     activeButton.setClickingTogglesState (true);
     addAndMakeVisible (activeButton);
 
-    // SPEAKER is a hardware-only tap: permanent OFF image, non-interactive.
-    speakerImage.setImage (toggleLookAndFeel.offImage);
-    speakerImage.setInterceptsMouseClicks (false, false);
-    addAndMakeVisible (speakerImage);
-
     signalLedImage.setImage (ledOffImage);
     addAndMakeVisible (signalLedImage);
-
-    // Blue POWER LED: mains lamp, ALWAYS lit while the plugin is open,
-    // independent of ACTIVE. Painted UNDER the dim veil with everything
-    // else, so the veil dims it naturally while bypassed (the on-image is
-    // set once and never swapped dark).
-    powerLedImage.setImage (ledOnImage);
-    addAndMakeVisible (powerLedImage);
 
     // Lights-off veil LAST so it paints over every control including POWER.
     // Non-interactive so knob drags pass straight through to the controls
@@ -340,8 +323,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         mastheadDrawable = juce::Drawable::createFromSVG (*svg);
 
     // Initial veil state from the `active` param (the timer keeps it live;
-    // this covers the first paint). POWER is a mains lamp — always on.
-    powerLedImage.setImage (ledOnImage);
+    // this covers the first paint).
     if (auto* activeParam = apvts.getParameter ("active"))
     {
         dimVisible = activeParam->getValue() <= 0.5f;
@@ -407,6 +389,17 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     }
 
     drawOsLabels (g, scaledRect (layoutRatios, "os_dial", w, h), scale);
+
+    // OS/TRIM captions above the mini-knobs (the v110 plate prints none;
+    // same ink as the baked captions, bold system sans).
+    g.setFont (juce::Font (juce::FontOptions (13.0f * scale).withStyle ("Bold")));
+    g.setColour (juce::Colour (0xff1b1b1c));
+    const auto osBox = scaledRect (layoutRatios, "os_dial", w, h);
+    const auto trimBox = scaledRect (layoutRatios, "trim_dial", w, h);
+    g.drawText ("OS", osBox.getX(), osBox.getY() - juce::roundToInt (26.0f * scale), osBox.getWidth(),
+                juce::roundToInt (18.0f * scale), juce::Justification::centred, false);
+    g.drawText ("TRIM", trimBox.getX(), trimBox.getY() - juce::roundToInt (26.0f * scale), trimBox.getWidth(),
+                juce::roundToInt (18.0f * scale), juce::Justification::centred, false);
 }
 
 // OS factor readout, centered UNDER the OS mini-knob on the silver strip
@@ -454,11 +447,9 @@ void AbaloneW5AudioProcessorEditor::resized ()
                            juce::roundToInt (16.0f * scale));
     osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
     highcutButton.setBounds (scaledRect (layoutRatios, "highcut_button", w, h));
-    speakerImage.setBounds (scaledRect (layoutRatios, "speaker_button", w, h));
     toneEngageButton.setBounds (scaledRect (layoutRatios, "tone_button", w, h));
     activeButton.setBounds (scaledRect (layoutRatios, "active_button", w, h));
     signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
-    powerLedImage.setBounds (scaledRect (layoutRatios, "power_led", w, h));
     dimOverlay.setBounds (0, 0, w, h);
 }
 
