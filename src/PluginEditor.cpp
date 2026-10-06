@@ -457,37 +457,42 @@ void AbaloneW5AudioProcessorEditor::resized ()
                            h - juce::roundToInt (34.0f * scale), juce::roundToInt (120.0f * scale),
                            juce::roundToInt (16.0f * scale));
     osSlider.setBounds (scaledRect (layoutRatios, "os_dial", w, h));
-    // Slot-art controls: integer bounds for hit-testing, float dest rects
-    // for the art — 1:1 PNGs land sub-pixel-exact on the red slots, never
-    // scaled up or overlapped (see FloatArtButton). All four slots nudge +2
-    // texture-px right: pixel-aligned art read a hair left of the slots.
-    const auto nudgeX = 2.0f * static_cast<float> (w) / 1969.0f;
-    const auto placeButton = [this, w, h, nudgeX] (FloatArtButton& b, const juce::String& name)
+    // Slot-art controls: bounds fit the ART (not the slot) so spillover like
+    // the LED glow is never clipped by the component frame; the art itself
+    // draws at its float dest, 1:1 and unscaled (see FloatArtButton). Slots
+    // nudge +2 texture-px right / +2 down: pixel-aligned art read a hair
+    // up-left of the slots. Single constants — adjust on visual check.
+    const float nudgeX = 2.0f * static_cast<float> (w) / 1969.0f;
+    const float nudgeY = 2.0f * static_cast<float> (h) / 799.0f;
+    const auto placeButton = [this, w, h, nudgeX, nudgeY] (FloatArtButton& b, const juce::String& name)
     {
-        b.setBounds (scaledRect (layoutRatios, name, w, h));
-        b.dest = scaledRectF (layoutRatios, name, w, h).translated (nudgeX, 0.0f) - b.getPosition().toFloat();
+        const auto dest = scaledRectF (layoutRatios, name, w, h).translated (nudgeX, nudgeY);
+        b.setBounds (dest.getSmallestIntegerContainer().expanded (1));
+        b.dest = dest - b.getPosition().toFloat();
     };
     placeButton (highcutButton, "highcut_button");
     placeButton (toneEngageButton, "tone_button");
     placeButton (activeButton, "active_button");
     {
-        signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
-        const auto origin = signalLedImage.getPosition().toFloat();
         const float sx = static_cast<float> (w) / 1969.0f;
         const float sy = static_cast<float> (h) / 799.0f;
-        const auto centre = scaledRectF (layoutRatios, "signal_led", w, h).translated (nudgeX, 0.0f).getCentre();
+        const auto centre = scaledRectF (layoutRatios, "signal_led", w, h).translated (nudgeX, nudgeY).getCentre();
         // OFF 48px core draws 1:1 on the slot; ON 79px art lands its 48px
         // core (file coords (42,43), spill reaches top-left) on the same
         // point. Asset geometry only — no crop, no resize.
         const auto& off = signalLedImage.offImage;
-        signalLedImage.offDest =
+        const auto absOff =
             juce::Rectangle<float> (centre.x - off.getWidth() * sx * 0.5f, centre.y - off.getHeight() * sy * 0.5f,
-                                    off.getWidth() * sx, off.getHeight() * sy) -
-            origin;
+                                    off.getWidth() * sx, off.getHeight() * sy);
         const auto& on = signalLedImage.onImage;
-        signalLedImage.onDest = juce::Rectangle<float> (centre.x - 42.0f * sx, centre.y - 43.0f * sy,
-                                                        on.getWidth() * sx, on.getHeight() * sy) -
-                                origin;
+        const auto absOn = juce::Rectangle<float> (centre.x - 42.0f * sx, centre.y - 43.0f * sy, on.getWidth() * sx,
+                                                   on.getHeight() * sy);
+        // Bounds contain the larger (ON) dest +1px: the glow must paint past
+        // the slot without the frame clipping it into a hard corner.
+        signalLedImage.setBounds (absOff.getUnion (absOn).getSmallestIntegerContainer().expanded (1));
+        const auto origin = signalLedImage.getPosition().toFloat();
+        signalLedImage.offDest = absOff - origin;
+        signalLedImage.onDest = absOn - origin;
     }
     dimOverlay.setBounds (0, 0, w, h);
 }
