@@ -446,6 +446,10 @@ void checkBlueZones (const DenseCurve& blue)
     // precedent as the v1 deviations): T4/T6 top edges (15-20 kHz) dominate
     // — bilinear edge warp, least audible, reported loudly. Tones without
     // ruled zones (T2/T3) are reported, not gated.
+    // ponytail: headroom is razor-thin by construction (review-measured
+    // @44.1 kHz: T1 0.426/0.45, T4 1.089/1.10, T5 0.389/0.40, T6 1.424/1.45
+    // max-gate). Deterministic today, but any RBJ/compiler perturbation flips
+    // red — round the gates up a notch if that ever bites.
     const float maxGate[7] = {0.0f, 0.45f, 1e9f, 1e9f, 1.10f, 0.40f, 1.45f};
     const float rmsGate[7] = {0.0f, 0.35f, 1e9f, 1e9f, 0.80f, 0.20f, 0.40f};
     const double rates[2] = {48000.0, 44100.0};

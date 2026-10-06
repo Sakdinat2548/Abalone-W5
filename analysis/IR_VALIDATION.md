@@ -739,3 +739,29 @@ Gated in `tests/ToneBankTest.cpp` (`checkLowEndCsv`); port re-verified
 4. Final call is ears: flip between DI and each tone at matched loudness;
    T2's scoop, T3's gentle dip, and T4's presence lift should be clearly
    audible and free of harshness/clicks on tone switches.
+
+## 9. Hardware-fit regime — v1.1.0 (supersedes Sections 5–7 gates in the ruled zones)
+
+RBJ numbers-only refits could not close the hardware gaps (see
+`analysis/circuit_trace/TRACE_NOTES.md` closing entry), but user rulings
+2026-10-04/05 adopted a split regime instead of pure chart binding:
+
+- T1/T4/T5/T6 carry hardware-fit RBJ coefficients + per-tone gains
+  (`src/dsp/ToneBank.h`); T2/T3 stay v1.
+- The binding oracle inside the ruled zones is the blue hardware curves
+  (`analysis/u5_tone_targets_blue.csv`, recipes in
+  `analysis/circuit_trace/fit_blue.py`), gated by `checkBlueZones`
+  (`tests/ToneBankTest.cpp:440`): max gates T1 0.45 / T4 1.10 / T5 0.40 /
+  T6 1.45 dB, RMS gates T1 0.35 / T4 0.80 / T5 0.20 / T6 0.40 dB; T2/T3
+  blue is reported, not gated. Zone membership: `inRuledZone`
+  (`tests/ToneBankTest.cpp:202`).
+- The dense chart gate is report-only inside ruled zones; outside zones the
+  AGENTS.md ±1 dB doctrine still binds. RECORDED deviations (Ruling 21/22,
+  Task-24, Fix-2 precedent for the T4 20 Hz override): outside-zone chart
+  deviations exceed ±1 dB in spots (T6 +1.16 dB @ 305 Hz; T4 RMS 0.74) —
+  accepted by the user as structural, not budget.
+- Blue-gate headroom is thin by construction (T4/T5/T6 max gates sit just
+  above deterministic measurements); any RBJ/compiler perturbation flips
+  them — see the fragility note at the gate tables.
+- `docs/tone-curves.png` + `docs/tone-curves-12panel.png` regenerated from
+  the as-fitted numbers in the same commit (curves rule honored).

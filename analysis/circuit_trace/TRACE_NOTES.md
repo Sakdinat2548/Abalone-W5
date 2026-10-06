@@ -150,3 +150,17 @@ sub-40 steepness, T4 dip role, T2 shoulder section, T1/T6 top-octave
 chart-vs-hardware split) — a numbers-only refit cannot close them.
 Hardware-truth promotion now requires topology decisions (+sections or
 re-roled stages) plus new gates, i.e. a full re-spec task, not a fit.
+
+## Closing entry: partial reversal adopted for v1.1.0
+
+The v2 verdict above stood for one day, then user rulings 2026-10-04/05
+reversed it IN PART: rather than binding everything to the digitized chart,
+T1/T4/T5/T6 ship hardware-fit RBJ coefficients + per-tone gains, gated
+against the blue hardware oracle inside ruled zones and against the chart
+outside them (`tests/ToneBankTest.cpp`: `inRuledZone`, `checkBlueZones`;
+recorded deviations under Ruling 21/22, Task-24, Fix-2 precedent). T2/T3
+stay v1, and the full topology re-spec stays parked. The alternative
+per-rate-SOS path (per-rate coefficient tables + generator) was built,
+evaluated, and NOT adopted — its files were removed before merge, so no
+generator output is missing. Regime documented in
+`analysis/IR_VALIDATION.md` §9.

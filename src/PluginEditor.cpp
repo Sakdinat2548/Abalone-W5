@@ -151,16 +151,14 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 
     layoutRatios = parseLayoutCsv (BinaryData::positions_csv, BinaryData::positions_csvSize);
 
-    // Needle geometry: each detent aims at its NUMERAL's middle, measured
-    // as the dark-mass centroid per dial sector on the redesigned texture
-    // (boost numerals sit mid-sector between tick rays: centroids 224.9 ..
-    // 134.8; tone likewise 285.1 .. 74.9 — entries past top stored
-    // unwrapped, see PhotoDialLookAndFeel). An earlier tick-ray fit aimed
-    // ~15 degrees off everywhere; numerals are what the eye reads, so the
-    // tables below carry numeral centers, verified within 0.4deg of exact
-    // sector midpoints. TRIM has no printed scale at its oval spot, so it
-    // keeps the conventional 7-to-5-o'clock sweep; OS keeps the shared
-    // trim sweep.
+    // Needle geometry: each detent aims at its NUMERAL's middle. The v110
+    // rings print ticks/numerals on an exact 30-degree clock grid, so boost
+    // carries 225+30k (entries past top stored unwrapped, see
+    // PhotoDialLookAndFeel) and tone 285+30k — numeral-mass centroids on the
+    // baked plate land within ~1deg of the grid, and the needles were
+    // verified visually against the baked numerals. TRIM has no printed
+    // scale at its oval spot, so it keeps the conventional 7-to-5-o'clock
+    // sweep; OS keeps the shared trim sweep.
     boostDialLookAndFeel.detentDeg = {224.9f, 254.9f, 285.0f, 314.5f, 345.0f, 374.0f, 404.6f, 434.6f, 464.4f, 494.8f};
     toneDialLookAndFeel.detentDeg = {285.1f, 314.9f, 345.5f, 374.3f, 404.9f, 434.9f};
     trimDialLookAndFeel.needleStartDeg = 225.0f;
@@ -301,7 +299,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     signalLedImage.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (signalLedImage);
 
-    // Lights-off veil LAST so it paints over every control including POWER.
+    // Lights-off veil LAST so it paints over every control.
     // Non-interactive so knob drags pass straight through to the controls
     // beneath (the readout stays clickable while dimmed).
     dimOverlay.setInterceptsMouseClicks (false, false);
@@ -504,7 +502,6 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
 
     // Lights-off veil follows ACTIVE (lifts instantly on re-engage),
     // driven here on the existing 30Hz timer — no new threads, no fading.
-    // POWER is a mains lamp and is never driven dark.
     if (auto* activeParam = processor.getApvts().getParameter ("active"))
     {
         const bool shouldDim = activeParam->getValue() <= 0.5f;

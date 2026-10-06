@@ -30,32 +30,26 @@ class AbaloneW5AudioProcessor;
 // - NEW additive Bool `active` (default true, red ACTIVE button) is the
 //   power switch: ACTIVE-to-THRU is a TRUE bypass (see processBlock) — zero
 //   DSP, chain states frozen, buffer untouched; a brief relay-style settle
-//   transient is possible on re-engage. Old states load as active. SPEAKER
-//   is hardware-only: it renders as a permanent OFF image and is
-//   non-interactive. ACTIVE off veils the panel (DimOverlay); the POWER
-//   LED is a mains lamp — always lit while the plugin is open, painted
-//   UNDER the veil with everything else so it dims naturally while
-//   bypassed; the SIGNAL LED follows the input peak while bypassed.
-// - Knob bodies (knob_*_no_pointer_redesigned.png) are NEVER rotated:
-//   baked highlights would swing. Bodies are drawn static and
-//   circular-clipped; value is shown by the extracted pointer
-//   (pointer_*_redesigned.png, straightened to 12 o'clock about the art
-//   axle) rotated about the measured pivot — true to hardware.
+//   transient is possible on re-engage. Old states load as active. The
+//   v110 plate bakes SPEAKER + POWER in the ON look — code owns no part for
+//   them. ACTIVE off veils the panel (DimOverlay); the SIGNAL LED follows
+//   the input peak while bypassed.
+// - Knob bodies live in the baked v110 plate (never drawn/rotated by code):
+//   value is shown by the needle PNGs (V110big/small_pointer, straight up at
+//   12 o'clock) drawn at natural art size, tip at the face rim, rotating
+//   about the measured axle — true to hardware.
 
-// Rotary look-and-feel: static photo knob body + extracted photo pointer.
-// The slider bounds ARE the knob frame; `pivotX/Y` is the rotation axle as a
-// fraction of the slider bounds (axle fit per knob art, not the frame
-// center). Two needle modes: legacy linear (`needleStartDeg` +
-// sliderPos * `needleSweepDeg`, clockwise-from-12) when `detentDeg` is empty,
-// or an exact per-detent table (one clockwise-from-12 entry per integer
-// slider value; entries past a 0-degree crossing are stored unwrapped, e.g.
-// 389.6 for 29.6, so interpolation never swings backwards; fractional
-// positions interpolate between entries). The redesigned UUV dial rings
-// print their detent ticks on a 30-degree clock grid with a decorative top
-// tick, while the NUMERALS sit mid-sector between tick rays — so no linear
-// 10-/6-position needle can land on numerals (residuals up
-// to 10 degrees); boost/tone carry per-detent numeral-center tables
-// (see ui/new_ui/positions.csv), trim/OS stay linear (no printed scale).
+// Rotary look-and-feel: baked knob body + natural-size needle.
+// The slider bounds center IS the rotation axle (tick-arc / face fit per
+// dial, see ui/new_ui/positions.csv). Two needle modes: legacy linear
+// (`needleStartDeg` + sliderPos * `needleSweepDeg`, clockwise-from-12) when
+// `detentDeg` is empty, or an exact per-detent table (one clockwise-from-12
+// entry per integer slider value; entries past a 0-degree crossing are
+// stored unwrapped, e.g. 389.6 for 29.6, so interpolation never swings
+// backwards; fractional positions interpolate between entries). The v110
+// dial rings print ticks/numerals on an exact 30-degree clock grid, so
+// boost/tone carry 30-degree detent tables (visually verified against the
+// baked numerals); trim/OS stay linear (no printed scale).
 struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
 {
     // v110: knob bodies live in the baked plate — code draws ONLY the
