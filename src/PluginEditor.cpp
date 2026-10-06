@@ -473,10 +473,21 @@ void AbaloneW5AudioProcessorEditor::resized ()
     {
         signalLedImage.setBounds (scaledRect (layoutRatios, "signal_led", w, h));
         const auto origin = signalLedImage.getPosition().toFloat();
-        // ON art is globe-matched to OFF by construction (same 47x48 crop
-        // geometry), so both states share one dest — no lens skew.
-        signalLedImage.offDest = scaledRectF (layoutRatios, "signal_led", w, h).translated (nudgeX, 0.0f) - origin;
-        signalLedImage.onDest = signalLedImage.offDest;
+        const float sx = static_cast<float> (w) / 1969.0f;
+        const float sy = static_cast<float> (h) / 799.0f;
+        const auto centre = scaledRectF (layoutRatios, "signal_led", w, h).translated (nudgeX, 0.0f).getCentre();
+        // OFF 48px core draws 1:1 on the slot; ON 79px art lands its 48px
+        // core (file coords (42,43), spill reaches top-left) on the same
+        // point. Asset geometry only — no crop, no resize.
+        const auto& off = signalLedImage.offImage;
+        signalLedImage.offDest =
+            juce::Rectangle<float> (centre.x - off.getWidth() * sx * 0.5f, centre.y - off.getHeight() * sy * 0.5f,
+                                    off.getWidth() * sx, off.getHeight() * sy) -
+            origin;
+        const auto& on = signalLedImage.onImage;
+        signalLedImage.onDest = juce::Rectangle<float> (centre.x - 42.0f * sx, centre.y - 43.0f * sy,
+                                                        on.getWidth() * sx, on.getHeight() * sy) -
+                                origin;
     }
     dimOverlay.setBounds (0, 0, w, h);
 }

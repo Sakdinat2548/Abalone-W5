@@ -136,9 +136,10 @@ struct FloatArtButton : public juce::ToggleButton
     }
 };
 
-// Same float-dest idea for the SIGNAL LED (non-interactive). ON/OFF arts
-// are globe-matched by construction (same crop geometry), so both states
-// share one dest and the lens never jumps.
+// Same float-dest idea for the SIGNAL LED (non-interactive). OFF art is
+// the bare 48px core (= slot size); ON art is 79px (48px core + light
+// spill, core center at (42,43) of the file). Each dest lands its CORE on
+// the slot center — art is never cropped, resized, or recentered.
 struct FloatArtLed : public juce::Component
 {
     juce::Image onImage, offImage;
