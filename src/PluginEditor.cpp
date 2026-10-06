@@ -14,7 +14,7 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
-// Parses the embedded ui/new_ui/positions.csv into name -> ratio rect.
+// Parses the embedded ui/v110ui/positions.csv into name -> ratio rect.
 // Runs once on the message thread at construction; no audio-thread use.
 std::map<juce::String, juce::Rectangle<float>> parseLayoutCsv (const char* data, int size)
 {
