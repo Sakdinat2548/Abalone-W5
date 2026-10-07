@@ -10,7 +10,7 @@
 
 #include "dsp/ProcessorChain.h"
 
-class AbaloneW5AudioProcessor : public juce::AudioProcessor
+class AbaloneW5AudioProcessor : public juce::AudioProcessor, private juce::AudioProcessorValueTreeState::Listener
 {
 public:
     AbaloneW5AudioProcessor ();
@@ -52,6 +52,10 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // VST3 bypass parameter (user-ruled DAW awareness): the host bypass
+    // button and the red ACTIVE button are one switch (see parameterChanged).
+    juce::AudioProcessorParameter* getBypassParameter () const override { return bypassParam_; }
+
     juce::AudioProcessorValueTreeState& getApvts () { return apvts; }
 
     // Max LED peak since the last call (resets on read). Normal operation:
@@ -65,6 +69,16 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout ();
 
+    // ACTIVE<->bypass mirror (both directions, diverge-only writes so the
+    // pair can never chase itself). Runs on the message thread; the audio
+    // thread only reads raw values. Suppressed while setStateInformation
+    // bulk-loads (loadingState_): mid-load mirrors fight the incoming
+    // values (a converged bypass gets clobbered by a missing child's
+    // default, which then drags active back) — alignment happens once,
+    // explicitly, after the load instead.
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    bool loadingState_ = false;
+
     // Tracks max |input| over the kept channels into bypassPeak_ (read side
     // of the chains is never touched: bypass runs zero DSP, states frozen).
     void trackBypassPeak (const juce::AudioBuffer<float>& buffer, int activeChannels, int numSamples);
@@ -72,6 +86,8 @@ private:
     void pushChainParams (int boostStep, int tone, bool highcut, float trimDb, int osFactor, int activeChannels);
 
     juce::AudioProcessorValueTreeState apvts;
+    // Non-owning: APVTS owns the `bypass` param (created in the layout).
+    juce::RangedAudioParameter* bypassParam_ = nullptr;
     std::array<ProcessorChain, 2> chains;
     // Last latency reported via setLatencySamples (0 at 1x, the chain's
     // exact hot-path FIR delay at 2x/4x). Updated only on change: the

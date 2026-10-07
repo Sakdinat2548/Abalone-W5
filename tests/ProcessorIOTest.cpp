@@ -426,6 +426,53 @@ void checkActiveToggleNoClick ()
 
 } // namespace
 
+// (f) Host-visible bypass: `bypass` is exposed via getBypassParameter and
+// two-way synced to !active (user-ruled: DAW button and ACTIVE are one
+// switch); pre-bypass states recall engaged-aligned.
+void checkBypassSync ()
+{
+    AbaloneW5AudioProcessor proc;
+    CHECK (proc.getBypassParameter() != nullptr);
+    auto& apvts = proc.getApvts();
+    auto* bypass = apvts.getParameter ("bypass");
+    auto* active = apvts.getParameter ("active");
+    CHECK (bypass->getValue() == 0.0f);   // engaged by default
+    bypass->setValueNotifyingHost (1.0f); // host -> plugin
+    CHECK (active->getValue() == 0.0f);
+    active->setValueNotifyingHost (1.0f); // plugin -> host
+    CHECK (bypass->getValue() == 0.0f);
+
+    // Old state: ACTIVE-off stored before `bypass` existed. Save bypassed,
+    // strip the `bypass` node (pre-bypass era format), reload: active stays
+    // off and bypass converges to on.
+    active->setValueNotifyingHost (0.0f);
+    CHECK (bypass->getValue() == 1.0f);
+    juce::MemoryBlock block;
+    proc.getStateInformation (block);
+    std::unique_ptr<juce::XmlElement> xml (
+        juce::AudioProcessor::getXmlFromBinary (block.getData(), static_cast<int> (block.getSize())));
+    CHECK (xml != nullptr);
+    bool dropped = false;
+    for (auto* child = xml->getFirstChildElement(); child != nullptr;)
+    {
+        auto* next = child->getNextElement();
+        if (child->getStringAttribute ("id") == "bypass")
+        {
+            xml->removeChildElement (child, true);
+            dropped = true;
+        }
+        child = next;
+    }
+    CHECK (dropped); // fails loudly if JUCE ever changes the state format
+    juce::MemoryBlock stripped;
+    juce::AudioProcessor::copyXmlToBinary (*xml, stripped);
+    AbaloneW5AudioProcessor proc2;
+    proc2.setStateInformation (stripped.getData(), static_cast<int> (stripped.getSize()));
+    CHECK (proc2.getApvts().getRawParameterValue ("active")->load() == 0.0f);
+    CHECK (proc2.getApvts().getParameter ("bypass")->getValue() == 1.0f);
+    std::puts ("bypass sync both directions + pre-bypass recall");
+}
+
 int main ()
 {
     checkMonoInStereoOut();
@@ -434,6 +481,7 @@ int main ()
     checkHostBypass();
     checkActiveOffPassthrough();
     checkActiveToggleNoClick();
+    checkBypassSync();
 
     if (failures == 0)
     {

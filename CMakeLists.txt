@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneW5 VERSION 1.1.0)
+project(AbaloneW5 VERSION 1.1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -71,6 +71,7 @@ juce_add_plugin(AbaloneW5
     FORMATS VST3 Standalone
     PRODUCT_NAME "Abalone-W5"
     PLUGIN_NAME "Abalone W5"
+    VST3_CATEGORIES "Fx|EQ"
 )
 
 target_sources(AbaloneW5 PRIVATE
