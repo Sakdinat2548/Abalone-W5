@@ -396,18 +396,29 @@ void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID,
 {
     if (loadingState_)
         return;
+    // Gesture-bracketed writes (begin/endChangeGesture): some hosts ignore
+    // unbracketed performEdit on kIsBypass, so the DAW bypass button would
+    // never follow the ACTIVE button without the gesture pair.
     const bool on = newValue > 0.5f;
     if (parameterID == "bypass")
     {
         if (auto* active = apvts.getParameter ("active"))
             if ((active->getValue() > 0.5f) == on) // same sense = diverged (bypass must read !active)
+            {
+                active->beginChangeGesture();
                 active->setValueNotifyingHost (on ? 0.0f : 1.0f);
+                active->endChangeGesture();
+            }
     }
     else if (parameterID == "active")
     {
         if (bypassParam_ != nullptr)
             if ((bypassParam_->getValue() > 0.5f) == on) // bypass must read !active
+            {
+                bypassParam_->beginChangeGesture();
                 bypassParam_->setValueNotifyingHost (on ? 0.0f : 1.0f);
+                bypassParam_->endChangeGesture();
+            }
     }
 }
 
