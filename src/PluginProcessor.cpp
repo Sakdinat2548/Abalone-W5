@@ -32,9 +32,16 @@ AbaloneW5AudioProcessor::AbaloneW5AudioProcessor ()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
+    bypassParam_ = apvts.getParameter ("bypass");
+    apvts.addParameterListener ("bypass", this);
+    apvts.addParameterListener ("active", this);
 }
 
-AbaloneW5AudioProcessor::~AbaloneW5AudioProcessor () = default;
+AbaloneW5AudioProcessor::~AbaloneW5AudioProcessor ()
+{
+    apvts.removeParameterListener ("bypass", this);
+    apvts.removeParameterListener ("active", this);
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::createParameterLayout ()
 {
@@ -51,9 +58,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
     // `toneIn` is driven by the red TONE button; the chain receives
     // `toneIn ? tone : 0`, so the tone knob (1-6 only) never writes bypass.
     // `active` is driven by the red ACTIVE button: ACTIVE-to-THRU is an
-    // internal bypass (see processBlock). Deliberately NOT exposed via
-    // getBypassParameter: host bypass must not dirty plugin state by
-    // flipping a preset param; host bypass is served by processBlockBypassed.
+    // internal bypass (see processBlock). `bypass` (below) is the VST3
+    // bypass parameter served by getBypassParameter, two-way synced to
+    // !active (user-ruled: DAW bypass button and ACTIVE button are one
+    // switch). DSP reads `active`, so preset recall is bit-identical; host
+    // bypass arrives as a bypass-param change and rides the same TRUE-bypass
+    // fade. processBlockBypassed stays for hosts/formats that invoke it
+    // (VST3 with our own bypass param always runs processBlock instead).
     params.push_back (std::make_unique<juce::AudioParameterBool> ("toneIn", "Tone In", true));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("active", "Active", true));
     // Additive quality param (default 1x, so states saved before it
@@ -67,6 +78,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
     // prepare.
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("osfactor", "OS Factor",
                                                                     juce::StringArray ({"1x", "2x", "4x"}), 0));
+    // VST3 bypass parameter (user-ruled DAW awareness — see getBypassParameter
+    // + parameterChanged). Appended LAST so legacy param indices (and host
+    // automation) of every existing id are untouched. Default false =
+    // engaged, so pre-bypass states recall exactly as before; the
+    // setStateInformation converge aligns it to a stored ACTIVE-off.
+    params.push_back (std::make_unique<juce::AudioParameterBool> ("bypass", "Bypass", false));
     return {params.begin(), params.end()};
 }
 
@@ -359,9 +376,39 @@ void AbaloneW5AudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 
 void AbaloneW5AudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
+    loadingState_ = true;
     std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
     if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    loadingState_ = false;
+    // Pre-bypass states lack the `bypass` child (default engaged): align it
+    // to a stored ACTIVE-off so old bypassed sessions recall bypassed and
+    // the DAW sees it. Diverge-only, so current-format states are untouched.
+    if (bypassParam_ != nullptr)
+    {
+        const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
+        if ((bypassParam_->getValue() > 0.5f) == active)
+            bypassParam_->setValueNotifyingHost (active ? 0.0f : 1.0f);
+    }
+}
+
+void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
+{
+    if (loadingState_)
+        return;
+    const bool on = newValue > 0.5f;
+    if (parameterID == "bypass")
+    {
+        if (auto* active = apvts.getParameter ("active"))
+            if ((active->getValue() > 0.5f) == on) // same sense = diverged (bypass must read !active)
+                active->setValueNotifyingHost (on ? 0.0f : 1.0f);
+    }
+    else if (parameterID == "active")
+    {
+        if (bypassParam_ != nullptr)
+            if ((bypassParam_->getValue() > 0.5f) == on) // bypass must read !active
+                bypassParam_->setValueNotifyingHost (on ? 0.0f : 1.0f);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter () { return new AbaloneW5AudioProcessor(); }

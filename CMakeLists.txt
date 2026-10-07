@@ -71,6 +71,7 @@ juce_add_plugin(AbaloneW5
     FORMATS VST3 Standalone
     PRODUCT_NAME "Abalone-W5"
     PLUGIN_NAME "Abalone W5"
+    VST3_CATEGORIES "Fx|EQ"
 )
 
 target_sources(AbaloneW5 PRIVATE
