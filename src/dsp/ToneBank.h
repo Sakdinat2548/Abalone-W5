@@ -294,17 +294,17 @@ private:
         case 34:
             return {Type::Peak, 677.6882, 1.72978, -0.2364};
         case 40:
-            return {Type::LowShelf, 21.9804, 1.11756, -1.9891};
+            return {Type::LowShelf, 23.3315, 0.66438, -2.1291};
         case 41:
             return {Type::Peak, 16931.4281, 0.23498, -0.9418};
         case 42:
-            return {Type::HighShelf, 79.0544, 0.12, -0.2948};
+            return {Type::HighShelf, 12.6487, 1.02216, 2.0772};
         case 43:
-            return {Type::Peak, 8000.0, 0.69283, -4.128};
+            return {Type::Peak, 7500.0, 0.69283, -4.128};
         case 44:
             return {Type::HighShelf, 20928.6602, 0.42978, 1.3207};
         case 45:
-            return {Type::Peak, 10.4613, 4.56174, -1.5092};
+            return {Type::Peak, 9.9251, 3.37706, -0.4468};
         case 50:
             return {Type::LowShelf, 10.7876, 0.53104, -5.696};
         case 51:
@@ -312,7 +312,7 @@ private:
         case 52:
             return {Type::HighShelf, 217.3673, 0.91213, 0.2316};
         case 53:
-            return {Type::Peak, 388.14, 1.30292, -0.7101};
+            return {Type::Peak, 388.14, 1.30292, -0.2101};
         case 54:
             return {Type::Peak, 9.3407, 1.41276, -1.7296};
         case 60:
