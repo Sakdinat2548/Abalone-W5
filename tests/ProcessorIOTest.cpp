@@ -427,8 +427,9 @@ void checkActiveToggleNoClick ()
 } // namespace
 
 // (f) Host-visible bypass: `bypass` is exposed via getBypassParameter and
-// two-way synced to !active (user-ruled: DAW button and ACTIVE are one
-// switch); pre-bypass states recall engaged-aligned.
+// synced ONE WAY from !active (user-ruled: the DAW button follows ACTIVE;
+// the reverse echo is gone so bulk sets round-trip bit-exact for auval);
+// pre-bypass states recall engaged-aligned; inconsistent pairs replay verbatim.
 void checkBypassSync ()
 {
     AbaloneW5AudioProcessor proc;
@@ -437,10 +438,30 @@ void checkBypassSync ()
     auto* bypass = apvts.getParameter ("bypass");
     auto* active = apvts.getParameter ("active");
     CHECK (bypass->getValue() == 0.0f);   // engaged by default
-    bypass->setValueNotifyingHost (1.0f); // host -> plugin
-    CHECK (active->getValue() == 0.0f);
-    active->setValueNotifyingHost (1.0f); // plugin -> host
+    active->setValueNotifyingHost (0.0f); // plugin -> host
+    CHECK (bypass->getValue() == 1.0f);
+    active->setValueNotifyingHost (1.0f);
     CHECK (bypass->getValue() == 0.0f);
+
+    // Host -> plugin: `bypass` never echoes into `active`, but the DSP still
+    // bypasses (processBlock obeys either control).
+    bypass->setValueNotifyingHost (1.0f); // host bypass on, ACTIVE untouched
+    CHECK (active->getValue() == 1.0f);
+    {
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 100.0, 0.4f);
+        static float snapshot0[kBlock];
+        static float snapshot1[kBlock];
+        std::memcpy (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0));
+        std::memcpy (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1));
+        juce::MidiBuffer midi;
+        proc.processBlock (buffer, midi);
+        CHECK (std::memcmp (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0)) == 0);
+        CHECK (std::memcmp (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1)) == 0);
+        std::puts ("host-bypass with ACTIVE on: bit-exact passthrough, ACTIVE untouched");
+    }
+    bypass->setValueNotifyingHost (0.0f);
 
     // Old state: ACTIVE-off stored before `bypass` existed. Save bypassed,
     // strip the `bypass` node (pre-bypass era format), reload: active stays
@@ -470,7 +491,42 @@ void checkBypassSync ()
     proc2.setStateInformation (stripped.getData(), static_cast<int> (stripped.getSize()));
     CHECK (proc2.getApvts().getRawParameterValue ("active")->load() == 0.0f);
     CHECK (proc2.getApvts().getParameter ("bypass")->getValue() == 1.0f);
-    std::puts ("bypass sync both directions + pre-bypass recall");
+    std::puts ("one-way sync + host-bypass DSP + pre-bypass recall");
+
+    // auval regression (CI-proven FAIL under the two-way mirror): a bulk set
+    // through the listener path must survive save/restore with neither side
+    // rewritten by our code. Live values stay raw-exact (JUCE bools store
+    // unquantized); the BLOB snaps bools to 0/1 (APVTS adapter behavior —
+    // every JUCE AU ships this, auval tolerates it); restore must replay the
+    // blob bit-exact and, critically, never flip `active` to 1.0.
+    {
+        AbaloneW5AudioProcessor p1;
+        auto& a1 = p1.getApvts();
+        a1.getParameter ("active")->setValueNotifyingHost (0.112305f);
+        a1.getParameter ("bypass")->setValueNotifyingHost (0.3f);
+        CHECK (a1.getParameter ("active")->getValue() == 0.112305f);
+        CHECK (a1.getParameter ("bypass")->getValue() == 0.3f);
+        juce::MemoryBlock block;
+        p1.getStateInformation (block);
+        std::unique_ptr<juce::XmlElement> blobXml (
+            juce::AudioProcessor::getXmlFromBinary (block.getData(), static_cast<int> (block.getSize())));
+        CHECK (blobXml != nullptr);
+        float blobActive = -1.0f, blobBypass = -1.0f;
+        for (auto* child = blobXml->getFirstChildElement(); child != nullptr; child = child->getNextElement())
+        {
+            if (child->getStringAttribute ("id") == "active")
+                blobActive = static_cast<float> (child->getDoubleAttribute ("value"));
+            if (child->getStringAttribute ("id") == "bypass")
+                blobBypass = static_cast<float> (child->getDoubleAttribute ("value"));
+        }
+        CHECK (blobActive == 0.0f); // bool snap, documented above
+        CHECK (blobBypass == 0.0f);
+        AbaloneW5AudioProcessor p2;
+        p2.setStateInformation (block.getData(), static_cast<int> (block.getSize()));
+        CHECK (p2.getApvts().getParameter ("active")->getValue() == blobActive);
+        CHECK (p2.getApvts().getParameter ("bypass")->getValue() == blobBypass);
+        std::puts ("bulk active/bypass set replays the saved blob bit-exact");
+    }
 }
 
 int main ()

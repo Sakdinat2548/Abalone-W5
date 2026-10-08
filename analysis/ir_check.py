@@ -21,11 +21,10 @@ asserted: --verify-port (run on every invocation as part of the self-test
 section) recomputes the six per-tone either-oracle worst deltas
 (min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
 algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each
-to match the recorded C++ reference within 0.05 dB (Task-24 numbers):
-  T1 0.16 / T2 0.12 / T3 0.07 / T4 0.10 / T5 0.05 / T6 0.21 dB.
-(The references are small because the fit tracks the digitized
-chart — CSV binding, header/IR advisory; see IR_VALIDATION.md. The check
-verifies port fidelity to C++, not fit quality.)
+to match the recorded C++ reference within 0.05 dB (current references:
+  T1 1.46 / T2 0.12 / T3 0.07 / T4 2.00 / T5 2.24 / T6 4.15 dB).
+(The check verifies port fidelity to C++, not fit quality — large
+references only mean the approved curves sit off the eye-read oracles.)
 
 Usage:
   python analysis/ir_check.py                  # self-test + real IRs if present
@@ -68,16 +67,16 @@ SELFTEST_TOL_DB = 0.05  # end-to-end (time-domain synth IR -> FFT -> analytic)
 # ----------------------------------------------------------------------------
 # Section 1: Python port of src/dsp/ToneBank.h + src/dsp/HighCut.h.
 # (tone, stage) -> (type, f0 Hz, Q, gain dB); HP stages have no gain.
-# Verbatim from the header comment table (Task 24: T1x6/T2x6/T3x5/T4x6/T5x5/
-# T6x6 — tight fit to the digitized gray, see ToneBank.h).
+# Verbatim from src/dsp/ToneBank.h (manual retune 2026-10-08);
+# TONE_GAIN mirrors ToneBank::toneGainDb (global per-tone staging).
 # ----------------------------------------------------------------------------
 TONE_PARAMS = {
-    10: ("hp", 5.0, 0.40395, 0.0),
-    11: ("pk", 49.0866, 0.35951, 1.8346),
-    12: ("pk", 1048.8736, 0.16364, -13.7137),
-    13: ("pk", 1734.5392, 0.21392, 7.1515),
-    14: ("hs", 11981.7927, 1.06858, 1.311),
-    15: ("pk", 284.8489, 0.89252, 1.335),
+    10: ("hp", 3.8136, 0.46776, 0.0),
+    11: ("pk", 19.966, 0.27101, 6.0138),
+    12: ("pk", 919.3987, 0.16448, -9.7137),
+    13: ("pk", 1927.2658, 0.17827, 9.1515),
+    14: ("hs", 8986.3445, 0.48574, 8.1929),
+    15: ("pk", 135.9733, 0.26901, 5.335),
     20: ("pk", 644.5752, 0.31635, -9.5942),
     21: ("pk", 715.0513, 1.6408, -12.8167),
     22: ("ls", 12.4907, 0.91201, -1.5117),
@@ -89,24 +88,28 @@ TONE_PARAMS = {
     32: ("ls", 12.9996, 0.78994, -3.6748),
     33: ("pk", 40.4319, 0.64122, 0.8181),
     34: ("pk", 677.6882, 1.72978, -0.2364),
-    40: ("ls", 23.3315, 0.66438, -2.6291),
-    41: ("pk", 8815.7501, 1.19986, -2.0138),
-    42: ("hs", 12.6487, 1.02216, 1.5772),
-    43: ("pk", 5139.997, 0.66627, -4.9216),
-    44: ("hs", 14083.1316, 0.57743, 1.3207),
+    40: ("ls", 23.3315, 0.66438, -2.1291),
+    41: ("pk", 16931.4281, 0.23498, -0.9418),
+    42: ("hs", 12.6487, 1.02216, 2.0772),
+    43: ("pk", 7500.0, 0.69283, -4.128),
+    44: ("hs", 20928.6602, 0.42978, 1.3207),
     45: ("pk", 9.9251, 3.37706, -0.4468),
-    50: ("ls", 16.5931, 0.66482, -4.0),
-    51: ("ls", 61.4232, 0.42485, -19.2452),
-    52: ("hs", 166.6066, 0.51491, 2.5516),
-    53: ("pk", 732.2752, 1.09303, 0.3299),
-    54: ("pk", 11.0426, 3.60242, -0.6),
-    60: ("ls", 17.7493, 0.65975, -3.972),
-    61: ("ls", 63.4268, 0.43413, -18.9831),
-    62: ("hs", 198.2506, 0.53229, 2.7376),
-    63: ("hs", 14729.0504, 0.51821, -5.6445),
-    64: ("pk", 20141.4081, 1.42257, -0.5909),
-    65: ("pk", 11.1211, 2.63754, -0.7999),
+    50: ("ls", 10.7876, 0.53104, -5.696),
+    51: ("ls", 52.824, 0.42485, -21.2452),
+    52: ("hs", 217.3673, 0.91213, 0.2316),
+    53: ("pk", 388.14, 1.30292, -0.2101),
+    54: ("pk", 9.3407, 1.41276, -1.7296),
+    60: ("ls", 19.5861, 0.84932, -3.652),
+    61: ("ls", 51.7034, 0.42067, -19.1111),
+    62: ("hs", 292.1971, 0.94755, -0.1584),
+    63: ("hs", 9158.3184, 0.54857, -6.8765),
+    64: ("pk", 18976.0169, 0.8665, -0.9109),
+    65: ("pk", 9.3951, 4.00708, -1.8879),
 }
+
+# Overall per-tone gain (dB); mirrors ToneBank::toneGainDb. The cascade
+# coefficients already carry per-section gains — this is the global staging.
+TONE_GAIN = {1: -6.8239, 2: 0.0, 3: 0.0, 4: -0.7323, 5: 2.4954, 6: 2.81}
 
 
 def num_sections(tone):
@@ -165,7 +168,7 @@ def tone_magnitude_at(tone, freq_hz, fs=48000.0):
         h_r = (bz_r * az_r + bz_i * az_i) / denom
         h_i = (bz_i * az_r - bz_r * az_i) / denom
         real, imag = real * h_r - imag * h_i, real * h_i + imag * h_r
-    return 20.0 * math.log10(math.hypot(real, imag))
+    return 20.0 * math.log10(math.hypot(real, imag)) + TONE_GAIN.get(tone, 0.0)
 
 
 def highcut_coeff(fs):
@@ -199,9 +202,10 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # same algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires
 # each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
 # Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal
-# (Task-24 numbers).
+# (re-pointed 2026-10-08 to the approved manual T4/T5 retune; T1/T6 zone
+# points were already off the Task-24 numbers at HEAD).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 0.16, 2: 0.12, 3: 0.07, 4: 0.10, 5: 0.05, 6: 0.21}
+CXX_EITHER_REF_DB = {1: 1.46, 2: 0.12, 3: 0.07, 4: 2.00, 5: 2.24, 6: 4.15}
 PORT_VERIFY_TOL_DB = 0.05
 
 

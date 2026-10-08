@@ -81,6 +81,18 @@
 // Ruling options: 7th section on T4 (+0.005 relief on that point),
 // accepted deviation, or gate relief.
 //
+// MANUAL RETUNE (user decision 2026-10-08, approved curves — tests
+// re-pointed, not relaxed silently): T4 40/42 back to v1 values +0.5 dB
+// staging (23.33/0.66/-2.13, 12.65/1.02/+2.08), 43 dip 8k -> 7.5k,
+// 45 back to v1 micro-peak, T5 53 peak +0.5 dB (-0.21). Absolute T4 level
+// +1.4 dB (anchor -1.66, 20 Hz +1.71); normalized shapes still <= 0.35 dB
+// rms vs measured IR (T4 dip -4.5 vs IR -4.59). T4 blue-zone now max
+// 1.10/1.16 rms 0.72/0.79 (gates 1.20/0.80); T5 blue rms 0.21/0.18
+// (gate 0.25).
+// STAGING TRIM 2026-10-08: toneGainDb(4) 0.7677 -> -0.7323 (-1.5 dB)
+// restores chart staging (+1.19 dB @1 kHz vs eye +1.2; anchor back to
+// -3.00, 20 Hz +0.21, dip -3.33) — the shape retune above is untouched.
+//
 // T6 RECORDED DEVIATION (6-sec floor 0.217 after 12 rounds; gates
 // 0.22/0.07/0.15): foot solved (twin-LS + micro-peak, low band <= 0.09);
 // remainder is the top — 9964 bump + 18-20 kHz edge warp split (48-20k
@@ -148,7 +160,7 @@ struct ToneBank
         case 1:
             return -6.8239f;
         case 4:
-            return 0.7677f;
+            return -0.7323f;
         case 5:
             return 2.4954f;
         case 6:
@@ -294,17 +306,17 @@ private:
         case 34:
             return {Type::Peak, 677.6882, 1.72978, -0.2364};
         case 40:
-            return {Type::LowShelf, 21.9804, 1.11756, -1.9891};
+            return {Type::LowShelf, 23.3315, 0.66438, -2.1291};
         case 41:
             return {Type::Peak, 16931.4281, 0.23498, -0.9418};
         case 42:
-            return {Type::HighShelf, 79.0544, 0.12, -0.2948};
+            return {Type::HighShelf, 12.6487, 1.02216, 2.0772};
         case 43:
-            return {Type::Peak, 8000.0, 0.69283, -4.128};
+            return {Type::Peak, 7500.0, 0.69283, -4.128};
         case 44:
             return {Type::HighShelf, 20928.6602, 0.42978, 1.3207};
         case 45:
-            return {Type::Peak, 10.4613, 4.56174, -1.5092};
+            return {Type::Peak, 9.9251, 3.37706, -0.4468};
         case 50:
             return {Type::LowShelf, 10.7876, 0.53104, -5.696};
         case 51:
@@ -312,7 +324,7 @@ private:
         case 52:
             return {Type::HighShelf, 217.3673, 0.91213, 0.2316};
         case 53:
-            return {Type::Peak, 388.14, 1.30292, -0.7101};
+            return {Type::Peak, 388.14, 1.30292, -0.2101};
         case 54:
             return {Type::Peak, 9.3407, 1.41276, -1.7296};
         case 60:

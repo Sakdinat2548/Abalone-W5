@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneW5 VERSION 1.1.1)
+project(AbaloneW5 VERSION 1.1.2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,9 +66,10 @@ FetchContent_MakeAvailable(JUCE)
 juce_add_plugin(AbaloneW5
     VERSION ${PROJECT_VERSION}
     COMPANY_NAME "Sakdinat2548"
+    BUNDLE_ID com.sakdinat2548.abalonew5
     PLUGIN_MANUFACTURER_CODE SA48
     PLUGIN_CODE AbW5
-    FORMATS VST3 Standalone
+    FORMATS AU VST3 Standalone
     PRODUCT_NAME "Abalone-W5"
     PLUGIN_NAME "Abalone W5"
     VST3_CATEGORIES "Fx|EQ"

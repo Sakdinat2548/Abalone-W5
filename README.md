@@ -3,7 +3,7 @@
 [![CI](https://github.com/Sakdinat2548/Abalone-W5/actions/workflows/ci.yml/badge.svg)](https://github.com/Sakdinat2548/Abalone-W5/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-U5-inspired clean DI — free VST3 (Windows, macOS, Linux).
+U5-inspired clean DI — free VST3 (Windows, macOS, Linux) + AU (macOS, for Logic).
 Windows is host-tested; macOS/Linux builds are CI-tested only.
 
 ![Abalone W5 UI](docs/ui-preview.png)
@@ -25,7 +25,7 @@ built with JUCE 8 biquads/gain only. 0 dBFS = +24 dBu (hardware max in);
 | Boost | 1–10 stepped, 3 dB/step (~+3 to +30 dB), default 1 |
 | Tone | Bypass + 1–6, default Tone 3 (10 ms xfade on switch) |
 | TONE button | Tone in/out (default in) |
-| ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active) |
+| ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active; DAW bypass follows it, and also silences on its own) |
 | HighCut | On/off, −3 dB at 8 kHz, 1-pole min-phase (default off) |
 | TRIM | Cut-only −30..0 dB (default 0) |
 | SIGNAL LED | Signal-present at −2 dBFS, pre-trim tap (follows Boost staging, unaffected by TRIM) |
@@ -52,7 +52,8 @@ from the first open.
 
 ## Install
 
-- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship only the VST3.
+- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship the VST3 on every OS (plus AU on macOS).
+- AU (macOS zip only, for Logic): copy `Abalone-W5.component` to `~/Library/Audio/Plug-Ins/Components` (or the system location), then rescan in Logic.
 - Standalone (dev testing only, not shipped): run the locally built `Abalone W5.exe` directly.
 
 ## Validation
