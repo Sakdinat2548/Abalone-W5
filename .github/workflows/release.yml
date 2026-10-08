@@ -13,7 +13,8 @@
 # Release notes are edited by hand on the GitHub release page (no body_path:
 # automation kept overwriting manual edits).
 # Standing caveat: only Windows is host-tested by the author.
-# No AU, no code signing, no installer (all prior rulings stand).
+# AU builds + auval-gates on the mac leg (component packaging still open);
+# no code signing, no installer.
 name: Release
 
 on:
@@ -154,6 +155,16 @@ jobs:
           chmod +x "$PVBIN"
           if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
           $RUN ./"$PVBIN" --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
+
+      # auval (same arrangement as ci.yml): the mac leg gates the AU the way
+      # Logic loads it, before packaging.
+      - name: Validate AU with auval (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "build/AbaloneW5_artefacts/Release/AU/Abalone-W5.component" ~/Library/Audio/Plug-Ins/Components/
+          auval -v aufx AbW5 SA48
 
       # ZIP_NAME via env keeps ${{ }} out of the script body so the script is
       # statically parse-clean (Task-31 lesson).

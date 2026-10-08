@@ -16,8 +16,9 @@
 #   ride the same apt line (no-op if preinstalled).
 # Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg + a
 # shared step that fails loud if a MinGW gcc is on PATH.
-# Builds all targets as proof (VST3 + Standalone + tests); only the VST3 ships
-# (VST3-only product ruling — Standalone is dev-testing).
+# Builds all targets as proof (VST3 + AU on macOS + Standalone + tests);
+# only the VST3 ships (Standalone is dev-testing; AU component packaging
+# still open — the AU builds and auval-gates, but releases don't zip it yet).
 # No code signing; no installer (manual install per README).
 name: CI
 
@@ -139,6 +140,18 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      # auval (ships with macOS, nothing to download): validates the
+      # just-built AU the way Logic loads it. Copies the .component into the
+      # user Components dir first — auval resolves by type/subtype/manufacturer
+      # (aufx AbW5 SA48), not by path. Nonzero exit fails the leg.
+      - name: Validate AU with auval (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "build/AbaloneW5_artefacts/Release/AU/Abalone-W5.component" ~/Library/Audio/Plug-Ins/Components/
+          auval -v aufx AbW5 SA48
 
       # pluginval (pinned v1.0.4 binary from Tracktion/pluginval releases —
       # building it from source would double CI time for zero gain). Validates
