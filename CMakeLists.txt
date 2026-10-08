@@ -68,7 +68,7 @@ juce_add_plugin(AbaloneW5
     COMPANY_NAME "Sakdinat2548"
     PLUGIN_MANUFACTURER_CODE SA48
     PLUGIN_CODE AbW5
-    FORMATS VST3 Standalone
+    FORMATS AU VST3 Standalone
     PRODUCT_NAME "Abalone-W5"
     PLUGIN_NAME "Abalone W5"
     VST3_CATEGORIES "Fx|EQ"
