@@ -38,6 +38,10 @@ U5-flavored clean DI VST3. JUCE 8 biquads/gain only. No WDF. 1x/2x/4x oversampli
   MinGW gcc on PATH, so force `CC=cl`/`CXX=cl`):
   `call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 && set CC=cl && set CXX=cl && C:\msys64\ucrt64\bin\cmake.exe -B build-ide -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=C:\msys64\ucrt64\bin\ninja.exe`
   (note: `VsDevCmd.bat` is directly under `Common7\Tools\`, no `vsdevcmd\` subdir).
+- Then build the assets target once (same shell): JUCE emits `BinaryData.h`
+  only at BUILD time, never at configure — without this clangd flags the
+  include as missing from the first open:
+  `C:\msys64\ucrt64\bin\cmake.exe --build build-ide --target AbaloneW5Assets`
 - `.clangd` points at `build-ide` and adds MSVC 14.29.30133 + WinSDK 10.0.19041.0
   includes explicitly (clangd 22 auto-detection falls back to stale VS8/9/10
   paths; use combined `-I<path>` form — split `-isystem <path>` breaks its
