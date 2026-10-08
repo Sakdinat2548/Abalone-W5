@@ -58,13 +58,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
     // `toneIn` is driven by the red TONE button; the chain receives
     // `toneIn ? tone : 0`, so the tone knob (1-6 only) never writes bypass.
     // `active` is driven by the red ACTIVE button: ACTIVE-to-THRU is an
-    // internal bypass (see processBlock). `bypass` (below) is the VST3
-    // bypass parameter served by getBypassParameter, two-way synced to
-    // !active (user-ruled: DAW bypass button and ACTIVE button are one
-    // switch). DSP reads `active`, so preset recall is bit-identical; host
-    // bypass arrives as a bypass-param change and rides the same TRUE-bypass
-    // fade. processBlockBypassed stays for hosts/formats that invoke it
-    // (VST3 with our own bypass param always runs processBlock instead).
+    // internal bypass (see processBlock). `bypass` (below) is the host
+    // bypass parameter served by getBypassParameter, synced ONE WAY from
+    // active (user-ruled: the DAW bypass button follows ACTIVE; the reverse
+    // echo is gone — see parameterChanged). DSP obeys either control, so
+    // preset recall is bit-identical; host bypass arrives as a bypass-param
+    // change and rides the same TRUE-bypass fade. processBlockBypassed stays
+    // for hosts/formats that invoke it (VST3 with our own bypass param
+    // always runs processBlock instead).
     params.push_back (std::make_unique<juce::AudioParameterBool> ("toneIn", "Tone In", true));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("active", "Active", true));
     // Additive quality param (default 1x, so states saved before it
@@ -78,11 +79,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
     // prepare.
     params.push_back (std::make_unique<juce::AudioParameterChoice> ("osfactor", "OS Factor",
                                                                     juce::StringArray ({"1x", "2x", "4x"}), 0));
-    // VST3 bypass parameter (user-ruled DAW awareness — see getBypassParameter
+    // Host bypass parameter (user-ruled DAW awareness — see getBypassParameter
     // + parameterChanged). Appended LAST so legacy param indices (and host
     // automation) of every existing id are untouched. Default false =
     // engaged, so pre-bypass states recall exactly as before; the
-    // setStateInformation converge aligns it to a stored ACTIVE-off.
+    // setStateInformation converge aligns it to a stored ACTIVE-off only
+    // when the blob predates the param (no `bypass` child).
     params.push_back (std::make_unique<juce::AudioParameterBool> ("bypass", "Bypass", false));
     return {params.begin(), params.end()};
 }
@@ -155,7 +157,13 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const int tone = toneIn ? toneParam : 0;
     const bool highcut = apvts.getRawParameterValue ("highcut")->load() > 0.5f;
     const float trimDb = apvts.getRawParameterValue ("output")->load();
-    const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
+    // One-way mirror (see parameterChanged): host bypass writes only
+    // `bypass` and never echoes into `active`, so bulk sets (AU state
+    // restore, auval's per-param randomization) round-trip bit-exact. The
+    // DSP obeys EITHER control, so host bypass still silences audio; only
+    // the ACTIVE button display no longer follows host-bypass presses.
+    const bool hostBypass = apvts.getRawParameterValue ("bypass")->load() > 0.5f;
+    const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f && !hostBypass;
     const int osIndex = static_cast<int> (std::round (apvts.getRawParameterValue ("osfactor")->load()));
     const int osFactor = (osIndex <= 0) ? 1 : (osIndex == 1) ? 2 : 4;
 
@@ -381,14 +389,30 @@ void AbaloneW5AudioProcessor::setStateInformation (const void* data, int sizeInB
     if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
     loadingState_ = false;
-    // Pre-bypass states lack the `bypass` child (default engaged): align it
-    // to a stored ACTIVE-off so old bypassed sessions recall bypassed and
-    // the DAW sees it. Diverge-only, so current-format states are untouched.
-    if (bypassParam_ != nullptr)
+    // Pre-bypass-era blobs have no `bypass` child (default engaged): align it
+    // once from a stored ACTIVE-off so old bypassed sessions recall bypassed
+    // in the DAW. Presence is read from the BLOB, never apvts.state:
+    // replaceState re-links every adapter and re-appends missing children
+    // with defaults (JUCE's updateParameterConnectionsToChildTrees), so the
+    // tree always looks complete afterwards. Current-format blobs (child
+    // present) are left bit-exact — even an inconsistent pair replays
+    // verbatim, which is what AU state round-trip validation (auval)
+    // requires of every parameter. Never touch `active` here: it is the
+    // source of truth, `bypass` the follower.
+    if (bypassParam_ != nullptr && xml != nullptr)
     {
-        const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
-        if ((bypassParam_->getValue() > 0.5f) == active)
+        bool hasBypassChild = false;
+        for (auto* child = xml->getFirstChildElement(); child != nullptr; child = child->getNextElement())
+            if (child->getStringAttribute ("id") == "bypass")
+            {
+                hasBypassChild = true;
+                break;
+            }
+        if (!hasBypassChild)
+        {
+            const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
             bypassParam_->setValueNotifyingHost (active ? 0.0f : 1.0f);
+        }
     }
 }
 
@@ -396,30 +420,26 @@ void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID,
 {
     if (loadingState_)
         return;
-    // Gesture-bracketed writes (begin/endChangeGesture): some hosts ignore
+    // One-way mirror, ACTIVE -> bypass only (diverge-only write so the pair
+    // can never chase itself). Gesture-bracketed: some hosts ignore
     // unbracketed performEdit on kIsBypass, so the DAW bypass button would
     // never follow the ACTIVE button without the gesture pair.
+    // The reverse echo (bypass -> active) is deliberately GONE: auval (and
+    // Apple's AU per-parameter state replay) writes every parameter
+    // independently, so an eager echo clobbers bulk sets — proven by CI
+    // (Active 0.112305 restored as 1.0). Host bypass still silences the DSP
+    // (processBlock obeys either control); only the ACTIVE button display
+    // no longer follows host-bypass presses.
+    if (parameterID != "active")
+        return;
     const bool on = newValue > 0.5f;
-    if (parameterID == "bypass")
-    {
-        if (auto* active = apvts.getParameter ("active"))
-            if ((active->getValue() > 0.5f) == on) // same sense = diverged (bypass must read !active)
-            {
-                active->beginChangeGesture();
-                active->setValueNotifyingHost (on ? 0.0f : 1.0f);
-                active->endChangeGesture();
-            }
-    }
-    else if (parameterID == "active")
-    {
-        if (bypassParam_ != nullptr)
-            if ((bypassParam_->getValue() > 0.5f) == on) // bypass must read !active
-            {
-                bypassParam_->beginChangeGesture();
-                bypassParam_->setValueNotifyingHost (on ? 0.0f : 1.0f);
-                bypassParam_->endChangeGesture();
-            }
-    }
+    if (bypassParam_ != nullptr)
+        if ((bypassParam_->getValue() > 0.5f) == on) // bypass must read !active
+        {
+            bypassParam_->beginChangeGesture();
+            bypassParam_->setValueNotifyingHost (on ? 0.0f : 1.0f);
+            bypassParam_->endChangeGesture();
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter () { return new AbaloneW5AudioProcessor(); }
