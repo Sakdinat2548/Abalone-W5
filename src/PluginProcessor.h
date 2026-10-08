@@ -52,8 +52,10 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    // VST3 bypass parameter (user-ruled DAW awareness): the host bypass
-    // button and the red ACTIVE button are one switch (see parameterChanged).
+    // VST3 bypass parameter (user-ruled DAW awareness): the red ACTIVE button
+    // drives the host bypass button via the one-way mirror (see
+    // parameterChanged); host-bypass presses silence the DSP without
+    // echoing into ACTIVE (auval-fidelity rule).
     juce::AudioProcessorParameter* getBypassParameter () const override { return bypassParam_; }
 
     juce::AudioProcessorValueTreeState& getApvts () { return apvts; }
@@ -69,13 +71,14 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout ();
 
-    // ACTIVE<->bypass mirror (both directions, diverge-only writes so the
-    // pair can never chase itself). Runs on the message thread; the audio
-    // thread only reads raw values. Suppressed while setStateInformation
-    // bulk-loads (loadingState_): mid-load mirrors fight the incoming
-    // values (a converged bypass gets clobbered by a missing child's
-    // default, which then drags active back) — alignment happens once,
-    // explicitly, after the load instead.
+    // ACTIVE->bypass one-way mirror (diverge-only write so the pair can never
+    // chase itself; the reverse echo is gone — auval writes every parameter
+    // independently and an eager echo clobbers bulk sets). Runs on the
+    // message thread; the audio thread only reads raw values. Suppressed
+    // while setStateInformation bulk-loads (loadingState_): mid-load mirrors
+    // fight the incoming values — alignment happens once, explicitly, after
+    // the load instead (missing-`bypass`-child blobs only; current-format
+    // blobs replay bit-exact).
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     bool loadingState_ = false;
 

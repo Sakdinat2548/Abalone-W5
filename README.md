@@ -3,7 +3,7 @@
 [![CI](https://github.com/Sakdinat2548/Abalone-W5/actions/workflows/ci.yml/badge.svg)](https://github.com/Sakdinat2548/Abalone-W5/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-U5-inspired clean DI — free VST3 (Windows, macOS, Linux).
+U5-inspired clean DI — free VST3 (Windows, macOS, Linux) + AU (macOS, for Logic).
 Windows is host-tested; macOS/Linux builds are CI-tested only.
 
 ![Abalone W5 UI](docs/ui-preview.png)
@@ -52,7 +52,8 @@ from the first open.
 
 ## Install
 
-- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship only the VST3.
+- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship the VST3 on every OS (plus AU on macOS).
+- AU (macOS zip only, for Logic): copy `Abalone-W5.component` to `~/Library/Audio/Plug-Ins/Components` (or the system location), then rescan in Logic.
 - Standalone (dev testing only, not shipped): run the locally built `Abalone W5.exe` directly.
 
 ## Validation

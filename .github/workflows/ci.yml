@@ -17,8 +17,8 @@
 # Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg + a
 # shared step that fails loud if a MinGW gcc is on PATH.
 # Builds all targets as proof (VST3 + AU on macOS + Standalone + tests);
-# only the VST3 ships (Standalone is dev-testing; AU component packaging
-# still open — the AU builds and auval-gates, but releases don't zip it yet).
+# CI publishes nothing (Standalone is dev-testing; the AU ships in the
+# macOS release zip, auval-gated on that leg too).
 # No code signing; no installer (manual install per README).
 name: CI
 

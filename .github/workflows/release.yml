@@ -1,4 +1,4 @@
-# Release: on version tags (v*), rebuild per OS + ship VST3 zips.
+# Release: on version tags (v*), rebuild per OS + ship plugin zips.
 #
 # Self-contained (own configure+build per leg, not artifact downloads from CI)
 # so a tagged build is always fresh and reproducible from the tag alone.
@@ -6,15 +6,17 @@
 # Linux GCC+JUCE deps); see ci.yml header for the why. Upload via
 # softprops/action-gh-release (maintained, de-facto standard for tag releases;
 # auto-creates the GitHub release; each matrix leg appends its own zip).
-# Ships ONLY the VST3 bundle (+ LICENSE + README.md) per zip — the Standalone
-# is dev-testing and is NOT released. VST3 bundle name follows PRODUCT_NAME
-# ("Abalone-W5.vst3" since the SA48/AbW5 identity commit; the old
-# "Abalone W5.vst3" dir lingering in local build/ output is pre-rename stale).
+# Ships the VST3 bundle on all OSes + the AU component on macOS
+# (auval-gated in CI/release; install to ~/Library/Audio/Plug-Ins/Components
+# or /Library/Audio/Plug-Ins/Components, then rescan in Logic) + LICENSE +
+# README.md per zip — the Standalone is dev-testing and is NOT released.
+# Bundle names follow PRODUCT_NAME ("Abalone-W5.vst3" since the SA48/AbW5
+# identity commit; the old "Abalone W5.vst3" dir lingering in local build/
+# output is pre-rename stale).
 # Release notes are edited by hand on the GitHub release page (no body_path:
 # automation kept overwriting manual edits).
 # Standing caveat: only Windows is host-tested by the author.
-# AU builds + auval-gates on the mac leg (component packaging still open);
-# no code signing, no installer.
+# macOS ships VST3 + auval-gated AU; no code signing, no installer.
 name: Release
 
 on:
@@ -188,8 +190,26 @@ jobs:
           Compress-Archive -LiteralPath stage/"Abalone-W5.vst3", stage/LICENSE, stage/README.md `
             -DestinationPath $env:ZIP_NAME
 
-      - name: Package VST3 zip (macOS/Linux)
-        if: runner.os != 'Windows'
+      # macOS ships VST3 + the auval-gated AU component (same bundle
+      # auval just validated); Linux stays VST3-only (AU is Apple-only).
+      - name: Package VST3+AU zip (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ZIP_NAME: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
+        run: |
+          VST3="build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3"
+          AU="build/AbaloneW5_artefacts/Release/AU/Abalone-W5.component"
+          test -d "$VST3" || { echo "VST3 not found at $VST3"; exit 1; }
+          test -d "$AU" || { echo "AU not found at $AU"; exit 1; }
+          command -v zip >/dev/null || { echo "zip tool missing"; exit 1; }
+          rm -rf stage && mkdir stage
+          cp -R "$VST3" "$AU" stage/
+          cp LICENSE README.md stage/
+          (cd stage && zip -r "../$ZIP_NAME" "Abalone-W5.vst3" "Abalone-W5.component" LICENSE README.md)
+
+      - name: Package VST3 zip (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         env:
           ZIP_NAME: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
