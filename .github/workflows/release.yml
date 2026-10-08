@@ -39,6 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same sccache setup as ci.yml (shared cache: tag legs start warm).
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Set up MSVC environment
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -85,6 +89,8 @@ jobs:
         env:
           CC: cl
           CXX: cl
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           Write-Host "CC=$env:CC CXX=$env:CXX"
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -95,6 +101,8 @@ jobs:
         env:
           CC: clang
           CXX: clang++
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           echo "CC=$CC CXX=$CXX"
           "$CC" --version
@@ -106,6 +114,8 @@ jobs:
         env:
           CC: gcc
           CXX: g++
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           echo "CC=$CC CXX=$CXX"
           "$CC" --version
@@ -117,6 +127,29 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      # pluginval at strictness 10 (release-grade proof; CI gates level 5 for
+      # speed). Same pinned binary + xvfb arrangement as ci.yml. A failing
+      # leg ships no zip (fail-fast is false, each leg gates itself).
+      - name: Validate VST3 with pluginval (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          curl -sSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          New-Item -ItemType Directory -Force -Path pv | Out-Null
+          Expand-Archive $env:TEMP/pv.zip -DestinationPath pv/ -Force
+          ./pv/pluginval.exe --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
+
+      - name: Validate VST3 with pluginval (macOS/Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then ASSET=pluginval_Linux.zip; else ASSET=pluginval_macOS.zip; fi
+          curl -sSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
+          rm -rf pv && mkdir pv && unzip -q -o /tmp/pv.zip -d pv
+          chmod +x pv/pluginval
+          if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
+          $RUN ./pv/pluginval --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
 
       # ZIP_NAME via env keeps ${{ }} out of the script body so the script is
       # statically parse-clean (Task-31 lesson).
