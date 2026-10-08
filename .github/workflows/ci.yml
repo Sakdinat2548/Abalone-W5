@@ -34,8 +34,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+    # sccache backend wiring (per mozilla-actions/sccache-action README —
+    # the action alone only installs sccache on local disk): GHA puts the
+    # cache in the GitHub cache service (this is what the Caches page
+    # shows); MULTIARCH lets the macOS universal (arm64+x86_64 in one
+    # clang call) legs cache instead of skipping all 86 compiles.
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_MULTIARCH: "1"
     steps:
       - uses: actions/checkout@v4
+
+      # Compiler cache (sccache): JUCE modules dominate build time. Content-
+      # hashed (compiler+flags+sources) so hits are always safe — unlike a
+      # build-dir cache, which goes stale across runner-image updates. One
+      # step, all legs; the launchers below route every compile through it.
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Set up MSVC environment
         if: runner.os == 'Windows'
@@ -85,6 +100,8 @@ jobs:
         env:
           CC: cl
           CXX: cl
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           Write-Host "CC=$env:CC CXX=$env:CXX"
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -95,6 +112,8 @@ jobs:
         env:
           CC: clang
           CXX: clang++
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           echo "CC=$CC CXX=$CXX"
           "$CC" --version
@@ -106,6 +125,8 @@ jobs:
         env:
           CC: gcc
           CXX: g++
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           echo "CC=$CC CXX=$CXX"
           "$CC" --version
@@ -118,3 +139,29 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      # pluginval (pinned v1.0.4 binary from Tracktion/pluginval releases —
+      # building it from source would double CI time for zero gain). Validates
+      # the just-built VST3 bundle at strictness 5 (fast PR gate; level 10
+      # runs in the release pipeline + locally, evidenced in docs/pluginval/).
+      # Linux runs under xvfb: the Editor test opens a real window. Nonzero
+      # exit fails the leg.
+      - name: Validate VST3 with pluginval (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          curl -sSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          New-Item -ItemType Directory -Force -Path pv | Out-Null
+          Expand-Archive $env:TEMP/pv.zip -DestinationPath pv/ -Force
+          ./pv/pluginval.exe --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 5
+
+      - name: Validate VST3 with pluginval (macOS/Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then ASSET=pluginval_Linux.zip; PVBIN=pv/pluginval; else ASSET=pluginval_macOS.zip; PVBIN=pv/pluginval.app/Contents/MacOS/pluginval; fi
+          curl -sSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
+          rm -rf pv && mkdir pv && unzip -q -o /tmp/pv.zip -d pv
+          chmod +x "$PVBIN"
+          if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
+          $RUN ./"$PVBIN" --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 5
