@@ -4,7 +4,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 U5-inspired clean DI — free VST3 (Windows, macOS, Linux) + AU (macOS, for Logic).
-Windows is host-tested; macOS/Linux builds are CI-tested only.
+Windows is host-tested (Sonar, Reaper); macOS/Linux builds are CI-tested only.
 
 ![Abalone W5 UI](docs/ui-preview.png)
 
@@ -15,8 +15,9 @@ Inspired by the Avalon U5. Not affiliated with or endorsed by Avalon Design.
 ## What it is
 
 Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> DC-block -> HighCut -> Trim + LED` —
-built with JUCE 8 biquads/gain only. 0 dBFS = +24 dBu (hardware max in);
-+4 dBu nominal = −20 dBFS (see `analysis/LEVELS.md`).
+built with JUCE 8 biquads/gain only. Ships as VST3 (Windows, macOS, Linux)
+plus an AU component (macOS, for Logic — auval-validated). 0 dBFS = +24 dBu
+(hardware max in); +4 dBu nominal = −20 dBFS (see `analysis/LEVELS.md`).
 
 ## Controls
 
@@ -52,7 +53,7 @@ from the first open.
 
 ## Install
 
-- VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship the VST3 on every OS (plus AU on macOS).
+- VST3: copy `Abalone-W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship the VST3 on every OS (plus AU on macOS).
 - AU (macOS zip only, for Logic): copy `Abalone-W5.component` to `~/Library/Audio/Plug-Ins/Components` (or the system location), then rescan in Logic.
 - Standalone (dev testing only, not shipped): run the locally built `Abalone W5.exe` directly.
 
@@ -63,6 +64,7 @@ from the first open.
 
 ![Abalone W5 tone bank — all 6 tones, highcut off/on](docs/tone-curves-12panel.png)
 - Passes pluginval at strictness 5 and 10 (logs: `docs/pluginval/strictness-5.txt`, `docs/pluginval/strictness-10.txt`).
+- AU passes Apple's `auval` on every CI/release macOS leg (state round-trip included).
 
 ## License
 
