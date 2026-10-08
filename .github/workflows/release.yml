@@ -17,6 +17,8 @@
 # automation kept overwriting manual edits).
 # Standing caveat: only Windows is host-tested by the author.
 # macOS ships VST3 + auval-gated AU; no code signing, no installer.
+# No AAX either (Avid SDK + PACE signing required, and Pro Tools refuses
+# unsigned builds — ruled out 2026-10-08, VST3+AU covers the hosts).
 name: Release
 
 on:
