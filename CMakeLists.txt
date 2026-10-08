@@ -66,6 +66,7 @@ FetchContent_MakeAvailable(JUCE)
 juce_add_plugin(AbaloneW5
     VERSION ${PROJECT_VERSION}
     COMPANY_NAME "Sakdinat2548"
+    BUNDLE_ID com.sakdinat2548.abalonew5
     PLUGIN_MANUFACTURER_CODE SA48
     PLUGIN_CODE AbW5
     FORMATS AU VST3 Standalone
