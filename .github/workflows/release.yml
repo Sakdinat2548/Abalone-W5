@@ -144,12 +144,12 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then ASSET=pluginval_Linux.zip; else ASSET=pluginval_macOS.zip; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then ASSET=pluginval_Linux.zip; PVBIN=pv/pluginval; else ASSET=pluginval_macOS.zip; PVBIN=pv/pluginval.app/Contents/MacOS/pluginval; fi
           curl -sSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
           rm -rf pv && mkdir pv && unzip -q -o /tmp/pv.zip -d pv
-          chmod +x pv/pluginval
+          chmod +x "$PVBIN"
           if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
-          $RUN ./pv/pluginval --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
+          $RUN ./"$PVBIN" --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
 
       # ZIP_NAME via env keeps ${{ }} out of the script body so the script is
       # statically parse-clean (Task-31 lesson).
