@@ -128,7 +128,8 @@ jobs:
           "$CC" --version
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-      # Builds all targets as proof (as CI does); only the VST3 is packaged.
+      # Builds all targets as proof (as CI does); VST3 is packaged on every
+      # leg, plus the auval-gated AU component on the mac leg.
       - name: Build (VST3 + Standalone + tests)
         run: cmake --build build
 

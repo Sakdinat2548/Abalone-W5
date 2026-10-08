@@ -25,7 +25,7 @@ built with JUCE 8 biquads/gain only. 0 dBFS = +24 dBu (hardware max in);
 | Boost | 1–10 stepped, 3 dB/step (~+3 to +30 dB), default 1 |
 | Tone | Bypass + 1–6, default Tone 3 (10 ms xfade on switch) |
 | TONE button | Tone in/out (default in) |
-| ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active) |
+| ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active; DAW bypass follows it, and also silences on its own) |
 | HighCut | On/off, −3 dB at 8 kHz, 1-pole min-phase (default off) |
 | TRIM | Cut-only −30..0 dB (default 0) |
 | SIGNAL LED | Signal-present at −2 dBFS, pre-trim tap (follows Boost staging, unaffected by TRIM) |
