@@ -22,7 +22,7 @@ section) recomputes the six per-tone either-oracle worst deltas
 (min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
 algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each
 to match the recorded C++ reference within 0.05 dB (current references:
-  T1 1.46 / T2 0.12 / T3 0.07 / T4 2.12 / T5 2.24 / T6 4.15 dB).
+  T1 1.46 / T2 0.12 / T3 0.07 / T4 2.00 / T5 2.24 / T6 4.15 dB).
 (The check verifies port fidelity to C++, not fit quality — large
 references only mean the approved curves sit off the eye-read oracles.)
 
@@ -109,7 +109,7 @@ TONE_PARAMS = {
 
 # Overall per-tone gain (dB); mirrors ToneBank::toneGainDb. The cascade
 # coefficients already carry per-section gains — this is the global staging.
-TONE_GAIN = {1: -6.8239, 2: 0.0, 3: 0.0, 4: 0.7677, 5: 2.4954, 6: 2.81}
+TONE_GAIN = {1: -6.8239, 2: 0.0, 3: 0.0, 4: -0.7323, 5: 2.4954, 6: 2.81}
 
 
 def num_sections(tone):
@@ -205,7 +205,7 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # (re-pointed 2026-10-08 to the approved manual T4/T5 retune; T1/T6 zone
 # points were already off the Task-24 numbers at HEAD).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 1.46, 2: 0.12, 3: 0.07, 4: 2.12, 5: 2.24, 6: 4.15}
+CXX_EITHER_REF_DB = {1: 1.46, 2: 0.12, 3: 0.07, 4: 2.00, 5: 2.24, 6: 4.15}
 PORT_VERIFY_TOL_DB = 0.05
 
 

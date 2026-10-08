@@ -89,6 +89,9 @@
 // rms vs measured IR (T4 dip -4.5 vs IR -4.59). T4 blue-zone now max
 // 1.10/1.16 rms 0.72/0.79 (gates 1.20/0.80); T5 blue rms 0.21/0.18
 // (gate 0.25).
+// STAGING TRIM 2026-10-08: toneGainDb(4) 0.7677 -> -0.7323 (-1.5 dB)
+// restores chart staging (+1.19 dB @1 kHz vs eye +1.2; anchor back to
+// -3.00, 20 Hz +0.21, dip -3.33) — the shape retune above is untouched.
 //
 // T6 RECORDED DEVIATION (6-sec floor 0.217 after 12 rounds; gates
 // 0.22/0.07/0.15): foot solved (twin-LS + micro-peak, low band <= 0.09);
@@ -157,7 +160,7 @@ struct ToneBank
         case 1:
             return -6.8239f;
         case 4:
-            return 0.7677f;
+            return -0.7323f;
         case 5:
             return 2.4954f;
         case 6:

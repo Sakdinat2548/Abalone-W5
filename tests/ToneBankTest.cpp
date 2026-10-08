@@ -233,6 +233,8 @@ void checkHeaderOracle (const DenseCurve& csv)
     // still tracks chart/IR <= 0.35 dB rms — so T4's absolute either-oracle
     // gate widens 1.0 -> 2.0 dB (measured worst 1.75 @2 kHz). Level is
     // staging, still pinned per-tone by checkAbsoluteAnchors.
+    // STAGING TRIM 2026-10-08: toneGainDb(4) -1.5 dB restores chart staging
+    // (worst back to ~0.3), so the gate moves back to 1.0 dB.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -255,7 +257,7 @@ void checkHeaderOracle (const DenseCurve& csv)
                 ++skipped;
                 continue;
             }
-            REQUIRE (dEither <= (tone == 4 ? 2.0f : 1.0f));
+            REQUIRE (dEither <= 1.0f);
         }
         std::printf ("tone %d header-oracle worst either-oracle delta %+.3fdB (%d zone points reported-not-gated)\n",
                      tone, worstEither, skipped);
@@ -569,6 +571,8 @@ void checkTone4DipPresent ()
     // MANUAL RETUNE (user decision 2026-10-08): dip moved 8k -> 7.5k and
     // shallowed (absolute scan now -1.83dB; normalized still -4.5dB vs IR
     // -4.59dB), so the absolute floor relaxes -2.0 -> -1.5dB.
+    // STAGING TRIM 2026-10-08: toneGainDb(4) -1.5 dB drops the absolute
+    // scan to -3.33dB, so the floor moves back to -2.0dB.
     ToneBank bank;
     bank.setSampleRate (48000.0);
     bank.setTone (4);
@@ -581,7 +585,7 @@ void checkTone4DipPresent ()
             deepest = m;
     }
     std::printf ("tone 4 dip region deepest %+.2fdB\n", deepest);
-    REQUIRE (deepest < -1.5f);
+    REQUIRE (deepest < -2.0f);
 }
 
 void checkProcessSampleAgreement ()
@@ -642,7 +646,10 @@ void checkAbsoluteAnchors ()
     // MANUAL RETUNE (user decision 2026-10-08): T4 staging moved +1.4 dB
     // (40/42 +0.5 dB each), so its anchor moves -3.00 -> -1.66 dB
     // (measured -1.662 dB absolute @10 Hz, gate stays 1.0).
-    const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -1.66f, -22.0f, -19.47f};
+    // STAGING TRIM 2026-10-08: toneGainDb(4) -1.5 dB restores chart staging
+    // (+1.19 dB @1 kHz vs eye +1.2), so the anchor moves back to -3.00 dB
+    // (measured -3.162 dB absolute @10 Hz, delta 0.16, gate 1.0).
+    const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -19.47f};
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -708,7 +715,9 @@ void checkEyeLowEnd (const DenseCurve& csv)
         // MANUAL RETUNE (user decision 2026-10-08): gate widens 1.0 -> 2.0
         // dB — the 40/42 +0.5 dB staging pulls 20 Hz to +1.71 dB, still
         // monotonically rising 10->15->20->30->40 Hz as gated below.
-        REQUIRE (std::fabs (m20) <= (tone == 4 ? 2.0f : 0.5f));
+        // STAGING TRIM 2026-10-08: toneGainDb(4) -1.5 dB brings 20 Hz back
+        // to +0.21 dB, so the gate moves back to 1.0 dB.
+        REQUIRE (std::fabs (m20) <= (tone == 4 ? 1.0f : 0.5f));
         REQUIRE (m15 - m10 > 0.02f);
         REQUIRE (m20 - m15 > 0.02f);
         REQUIRE (m30 - m20 > 0.02f);
