@@ -81,6 +81,15 @@
 // Ruling options: 7th section on T4 (+0.005 relief on that point),
 // accepted deviation, or gate relief.
 //
+// MANUAL RETUNE (user decision 2026-10-08, approved curves — tests
+// re-pointed, not relaxed silently): T4 40/42 back to v1 values +0.5 dB
+// staging (23.33/0.66/-2.13, 12.65/1.02/+2.08), 43 dip 8k -> 7.5k,
+// 45 back to v1 micro-peak, T5 53 peak +0.5 dB (-0.21). Absolute T4 level
+// +1.4 dB (anchor -1.66, 20 Hz +1.71); normalized shapes still <= 0.35 dB
+// rms vs measured IR (T4 dip -4.5 vs IR -4.59). T4 blue-zone now max
+// 1.10/1.16 rms 0.72/0.79 (gates 1.20/0.80); T5 blue rms 0.21/0.18
+// (gate 0.25).
+//
 // T6 RECORDED DEVIATION (6-sec floor 0.217 after 12 rounds; gates
 // 0.22/0.07/0.15): foot solved (twin-LS + micro-peak, low band <= 0.09);
 // remainder is the top — 9964 bump + 18-20 kHz edge warp split (48-20k

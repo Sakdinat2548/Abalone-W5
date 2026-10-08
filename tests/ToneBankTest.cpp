@@ -228,6 +228,11 @@ void checkHeaderOracle (const DenseCurve& csv)
     // eye-reads there are superseded by measured hardware (nodal/IR).
     // T1 5k-20k, T4 3k-20k, T5 10-300Hz, T6 10-300Hz+3k-20k. T2/T3 fully
     // gated (shipped numbers, chart-following).
+    // MANUAL RETUNE (user decision 2026-10-08, T4/T5): T4's absolute level
+    // moved +1.4 dB staging (40/42 +0.5 dB each) while its normalized shape
+    // still tracks chart/IR <= 0.35 dB rms — so T4's absolute either-oracle
+    // gate widens 1.0 -> 2.0 dB (measured worst 1.75 @2 kHz). Level is
+    // staging, still pinned per-tone by checkAbsoluteAnchors.
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -250,7 +255,7 @@ void checkHeaderOracle (const DenseCurve& csv)
                 ++skipped;
                 continue;
             }
-            REQUIRE (dEither <= 1.0f);
+            REQUIRE (dEither <= (tone == 4 ? 2.0f : 1.0f));
         }
         std::printf ("tone %d header-oracle worst either-oracle delta %+.3fdB (%d zone points reported-not-gated)\n",
                      tone, worstEither, skipped);
@@ -447,11 +452,13 @@ void checkBlueZones (const DenseCurve& blue)
     // — bilinear edge warp, least audible, reported loudly. Tones without
     // ruled zones (T2/T3) are reported, not gated.
     // ponytail: headroom is razor-thin by construction (review-measured
-    // @44.1 kHz: T1 0.426/0.45, T4 1.089/1.10, T5 0.389/0.40, T6 1.424/1.45
+    // @44.1 kHz: T1 0.426/0.45, T4 1.164/1.20, T5 0.304/0.40, T6 1.424/1.45
     // max-gate). Deterministic today, but any RBJ/compiler perturbation flips
     // red — round the gates up a notch if that ever bites.
-    const float maxGate[7] = {0.0f, 0.45f, 1e9f, 1e9f, 1.10f, 0.40f, 1.45f};
-    const float rmsGate[7] = {0.0f, 0.35f, 1e9f, 1e9f, 0.80f, 0.20f, 0.40f};
+    // (T4 max gate raised 1.10 -> 1.20 and T5 rms gate 0.20 -> 0.25 by the
+    // 2026-10-08 manual retune: T4 dip moved 8k -> 7.5k, T5 53 peak +0.5 dB.)
+    const float maxGate[7] = {0.0f, 0.45f, 1e9f, 1e9f, 1.20f, 0.40f, 1.45f};
+    const float rmsGate[7] = {0.0f, 0.35f, 1e9f, 1e9f, 0.80f, 0.25f, 0.40f};
     const double rates[2] = {48000.0, 44100.0};
     for (int r = 0; r < 2; ++r)
     {
@@ -559,6 +566,9 @@ void checkTone4DipPresent ()
 {
     // Measured IR dip (1kHz-normalized): -4.59dB @ ~7.6kHz; assert the fitted
     // shape carries a dip in 4-8kHz without pinning its exact tip.
+    // MANUAL RETUNE (user decision 2026-10-08): dip moved 8k -> 7.5k and
+    // shallowed (absolute scan now -1.83dB; normalized still -4.5dB vs IR
+    // -4.59dB), so the absolute floor relaxes -2.0 -> -1.5dB.
     ToneBank bank;
     bank.setSampleRate (48000.0);
     bank.setTone (4);
@@ -571,7 +581,7 @@ void checkTone4DipPresent ()
             deepest = m;
     }
     std::printf ("tone 4 dip region deepest %+.2fdB\n", deepest);
-    REQUIRE (deepest < -2.0f);
+    REQUIRE (deepest < -1.5f);
 }
 
 void checkProcessSampleAgreement ()
@@ -629,7 +639,10 @@ void checkAbsoluteAnchors ()
     // RESEARCH BRANCH (user ruling: level is staging, not oracle data):
     // T6 anchor moves to its approved 1 kHz-anchored level (-19.47 dB);
     // all other anchors hold (staging preserved at 10 Hz as rendered).
-    const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -19.47f};
+    // MANUAL RETUNE (user decision 2026-10-08): T4 staging moved +1.4 dB
+    // (40/42 +0.5 dB each), so its anchor moves -3.00 -> -1.66 dB
+    // (measured -1.662 dB absolute @10 Hz, gate stays 1.0).
+    const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -1.66f, -22.0f, -19.47f};
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;
@@ -692,8 +705,10 @@ void checkEyeLowEnd (const DenseCurve& csv)
         // RESEARCH BRANCH (recorded override, Fix-2 precedent): T4's 20 Hz
         // eye gate widens 0.5 -> 1.0 dB — the hardware-moved dip skirts pull
         // 20 Hz to -0.82 dB, and no eye read outranks measured hardware.
-        // Monotonicity below is unchanged and still gated.
-        REQUIRE (std::fabs (m20) <= (tone == 4 ? 1.0f : 0.5f));
+        // MANUAL RETUNE (user decision 2026-10-08): gate widens 1.0 -> 2.0
+        // dB — the 40/42 +0.5 dB staging pulls 20 Hz to +1.71 dB, still
+        // monotonically rising 10->15->20->30->40 Hz as gated below.
+        REQUIRE (std::fabs (m20) <= (tone == 4 ? 2.0f : 0.5f));
         REQUIRE (m15 - m10 > 0.02f);
         REQUIRE (m20 - m15 > 0.02f);
         REQUIRE (m30 - m20 > 0.02f);
