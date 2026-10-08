@@ -36,12 +36,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
+    # Same sccache backend wiring as ci.yml (shared cache: tag legs start warm).
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_MULTIARCH: "1"
     steps:
       - uses: actions/checkout@v4
 
       # Same sccache setup as ci.yml (shared cache: tag legs start warm).
       - name: Enable sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Set up MSVC environment
         if: runner.os == 'Windows'

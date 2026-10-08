@@ -34,6 +34,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+    # sccache backend wiring (per mozilla-actions/sccache-action README —
+    # the action alone only installs sccache on local disk): GHA puts the
+    # cache in the GitHub cache service (this is what the Caches page
+    # shows); MULTIARCH lets the macOS universal (arm64+x86_64 in one
+    # clang call) legs cache instead of skipping all 86 compiles.
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_MULTIARCH: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +50,7 @@ jobs:
       # build-dir cache, which goes stale across runner-image updates. One
       # step, all legs; the launchers below route every compile through it.
       - name: Enable sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Set up MSVC environment
         if: runner.os == 'Windows'
