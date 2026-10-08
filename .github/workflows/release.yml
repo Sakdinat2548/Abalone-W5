@@ -164,6 +164,12 @@ jobs:
         run: |
           mkdir -p ~/Library/Audio/Plug-Ins/Components
           cp -R "build/AbaloneW5_artefacts/Release/AU/Abalone-W5.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          for i in $(seq 1 30); do
+            auval -a 2>/dev/null | grep -q "AbW5" && break
+            sleep 2
+          done
+          auval -a 2>/dev/null | grep "AbW5" || { echo "AU never registered"; exit 1; }
           auval -v aufx AbW5 SA48
 
       # ZIP_NAME via env keeps ${{ }} out of the script body so the script is

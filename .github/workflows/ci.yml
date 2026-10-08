@@ -144,13 +144,22 @@ jobs:
       # auval (ships with macOS, nothing to download): validates the
       # just-built AU the way Logic loads it. Copies the .component into the
       # user Components dir first — auval resolves by type/subtype/manufacturer
-      # (aufx AbW5 SA48), not by path. Nonzero exit fails the leg.
+      # (aufx AbW5 SA48), not by path. New bundles race the system registrar,
+      # so force a rescan and wait until the codes list before validating —
+      # otherwise a healthy build fails with "didn't find the component".
+      # Nonzero exit fails the leg.
       - name: Validate AU with auval (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
           mkdir -p ~/Library/Audio/Plug-Ins/Components
           cp -R "build/AbaloneW5_artefacts/Release/AU/Abalone-W5.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          for i in $(seq 1 30); do
+            auval -a 2>/dev/null | grep -q "AbW5" && break
+            sleep 2
+          done
+          auval -a 2>/dev/null | grep "AbW5" || { echo "AU never registered"; exit 1; }
           auval -v aufx AbW5 SA48
 
       # pluginval (pinned v1.0.4 binary from Tracktion/pluginval releases —
