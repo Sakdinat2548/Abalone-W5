@@ -124,7 +124,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          ZIP_NAME: Abalone-W5-${{ matrix.tag }}.zip
+          ZIP_NAME: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
         run: |
           $vst3 = "build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3"
           if (-not (Test-Path -LiteralPath $vst3)) { throw "VST3 not found at $vst3" }
@@ -138,7 +138,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         env:
-          ZIP_NAME: Abalone-W5-${{ matrix.tag }}.zip
+          ZIP_NAME: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
         run: |
           VST3="build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3"
           test -d "$VST3" || { echo "VST3 not found at $VST3"; exit 1; }
@@ -151,4 +151,4 @@ jobs:
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
-          files: Abalone-W5-${{ matrix.tag }}.zip
+          files: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
