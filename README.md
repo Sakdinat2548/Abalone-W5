@@ -45,6 +45,11 @@ ctest --test-dir build --output-on-failure
 
 Requires MSVC 2019 BuildTools, JUCE 8.0.15 (FetchContent), C++17. See `AGENTS.md`.
 
+Editing the code (clangd/Zed): the editor resolves all headers only after
+the one-time IDE setup in `AGENTS.md` ("IDE (clangd) setup") — configure
+plus the assets-target build, otherwise `BinaryData.h` reads as missing
+from the first open.
+
 ## Install
 
 - VST3: copy `Abalone W5.vst3` to `%COMMONPROGRAMFILES%/VST3`, then rescan plug-ins in your DAW. This is the product; releases ship only the VST3.
