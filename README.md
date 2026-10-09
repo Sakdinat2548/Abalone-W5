@@ -14,7 +14,7 @@ Inspired by the Avalon U5. Not affiliated with or endorsed by Avalon Design.
 
 ## What it is
 
-Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> DC-block -> HighCut -> Trim + LED` —
+Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> DC-block -> HighCut -> Trim -> Tilt + LED` —
 built with JUCE 8 biquads/gain only. Ships as VST3 (Windows, macOS, Linux)
 plus an AU component (macOS, for Logic — auval-validated). 0 dBFS = +24 dBu
 (hardware max in); +4 dBu nominal = −20 dBFS (see `analysis/LEVELS.md`).
