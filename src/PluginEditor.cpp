@@ -115,6 +115,10 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // 1969px texture width): 9.5px Bold system sans at 1x scale.
     : AudioProcessorEditor (&p), processor (p), readoutFont (juce::Font (juce::FontOptions (9.5f).withStyle ("Bold")))
 {
+    // Non-opaque: the faceplate PNG carries rounded transparent corners
+    // (~13px radius) — an opaque window would paint them square. Hosts that
+    // force opacity fall back to square; nothing else changes.
+    setOpaque (false);
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
     faceImage = imageFromBinary (BinaryData::v120background_png, BinaryData::v120background_pngSize);
