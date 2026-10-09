@@ -14,7 +14,7 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
-// Parses the embedded ui/v110ui/positions.csv into name -> ratio rect.
+// Parses the embedded ui/positions.csv into name -> ratio rect.
 // Runs once on the message thread at construction; no audio-thread use.
 std::map<juce::String, juce::Rectangle<float>> parseLayoutCsv (const char* data, int size)
 {
@@ -117,7 +117,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 {
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
-    faceImage = imageFromBinary (BinaryData::V110Bakedbackground_png, BinaryData::V110Bakedbackground_pngSize);
+    faceImage = imageFromBinary (BinaryData::v120background_png, BinaryData::v120background_pngSize);
     // v110: knob bodies are BAKED (never drawn by code) — only the needles
     // rotate, pivot at needle-art bottom-center (12 o'clock art).
     boostDialLookAndFeel.needleImage =

@@ -41,7 +41,7 @@ class AbaloneW5AudioProcessor;
 
 // Rotary look-and-feel: baked knob body + natural-size needle.
 // The slider bounds center IS the rotation axle (tick-arc / face fit per
-// dial, see ui/v110ui/positions.csv). Two needle modes: legacy linear
+// dial, see ui/positions.csv). Two needle modes: legacy linear
 // (`needleStartDeg` + sliderPos * `needleSweepDeg`, clockwise-from-12) when
 // `detentDeg` is empty, or an exact per-detent table (one clockwise-from-12
 // entry per integer slider value; entries past a 0-degree crossing are
@@ -231,7 +231,7 @@ private:
     juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from
-    // ui/v110ui/positions.csv (embedded as BinaryData, v110 geometry) at construction.
+    // ui/positions.csv (embedded as BinaryData) at construction.
     std::map<juce::String, juce::Rectangle<float>> layoutRatios;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;
