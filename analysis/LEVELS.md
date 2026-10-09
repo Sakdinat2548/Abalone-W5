@@ -1,5 +1,31 @@
 # Levels calibration + THD-vs-boost map (Task 29)
 
+## CANDIDATE 2026-10-09: hotter color drive (k=0.06, a=1.5e-3) — NOT ADOPTED
+
+Fit to four NAM captures' harmonic ladders (spike probe, `tone/v1.2` research).
+Old map below is the shipped (k=0.03, a=6e-4) behavior and stays authoritative
+until/unless the constants change. New candidate map, RMS-specified inputs
+(sine peak sits 3.01 dB above RMS; stage physics identical, grid relabeled):
+
+| Boost | Input | Stage sees | Stage drive (peak) | THD @1 kHz |
+|-------|-------|-----------|---------------------|------------|
+| 1 (+3 dB) | −20 dBFS RMS | +7 dBu RMS | −13.99 dB | 0.0150% |
+| 1 (+3 dB) | −10 dBFS RMS | +17 dBu RMS | −3.99 dB | 0.0488% |
+| 1 (+3 dB) | 0 dBFS RMS | +27 dBu RMS | +6.01 dB | 0.1918% |
+| 5 (+15 dB) | −20 dBFS RMS | +19 dBu RMS | −1.99 dB | 0.0626% |
+| 5 (+15 dB) | −10 dBFS RMS | +29 dBu RMS | +8.01 dB | 0.2674% |
+| 5 (+15 dB) | 0 dBFS RMS | +39 dBu RMS | +18.01 dB | 1.9029% |
+| 10 (+30 dB) | −20 dBFS RMS | +34 dBu RMS | +13.01 dB | 0.6810% |
+| 10 (+30 dB) | −10 dBFS RMS | +44 dBu RMS | +23.01 dB | 5.2508% |
+| 10 (+30 dB) | 0 dBFS RMS | +54 dBu RMS | +33.01 dB | 24.1691% |
+
+Reads: nominal playing (−10 RMS, boost 5) 0.27%; the old operating point
+(+34 dBu) reads 0.68% in RMS terms. The +44/+54 dBu RMS corners leave
+"subtle" territory entirely (5.3%/24% — real grind/saturation, matching what
+the captures show dimed). Adopting this supersedes the 0.1%-order THD story
+below (manual figure) in favor of capture matching; H2-dominance flips to H3
+above ~+5 dB stage drive (2.5× H2-led at 0 dB).
+
 ## Calibration (fixed rule)
 
 **0 dBFS = +24 dBu** (hardware maximum input — the one anchor the manual states).

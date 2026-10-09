@@ -8,14 +8,16 @@
 
 // Subtle fixed Class-A color stage (Abalone W5 v1). No knob in v1.
 //
-// Chain position: Tone -> Color -> HighCut. Adds ~0.1% THD at +10dB input
-// (chosen operating point — see analysis/LEVELS.md honesty note; the
-// manual's "0.1% at +10dB" carries no level reference, so no spec match is
-// claimed. Features list <0.5% THD/IMD as the only hard ceiling.)
+// Chain position: Tone -> Color -> HighCut. Adds ~0.38% THD at +10dB input
+// (capture-fitted operating point, 2026-10-09 spike: k=0.06, a=1.5e-3 fit
+// four NAM ladders at RMSE 12 dB vs 16.4 for the old 0.03/6e-4 — see
+// analysis/LEVELS.md candidate map. The manual's "0.1% at +10dB" carries no
+// level reference, so no spec match is claimed either way. Features list
+// <0.5% THD/IMD as the only hard ceiling.)
 // Bypassable for test.
 //
 // Transfer (enabled):
-//     y = tanh(k*x) / tanh(k)  +  a*x^2,   k = 0.03, a = 6e-4.
+//     y = tanh(k*x) / tanh(k)  +  a*x^2,   k = 0.06, a = 1.5e-3.
 //
 // Why not pure tanh: tanh is an odd function, so tanh(k*x)/tanh(k) produces
 // ONLY odd harmonics (H2 = 0 to numerical precision, ~1e-15 relative). The
@@ -27,12 +29,14 @@
 // deliberate and documented here.
 //
 // k derivation (cubic-term rule): tanh(z) ~= z - z^3/3 gives H3/fund ~= k^2*A^2/12.
-//   At +10dB (A = 10^(10/20) = 3.1623, A^2 = 10): k = 0.03 -> H3 ~= 0.03^2*10/12
-//   = 7.5e-4 = 0.075%. Measured (coherent DFT): 0.0748%.
+//   At +10dB (A = 10^(10/20) = 3.1623, A^2 = 10): k = 0.06 -> H3 ~= 0.0036*10/12
+//   = 0.30% (measured coherent DFT: 0.2973%).
 // a derivation: x = A*sin gives a*x^2 = a*A^2/2 (DC) - (a*A^2/2)*cos(2wt), so
-//   H2/fund ~= a*A/2. a = 6e-4 -> H2 = 6e-4*3.1623/2 = 9.49e-4 = 0.095% at +10dB.
-//   Total THD = sqrt(0.095^2 + 0.075^2) = 0.121%: inside [0.05%, 0.2%], H2/H3 = 1.26x.
-//   At 0dB (A = 1): H2 = 0.030%, H3 = 0.0075% -> 0.031% < 0.05%. Verified numerically
+//   H2/fund ~= a*A/2. a = 1.5e-3 -> H2 = 1.5e-3*3.1623/2 = 2.37e-3 = 0.237% at +10dB.
+//   Total THD = sqrt(0.237^2 + 0.297^2) = 0.38%: H2/H3 = 0.80x (H3-led at this
+//   drive; H2 dominates 2.5x at 0dB — Class-A character where it lives,
+//   saturation takes over when driven, matching captures).
+//   At 0dB (A = 1): H2 = 0.075%, H3 = 0.030% -> 0.081%. Verified numerically
 //   (double-precision oracle) before baking the constants.
 //
 // Level convention: levelDb in thdAt is peak dB relative to peak amplitude 1.0,
@@ -47,26 +51,44 @@
 // published H2/H3 spectrum exists to check against.
 //
 // Side effects of the blend (all negligible, measured):
-// - Small-signal gain = k/tanh(k) = 1.00030 (+0.0026dB ~= 1, as brief requires).
-// - DC offset = a*A^2/2: 3.0mV at +10dB, 75mV at +24dB hot. Hardware U5 output
+// - Small-signal gain = k/tanh(k) = 1.00120 (+0.0104dB ~= 1, as brief requires).
+// - DC offset = a*A^2/2: 7.5mV at +10dB, 188mV at +24dB hot (stripped by the
+//   post-color 2Hz DC-blocker in real use). Hardware U5 output
 //   is DC-coupled anyway; downstream Trim/HighCut pass it unchanged.
-// - No oversampling needed: harmonics decay geometrically (H5 ~ -100dB rel fund);
-//   spectrum above Nyquist*0.9 is DFT noise floor (test asserts < -80dB rel H1).
+// - No oversampling needed: harmonics decay geometrically (H5 ~ -100dB rel fund
+//   at +10dB); spectrum above Nyquist*0.9 is DFT noise floor (test asserts
+//   < -80dB rel H1).
 //
 // Header-only, dependency-free C++17 (<cmath> only). Stateless per-sample
 // function: no state to denormalize. JUCE-free, MSYS2-GCC-syntax-clean.
 struct ColorStage
 {
-    ColorStage () : norm_ (std::tanh (kDrive_)) {}
+    ColorStage () : norm_ (fastTanh (kDrive_)) {}
 
     void setEnabled (bool enabled) { enabled_ = enabled; }
+
+    // Fast tanh (Lambert continued fraction, 5 levels): max abs error
+    // 5.6e-7 vs std::tanh on [-2, 2], THD-identical to 4 decimals at every
+    // operating point (gated in ColorStageTest). Valid here because the
+    // argument z = k*x stays within |z| <= 1.9 (k = 0.06, |x| <= 31.6 =
+    // 0 dBFS through Boost 10); never use it beyond +-2 without rechecking.
+    static float fastTanh (float x)
+    {
+        const float x2 = x * x;
+        float t = 9.0f + x2 / 11.0f;
+        t = 7.0f + x2 / t;
+        t = 5.0f + x2 / t;
+        t = 3.0f + x2 / t;
+        t = 1.0f + x2 / t;
+        return x / t;
+    }
 
     float processSample (float x)
     {
         if (!enabled_)
             return x; // bit-transparent bypass.
 
-        return std::tanh (kDrive_ * x) / norm_ + kEven_ * x * x;
+        return fastTanh (kDrive_ * x) / norm_ + kEven_ * x * x;
     }
 
     // Measurement helper (not part of the audio path): drives the stage with a
@@ -114,9 +136,11 @@ struct ColorStage
 
 private:
     static constexpr double kPi_ = 3.14159265358979323846;
-    static constexpr float kDrive_ = 0.03f;  // tanh drive: sets H3 (see derivation above).
-    static constexpr float kEven_ = 0.0006f; // 2nd-harmonic blend: sets H2 (see derivation above).
+    static constexpr float kDrive_ = 0.06f;  // tanh drive: sets H3 (see derivation above).
+    static constexpr float kEven_ = 0.0015f; // 2nd-harmonic blend: sets H2 (see derivation above).
 
     bool enabled_ = true;
-    float norm_ = 1.0f; // tanh(k): normalizes x=1 gain to 1, small-signal gain ~= 1.
+    float norm_ = 1.0f; // tanh(k): normalizes the tanh term to 1 at x=1
+                        // (full transfer 1.0015 there with the blend;
+                        // small-signal gain 1.0012).
 };
