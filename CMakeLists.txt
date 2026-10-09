@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneW5 VERSION 1.1.2)
+# Pre-release tree toward v1.2.0 (tone/v1.2 integration); drop nothing at tag time.
+project(AbaloneW5 VERSION 1.2.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
