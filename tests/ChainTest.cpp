@@ -1,4 +1,4 @@
-// Abalone W5 - U5-inspired clean bass DI.
+// Abalone W5 - U5-inspired clean DI.
 // Copyright (C) 2026 Sakdinat2548.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,9 +14,77 @@ namespace
 
 constexpr double kPi = 3.14159265358979323846;
 
-// (a) End-to-end bypass-flat: tone 0, highcut off, boost step 1 (+3dB),
-// trim 0. Output must sit exactly on the +3dB line: 1kHz within +/-0.1dB,
-// 20Hz-15kHz spots within +/-0.5dB. 5Hz is the DC-block corner (-3dB by
+// One-pole highpass loss in dB (same smoother family as the chain's
+// DC-blockers; mirrors the audit oracle below).
+float blockerTheoryDb (double fc, double freqHz, double sampleRate)
+{
+    constexpr double twoPi = 6.28318530717958647692;
+    const double a = 1.0 - std::exp (-twoPi * fc / sampleRate);
+    const double w = twoPi * freqHz / sampleRate;
+    const std::complex<double> z = std::exp (std::complex<double> (0.0, -w));
+    const std::complex<double> h = 1.0 - a / (1.0 - (1.0 - a) * z);
+    return static_cast<float> (20.0 * std::log10 (std::abs (h)));
+}
+
+// Tilt oracle (fitted hardware tilt, engaged path only): LS 75Hz +0.91dB
+// Q0.54 + HS 5441Hz -0.34dB Q0.62 + peak 180Hz +0.11dB Q1.97,
+// Q-parametrized RBJ (same cookbook family as ToneBank::cook). Theoretical
+// magnitude in dB — an independent frequency-domain path from the chain's
+// time-domain biquads, same pattern as the blocker-loss oracle in
+// audit10HzAnchors below.
+float tiltTheoryDb (double freqHz, double sampleRate)
+{
+    constexpr double twoPi = 6.28318530717958647692;
+    auto section = [&] (int kind, double f0, double q, double gainDb)
+    {
+        const double w0 = twoPi * f0 / sampleRate;
+        const double cw = std::cos (w0);
+        const double sw = std::sin (w0);
+        const double alpha = sw / (2.0 * q);
+        const double A = std::pow (10.0, gainDb / 40.0);
+        const double sq = 2.0 * std::sqrt (A) * alpha;
+        double b0, b1, b2, a0, a1, a2;
+        if (kind == 0) // low shelf
+        {
+            b0 = A * ((A + 1.0) - (A - 1.0) * cw + sq);
+            b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cw);
+            b2 = A * ((A + 1.0) - (A - 1.0) * cw - sq);
+            a0 = (A + 1.0) + (A - 1.0) * cw + sq;
+            a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cw);
+            a2 = (A + 1.0) + (A - 1.0) * cw - sq;
+        }
+        else if (kind == 1) // high shelf
+        {
+            b0 = A * ((A + 1.0) + (A - 1.0) * cw + sq);
+            b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cw);
+            b2 = A * ((A + 1.0) + (A - 1.0) * cw - sq);
+            a0 = (A + 1.0) - (A - 1.0) * cw + sq;
+            a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cw);
+            a2 = (A + 1.0) - (A - 1.0) * cw - sq;
+        }
+        else // peak
+        {
+            b0 = 1.0 + alpha * A;
+            b1 = -2.0 * cw;
+            b2 = 1.0 - alpha * A;
+            a0 = 1.0 + alpha / A;
+            a1 = -2.0 * cw;
+            a2 = 1.0 - alpha / A;
+        }
+        const double w = twoPi * freqHz / sampleRate;
+        const std::complex<double> z = std::exp (std::complex<double> (0.0, -w));
+        const std::complex<double> h = (b0 + b1 * z + b2 * z * z) / (a0 + a1 * z + a2 * z * z);
+        return 20.0 * std::log10 (std::abs (h));
+    };
+    return static_cast<float> (section (0, 75.0, 0.54, 0.91) + section (1, 5441.0, 0.62, -0.34) +
+                               section (2, 180.0, 1.97, 0.11));
+}
+
+// (a) End-to-end engaged-flat (tone 0, highcut off, boost step 1 (+3dB),
+// trim 0): output sits on +3dB PLUS the fitted hardware tilt (LS75 +0.91 /
+// HS5441 -0.34 + PK180 +0.11, engaged path only — ACTIVE-off passthrough
+// stays bit-exact, see ProcessorIOTest). 1kHz within +/-0.1dB, 20Hz-15kHz
+// spots within +/-0.2dB of theory. 5Hz is the DC-block corner (-3dB by
 // design, see GainStage.h), so it asserts the block instead of flatness.
 constexpr float kStep1Db = 3.0f;
 
@@ -64,10 +132,16 @@ void checkBypassFlat ()
             chain.setHighcut (false);
             chain.setTrimDb (0.0f);
             const float gainDb = steadyGainDb (chain, sampleRate, spots[f], 0.5f);
-            const float tol = spots[f] == 1000.0 ? 0.1f : 0.5f;
-            std::printf ("bypass-flat @ %.0fHz / %.0fHz: %+0.3fdB (expect %+0.1f +/- %0.1f)\n", sampleRate, spots[f],
-                         gainDb, kStep1Db, tol);
-            assert (std::fabs (gainDb - kStep1Db) < tol);
+            // Expectation models the full engaged tail: boost + tilt +
+            // both DC-blockers (5Hz in, 2Hz post-color).
+            const float expectDb = kStep1Db + tiltTheoryDb (spots[f], sampleRate) +
+                                   blockerTheoryDb (5.0, spots[f], sampleRate) +
+                                   blockerTheoryDb (2.0, spots[f], sampleRate);
+            const float tol = spots[f] == 1000.0 ? 0.1f : 0.2f;
+            std::printf ("engaged-flat @ %.0fHz / %.0fHz: %+0.3fdB (expect %+0.3f +/- %0.1f)\n", sampleRate, spots[f],
+                         gainDb, expectDb, tol);
+            std::fflush (stdout);
+            assert (std::fabs (gainDb - expectDb) < tol);
         }
 
         // 5Hz corner: the DC-block highpass owns this point (-3dB by design).
@@ -775,8 +849,10 @@ void checkPostColorTransparency1k ()
     ToneBank ref;
     ref.setSampleRate (48000.0);
     ref.setTone (3);
-    // Boost step 1 (+3dB) + tone theory + color small-signal gain k/tanh(k).
-    const float expected = 3.0f + ref.magnitudeAt (1000.0f) + 20.0f * std::log10 (0.03f / std::tanh (0.03f));
+    // Boost step 1 (+3dB) + tone theory + color small-signal gain k/tanh(k)
+    // (k = 0.06 post drive-fit) + engaged tilt theory (LS120/HS8k at 1kHz).
+    const float expected = 3.0f + ref.magnitudeAt (1000.0f) + 20.0f * std::log10 (0.06f / std::tanh (0.06f)) +
+                           tiltTheoryDb (1000.0, 48000.0);
     std::printf ("post-color transparency @1kHz/tone3: %+0.4fdB (expect %+0.4f +/- 0.05)\n", measured, expected);
     std::fflush (stdout);
     assert (std::fabs (measured - expected) < 0.05f);
@@ -786,9 +862,9 @@ void checkPostColorTransparency1k ()
 // assert — the controller rules compensate-vs-document from these numbers).
 // Per tone (boost step 1, highcut off, trim 0): raw chain magnitude at 10Hz
 // vs the absolute anchors (T1/T3/T4 -3, T2 -0.25, T5/T6 -22), with the exact
-// blocker losses shown separately (5Hz input blocker + 2Hz post-color
-// blocker per Ruling 30 — one column per stage, so the audit names the
-// actual chain).
+// blocker losses plus the engaged tilt shown separately (5Hz input blocker
+// + 2Hz post-color blocker per Ruling 30 + LS120/HS8k tilt — one column per
+// stage, so the audit names the actual chain).
 void audit10HzAnchors ()
 {
     constexpr double twoPi = 6.28318530717958647692;
@@ -803,9 +879,11 @@ void audit10HzAnchors ()
     };
     const float loss5 = blockerLossDb (5.0);
     const float loss2 = blockerLossDb (2.0);
+    const float tilt10 = tiltTheoryDb (10.0, fs);
 
     const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -22.0f};
-    std::printf ("10Hz audit @48k (5Hz-blocker %+0.4fdB, 2Hz-blocker %+0.4fdB):\n", loss5, loss2);
+    std::printf ("10Hz audit @48k (5Hz-blocker %+0.4fdB, 2Hz-blocker %+0.4fdB, tilt %+0.4fdB):\n", loss5, loss2,
+                 tilt10);
     for (int tone = 1; tone <= 6; ++tone)
     {
         ProcessorChain chain;
@@ -815,12 +893,17 @@ void audit10HzAnchors ()
         chain.setHighcut (false);
         chain.setTrimDb (0.0f);
         const float raw = steadyGainDb (chain, fs, 10.0, 0.1f);
-        // Chain adds boost (+3dB), color small-signal gain, and the blockers.
-        const float colorDb = 20.0f * std::log10 (0.03f / std::tanh (0.03f));
+        // Chain adds boost (+3dB), color small-signal gain, the blockers,
+        // and the engaged tilt.
+        const float colorDb = 20.0f * std::log10 (0.06f / std::tanh (0.06f));
+        const float tiltDb = tiltTheoryDb (10.0, fs);
         const float comp1 = raw - 3.0f - colorDb - loss5;
         const float comp2 = raw - 3.0f - colorDb - loss5 - loss2;
-        std::printf ("  T%d: raw %+0.3f | -5Hz %+0.3f (d %+0.3f) | -both %+0.3f (d %+0.3f) | anchor %+0.2f\n", tone,
-                     raw, comp1, comp1 - anchors[tone], comp2, comp2 - anchors[tone], anchors[tone]);
+        const float comp3 = comp2 - tiltDb;
+        std::printf ("  T%d: raw %+0.3f | -5Hz %+0.3f (d %+0.3f) | -both %+0.3f (d %+0.3f) | -tilt %+0.3f (d %+0.3f) | "
+                     "anchor %+0.2f\n",
+                     tone, raw, comp1, comp1 - anchors[tone], comp2, comp2 - anchors[tone], comp3,
+                     comp3 - anchors[tone], anchors[tone]);
     }
     std::fflush (stdout);
 }

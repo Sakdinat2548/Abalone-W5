@@ -52,19 +52,19 @@ U5-flavored clean DI VST3 + AU (Logic). JUCE 8 biquads/gain only. No WDF. 1x/2x/
 
 ## DSP chain (fixed order)
 
-`Boost -> DC-block -> Tone -> Color -> HighCut -> Trim + LED`
+`Boost -> DC-block -> Tone -> Color -> HighCut -> Trim -> Tilt + LED`
 
 - Boost: Choice 1-10, 3dB/step (~+3 to +30dB). Clean float, no hard clip.
 - DC-block: 5Hz input. Tone: bypass (TONE0) + 1-6 biquads, default Tone 3, 10ms xfade.
-- Color: fixed subtle tanh/2nd-harmonic ~0.1% THD at +10dB, bypassable for test.
+- Color: fixed subtle tanh/2nd-harmonic ~0.38% THD at +10dB, bypassable for test.
 - HighCut: on/off, -3dB at 8kHz, 1-pole min-phase. Trim + SIGNAL LED at -2dB.
-- APVTS: boost (Choice 1-10), tone (Choice Bypass,1-6), highcut (Bool), output CUT-ONLY −30..0dB (default 0; old +values clamp to 0 on load), + additive toneIn/active Bools (default true/engaged) + additive host `bypass` Bool (default engaged, one-way follower of !active — DAW button follows ACTIVE, never the reverse, so bulk state sets round-trip bit-exact for auval).
+- APVTS: boost (Choice 1-10), tone (Choice Bypass,1-6), highcut (Bool), output −32..+6dB (default −3; old states load verbatim, all inside the wider range), + additive toneIn/active Bools (default true/engaged) + additive host `bypass` Bool (default engaged, one-way follower of !active — DAW button follows ACTIVE, never the reverse, so bulk state sets round-trip bit-exact for auval).
 - Levels: 0dBFS = +24dBu (hardware max in); +4dBu nominal = −20dBFS; boost step N adds 3N dB (see `analysis/LEVELS.md`).
 
 ## TDD + lint rules
 
 - Tests before audio code: bypass flat 5Hz-100kHz ±0.5dB; tones ±1dB 40Hz-15kHz;
-  boost +3dB/step no clip; highcut -3dB @8kHz; THD ~0.1%; IR shape agreement.
+  boost +3dB/step no clip; highcut -3dB @8kHz; THD ~0.4% @+10dB stage; IR shape agreement.
 - Flat bypass when tone=bypass, highcut=off, boost=min. No clicks on tone switch.
 - Curves rule: any DSP change that moves tone shapes must regen `docs/tone-curves.png` (manual frame: y +6/0/−6/−12/−18/−24, x 10/100/1kHz/10k/20k, full tick labels every panel) in the SAME commit — never temp-folder-only plots.
 - Test integrity: MSVC Release defines NDEBUG which kills bare `assert()` — every CTest target must use the `add_dsp_test()` helper OR explicit NDEBUG-independent CHECKs, so asserts stay live.

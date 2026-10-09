@@ -1,4 +1,4 @@
-// Abalone W5 - U5-inspired clean bass DI.
+// Abalone W5 - U5-inspired clean DI.
 // Copyright (C) 2026 Sakdinat2548.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -14,7 +14,7 @@ namespace
 
 juce::Image imageFromBinary (const void* data, int size) { return juce::ImageCache::getFromMemory (data, size); }
 
-// Parses the embedded ui/v110ui/positions.csv into name -> ratio rect.
+// Parses the embedded ui/positions.csv into name -> ratio rect.
 // Runs once on the message thread at construction; no audio-thread use.
 std::map<juce::String, juce::Rectangle<float>> parseLayoutCsv (const char* data, int size)
 {
@@ -115,9 +115,13 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // 1969px texture width): 9.5px Bold system sans at 1x scale.
     : AudioProcessorEditor (&p), processor (p), readoutFont (juce::Font (juce::FontOptions (9.5f).withStyle ("Bold")))
 {
+    // Non-opaque: the faceplate PNG carries rounded transparent corners
+    // (~13px radius) — an opaque window would paint them square. Hosts that
+    // force opacity fall back to square; nothing else changes.
+    setOpaque (false);
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
-    faceImage = imageFromBinary (BinaryData::V110Bakedbackground_png, BinaryData::V110Bakedbackground_pngSize);
+    faceImage = imageFromBinary (BinaryData::v120background_png, BinaryData::v120background_pngSize);
     // v110: knob bodies are BAKED (never drawn by code) — only the needles
     // rotate, pivot at needle-art bottom-center (12 o'clock art).
     boostDialLookAndFeel.needleImage =
@@ -193,12 +197,12 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     };
     addAndMakeVisible (toneSlider);
 
-    // Cut-only output trim, attached (range must match the param exactly).
+    // Output trim (-32..+6dB, default -3), attached (range must match the param exactly).
     // Starting a trim drag while the readout is being edited cancels the
     // edit (the hide below restores the live value via onEditorHide).
     outputSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     outputSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    outputSlider.setRange (-30.0, 0.0, 0.1);
+    outputSlider.setRange (-32.0, 6.0, 0.1);
     outputSlider.setLookAndFeel (&trimDialLookAndFeel);
     outputSlider.onDragStart = [this]
     {
@@ -220,8 +224,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // In-code dB readout below the trim knob, following the output param
     // (set in resized(); text refreshed in timerCallback). Pale on the black
     // oval; Cinzel Black at a subordinate size. Single-click editable:
-    // Enter commits the typed number to the output param (clamped -30..0,
-    // so -40 lands at -30; non-numeric input is ignored and the live value
+    // Enter commits the typed number to the output param (clamped -32..+6,
+    // so -40 lands at -32; non-numeric input is ignored and the live value
     // returns), Esc cancels and restores the live value, and focus-loss
     // also exits editing (discards, never traps keyboard focus).
     trimReadout.setEditable (true, false, true);
@@ -275,7 +279,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
                 }
             if (hasDigit)
             {
-                const float clamped = juce::jlimit (-30.0f, 0.0f, typed.getFloatValue());
+                const float clamped = juce::jlimit (-32.0f, 6.0f, typed.getFloatValue());
                 outParam->setValueNotifyingHost (outParam->convertTo0to1 (clamped));
             }
         }

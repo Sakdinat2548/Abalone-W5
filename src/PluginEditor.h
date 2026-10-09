@@ -1,4 +1,4 @@
-// Abalone W5 - U5-inspired clean bass DI.
+// Abalone W5 - U5-inspired clean DI.
 // Copyright (C) 2026 Sakdinat2548.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -41,7 +41,7 @@ class AbaloneW5AudioProcessor;
 
 // Rotary look-and-feel: baked knob body + natural-size needle.
 // The slider bounds center IS the rotation axle (tick-arc / face fit per
-// dial, see ui/v110ui/positions.csv). Two needle modes: legacy linear
+// dial, see ui/positions.csv). Two needle modes: legacy linear
 // (`needleStartDeg` + sliderPos * `needleSweepDeg`, clockwise-from-12) when
 // `detentDeg` is empty, or an exact per-detent table (one clockwise-from-12
 // entry per integer slider value; entries past a 0-degree crossing are
@@ -205,7 +205,7 @@ private:
 
     juce::Slider boostSlider;
     juce::Slider toneSlider;   // manual: values 1-6, never engages (see note above).
-    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob on the
+    juce::Slider outputSlider; // attached; -32..+6dB mini-knob on the
                                // black oval right of the THRU jack (see CSV trim_dial).
     juce::Slider osSlider;     // attached to the `osfactor` Choice (1x/2x/4x);
                                // 3-position mini-knob in the trim art family,
@@ -214,7 +214,7 @@ private:
                                // both drive it via the attachment.
     juce::Label trimReadout;   // in-code dB readout on the silver strip below
                                // the oval (black plate ink). Single-click editable: type a
-                               // number, Enter commits (clamped -30..0), Esc cancels.
+                               // number, Enter commits (clamped -32..+6), Esc cancels.
                                // Follows the param while idle (see timerCallback).
     FloatArtButton highcutButton;
     FloatArtButton toneEngageButton; // attached to `toneIn`.
@@ -231,7 +231,7 @@ private:
     juce::Font readoutFont;
 
     // Layout rects as texture ratios, parsed from
-    // ui/v110ui/positions.csv (embedded as BinaryData, v110 geometry) at construction.
+    // ui/positions.csv (embedded as BinaryData) at construction.
     std::map<juce::String, juce::Rectangle<float>> layoutRatios;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> boostAttachment;

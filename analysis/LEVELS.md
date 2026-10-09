@@ -1,5 +1,30 @@
 # Levels calibration + THD-vs-boost map (Task 29)
 
+## CANDIDATE 2026-10-09: hotter color drive (k=0.06, a=1.5e-3) — ADOPTED in v1.2
+
+Fit to four NAM captures' harmonic ladders (spike probe, `tone/v1.2` research).
+The map below (RMS-specified inputs) is the shipped behavior; the peak-grid
+3×3 map further down is the v1.1.x record, kept for history.
+
+| Boost | Input | Stage sees | Stage drive (peak) | THD @1 kHz |
+|-------|-------|-----------|---------------------|------------|
+| 1 (+3 dB) | −20 dBFS RMS | +7 dBu RMS | −13.99 dB | 0.0150% |
+| 1 (+3 dB) | −10 dBFS RMS | +17 dBu RMS | −3.99 dB | 0.0488% |
+| 1 (+3 dB) | 0 dBFS RMS | +27 dBu RMS | +6.01 dB | 0.1918% |
+| 5 (+15 dB) | −20 dBFS RMS | +19 dBu RMS | −1.99 dB | 0.0626% |
+| 5 (+15 dB) | −10 dBFS RMS | +29 dBu RMS | +8.01 dB | 0.2674% |
+| 5 (+15 dB) | 0 dBFS RMS | +39 dBu RMS | +18.01 dB | 1.9029% |
+| 10 (+30 dB) | −20 dBFS RMS | +34 dBu RMS | +13.01 dB | 0.6810% |
+| 10 (+30 dB) | −10 dBFS RMS | +44 dBu RMS | +23.01 dB | 5.2508% |
+| 10 (+30 dB) | 0 dBFS RMS | +54 dBu RMS | +33.01 dB | 24.1691% |
+
+Reads: nominal playing (−10 RMS, boost 5) 0.27%; the old operating point
+(+34 dBu) reads 0.68% in RMS terms. The +44/+54 dBu RMS corners leave
+"subtle" territory entirely (5.3%/24% — real grind/saturation, matching what
+the captures show dimed). Adopting this supersedes the 0.1%-order THD story
+below (manual figure) in favor of capture matching; H2-dominance flips to H3
+above ~+5 dB stage drive (2.5× H2-led at 0 dB).
+
 ## Calibration (fixed rule)
 
 **0 dBFS = +24 dBu** (hardware maximum input — the one anchor the manual states).
@@ -19,7 +44,7 @@ Stage-only numbers: `thdAt` drives `processSample` directly, so the chain's post
 2 Hz DC-blocker (Task 28) strips the `a*x^2` DC term in real use but does not change
 these harmonic THD figures.
 
-## Measured 3×3 map
+## Measured 3×3 map (v1.1.x record — k=0.03, a=6e-4; superseded above)
 
 | Boost | Input | Stage sees | Stage drive (`thdAt` level) | THD @1 kHz |
 |-------|-------|-----------|------------------------------|------------|
@@ -37,7 +62,15 @@ Sanity: THD rises monotonically with level in every row and every column; no NaN
 only the +54 dBu corner (30 dB past hardware maximum — insane drive, not a sane
 operating point) exceeds 5%, which is expected hard saturation, not a defect.
 
-## Plain-English reads
+## Plain-English reads (v1.2 RMS grid)
+
+- At +3 dB boost with a −20 dBFS RMS bass, the stage sees +7 dBu RMS and contributes ≈0.015% THD (inaudible).
+- At +15 dB boost with a −10 dBFS RMS bass, the stage sees +29 dBu RMS and contributes ≈0.27% THD (edge of warmth).
+- At +30 dB boost with a −20 dBFS RMS bass, the stage sees +34 dBu RMS and contributes ≈0.68% THD (audible color).
+- At +30 dB boost with a −10 dBFS RMS bass, the stage sees +44 dBu RMS and contributes ≈5.3% THD (grind).
+- At +30 dB boost with a 0 dBFS RMS input, the stage sees +54 dBu RMS and contributes ≈24% THD (documented, not assert-pinned — past hardware max, not a sane level).
+
+## Plain-English reads (v1.1.x record, peak grid)
 
 - At +3 dB boost with a −20 dBFS bass, the stage sees +7 dBu and contributes ≈0.004% THD (inaudible).
 - At +15 dB boost with a −10 dBFS bass, the stage sees +29 dBu and contributes ≈0.06% THD (subtle).
@@ -47,23 +80,21 @@ operating point) exceeds 5%, which is expected hard saturation, not a defect.
 
 ## Pinned calibration points (asserts in `tests/ColorStageTest.cpp`)
 
-- Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.0042%, pinned to [0.002%, 0.007%].
-- Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.058%, pinned to [0.040%, 0.080%].
-- Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.121%, pinned to [0.090%, 0.160%].
+- Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.0106%, pinned to [0.008%, 0.014%].
+- Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.1637%, pinned to [0.130%, 0.200%].
+- Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.3815%, pinned to [0.300%, 0.500%].
 
 ## Honesty note: relationship to the manual's distortion spec
 
 The Avalon literature states ~0.1% THD at "+10 dB" (an older manual revision
 says 0.05%) — with no stated level reference. Two readings are defensible
 and neither is confirmable without hardware:
-(a) +10 dBu at the stage → our model reads ≈0.006% there, i.e. ~17×
-cleaner than the spec figure; (b) the +34 dBu point above → ≈0.12%,
-near the spec figure by construction, not by calibration.
-We ship (b) as a CHOSEN OPERATING POINT, not a spec match: raising drive
-17× to hit reading (a) would make every sane playing level more colored
-than the unit players describe as "clean with weight" — tuning real DSP to
-an ambiguous number with a factor-of-17 error bar. The map, pins, and math
-above are unaffected by this naming; only the claim is corrected.
+(a) +10 dBu at the stage → our model reads ≈0.015% there, i.e. ~7×
+cleaner than the spec figure; (b) the +34 dBu point above → ≈0.38%,
+near the capture ladders by fit, not by manual calibration.
+v1.2 ships capture-matched drive: the manual figure is superseded (it also
+disagrees with the captures, which read 0.25–0.35% at +11 dB). The map,
+pins, and math above are unaffected by this naming; only the claim is corrected.
 
 ## Web-research cross-check (2026-10-05, no model change)
 
@@ -73,8 +104,9 @@ above are unaffected by this naming; only the claim is corrected.
 - Boost 3N dB/step CONFIRMED (manual + current spec + 10-detent/9-resistor
   hardware). The manual's "+2…+32 dB" needs 11 detents — stale rev, ignore.
 - THD spec drifted between revs: 0.05% (old manual) vs 0.1% (current site),
-  both at "+10 dB" with no level/load/frequency stated. Our 0.12% point
-  sits inside either reading; no evidence forces a move.
+  both at "+10 dB" with no level/load/frequency stated. v1.1.x sat inside
+  either reading by construction; v1.2 follows the captures instead (0.38%
+  at the operating point) — see the honesty note.
 - HEADROOM NOTE: max Class-A output is +30 dBu = +6 dBFS — 6 dB above
   digital clip. Hot boost + hot input (e.g. the +44/+54 dBu map corners)
   can exceed 0 dBFS inside the chain before Trim; that is modeled

@@ -1,4 +1,4 @@
-// Abalone W5 - U5-inspired clean bass DI.
+// Abalone W5 - U5-inspired clean DI.
 // Copyright (C) 2026 Sakdinat2548.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -52,7 +52,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AbaloneW5AudioProcessor::cre
         "tone", "Tone", juce::StringArray ({"Bypass", "Tone 1", "Tone 2", "Tone 3", "Tone 4", "Tone 5", "Tone 6"}), 3));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("highcut", "High Cut", false));
     params.push_back (std::make_unique<juce::AudioParameterFloat> (
-        "output", "Output", juce::NormalisableRange<float> (-30.0f, 0.0f, 0.1f), 0.0f));
+        "output", "Output", juce::NormalisableRange<float> (-32.0f, 6.0f, 0.1f), -3.0f));
     // Additive hardware-fidelity params (both default true, so states saved
     // before they existed load as engaged/active — see setNewState default).
     // `toneIn` is driven by the red TONE button; the chain receives

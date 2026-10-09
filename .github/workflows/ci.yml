@@ -14,8 +14,8 @@
 #   JUCE_WEB_BROWSER=0 are set on the plugin target: ProcessorIOTest links the
 #   JUCE modules with default flags, so the headers must exist. cmake/ninja/g++
 #   ride the same apt line (no-op if preinstalled).
-# Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg + a
-# shared step that fails loud if a MinGW gcc is on PATH.
+# Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg (see
+# the CC/CXX pins on every configure step).
 # Builds all targets as proof (VST3 + AU on macOS + Standalone + tests);
 # CI publishes nothing (Standalone is dev-testing; the AU ships in the
 # macOS release zip, auval-gated on that leg too).
@@ -142,7 +142,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
       # auval (ships with macOS, nothing to download): validates the
-      # just-built AU the way Logic loads it. Copies the .component into the
+      # just-built AU the way Logic loads it, with -strict (release-grade;
+      # per iPlug2's validate skill). Copies the .component into the
       # user Components dir first — auval resolves by type/subtype/manufacturer
       # (aufx AbW5 SA48), not by path. New bundles race the system registrar,
       # so force a rescan and wait until the codes list before validating —
@@ -160,12 +161,12 @@ jobs:
             sleep 2
           done
           auval -a 2>/dev/null | grep "AbW5" || { echo "AU never registered"; exit 1; }
-          auval -v aufx AbW5 SA48
+          auval -strict -v aufx AbW5 SA48
 
       # pluginval (pinned v1.0.4 binary from Tracktion/pluginval releases —
       # building it from source would double CI time for zero gain). Validates
-      # the just-built VST3 bundle at strictness 5 (fast PR gate; level 10
-      # runs in the release pipeline + locally, evidenced in docs/pluginval/).
+      # the just-built VST3 bundle at strictness 10 (release-grade gate
+      # everywhere; the run itself takes seconds, so no fast/strict split).
       # Linux runs under xvfb: the Editor test opens a real window. Nonzero
       # exit fails the leg.
       - name: Validate VST3 with pluginval (Windows)
@@ -175,7 +176,7 @@ jobs:
           curl -sSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
           New-Item -ItemType Directory -Force -Path pv | Out-Null
           Expand-Archive $env:TEMP/pv.zip -DestinationPath pv/ -Force
-          ./pv/pluginval.exe --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 5
+          ./pv/pluginval.exe --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
 
       - name: Validate VST3 with pluginval (macOS/Linux)
         if: runner.os != 'Windows'
@@ -186,4 +187,4 @@ jobs:
           rm -rf pv && mkdir pv && unzip -q -o /tmp/pv.zip -d pv
           chmod +x "$PVBIN"
           if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
-          $RUN ./"$PVBIN" --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 5
+          $RUN ./"$PVBIN" --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10

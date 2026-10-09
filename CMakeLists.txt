@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AbaloneW5 VERSION 1.1.2)
+# Pre-release tree toward v1.2.0 (tone/v1.2 integration); drop nothing at tag time.
+project(AbaloneW5 VERSION 1.2.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -82,7 +83,7 @@ target_sources(AbaloneW5 PRIVATE
 
 # UI skins + layout data, embedded as BinaryData (decoded once on the message
 # thread in the editor constructor, never on the audio thread).
-# - V110Bakedbackground.png: v110 faceplate (ui/v110ui/, 1969x799) drawn 1:1;
+# - v120background.png: v120 faceplate (ui/, 1969x799) drawn 1:1;
 #   knob bodies, captions, and button/LED slots all baked in. The dial rings
 #   print ticks/numerals on an exact 30-degree clock grid, so boost/tone
 #   needles use exact per-detent tables (see PluginEditor.cpp) instead of a
@@ -93,7 +94,7 @@ target_sources(AbaloneW5 PRIVATE
 # - V110button_on/off.png (103x48), V110led_off.png (48px core),
 #   V110led_on.png (79px: 48px core + spill): slot art drawn 1:1 at
 #   float-exact slot rects (see FloatArtButton/FloatArtLed in PluginEditor.h).
-# - v110ui/positions.csv: all live-element rects as texture ratios
+# - ui/positions.csv: all live-element rects as texture ratios
 #   (positions are data, not magic numbers; the editor parses this at
 #   construction). OS/TRIM are small baked knobs flanking the UUV oval, with
 #   in-code readouts below them.
@@ -102,7 +103,8 @@ target_sources(AbaloneW5 PRIVATE
 #   SVG drawable; static black in every OS state. (A previous CinzelBlack
 #   fallback face + OFL.txt were removed: the embedded SVG cannot
 #   realistically fail to parse, so nothing falls back to it.)
-# Superseded (kept on disk, no longer embedded): ui/u5_front_clean.png,
+# Superseded (kept on disk, no longer embedded): ui/V110Bakedbackground.png,
+# ui/u5_front_clean.png,
 # ui/knob_boost_no_pointer.png, ui/knob_tone_no_pointer.png,
 # ui/pointer_boost.png, ui/pointer_tone.png, ui/pointer_trim.png,
 # ui/button_on.png, ui/button_off.png, ui/led_on.png, ui/led_off.png,
@@ -111,14 +113,14 @@ juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
-        ui/v110ui/V110Bakedbackground.png
-        ui/v110ui/V110big_pointer.png
-        ui/v110ui/V110small_pointer.png
-        ui/v110ui/V110button_on.png
-        ui/v110ui/V110button_off.png
-        ui/v110ui/V110led_on.png
-        ui/v110ui/V110led_off.png
-        ui/v110ui/positions.csv
+        ui/v120background.png
+        ui/V110big_pointer.png
+        ui/V110small_pointer.png
+        ui/V110button_on.png
+        ui/V110button_off.png
+        ui/V110led_on.png
+        ui/V110led_off.png
+        ui/positions.csv
         ui/abalone.svg
 )
 

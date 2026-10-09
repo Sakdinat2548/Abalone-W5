@@ -14,7 +14,7 @@ Inspired by the Avalon U5. Not affiliated with or endorsed by Avalon Design.
 
 ## What it is
 
-Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> DC-block -> HighCut -> Trim + LED` —
+Clean DI signal path — `Boost -> DC-block -> Tone -> Color -> DC-block -> HighCut -> Trim -> Tilt + LED` —
 built with JUCE 8 biquads/gain only. Ships as VST3 (Windows, macOS, Linux)
 plus an AU component (macOS, for Logic — auval-validated). 0 dBFS = +24 dBu
 (hardware max in); +4 dBu nominal = −20 dBFS (see `analysis/LEVELS.md`).
@@ -28,11 +28,21 @@ plus an AU component (macOS, for Logic — auval-validated). 0 dBFS = +24 dBu
 | TONE button | Tone in/out (default in) |
 | ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active; DAW bypass follows it, and also silences on its own) |
 | HighCut | On/off, −3 dB at 8 kHz, 1-pole min-phase (default off) |
-| TRIM | Cut-only −30..0 dB (default 0) |
+| TRIM | −32…+6 dB (default −3) |
 | SIGNAL LED | Signal-present at −2 dBFS, pre-trim tap (follows Boost staging, unaffected by TRIM) |
 | OS mini-knob | 1x/2x/4x oversampling on the Color stage only, default 1x (exact FIR delay 0/40/60 samples via `setLatencySamples`) |
 
 Editor is aspect-locked, corner-drag resizable 1x–2x (748x304 to 1496x608).
+
+## Dynamics
+
+Boost isn't just level — each step bends into the color stage's soft knee
+at a different point. Unity-trimmed transfer curves:
+
+<img src="docs/dynamics.png" width="550" alt="Boost transfer curves">
+
+Boost 1–3 rides the diagonal (pure level); 6 peels off on peaks; 10 dives
+early. Pick compression by boost step — no threshold knob needed.
 
 ## Build from source
 
@@ -59,12 +69,11 @@ from the first open.
 
 ## Validation
 
-- Per-stage CTest gates (`tests/`): bypass flat 20 Hz–15 kHz ±0.5 dB (±0.1 at 1 kHz; the owned 5 Hz −3 dB DC-block corner is by design), tones fit to digitized curves within ±0.5 dB, boost +3 dB/step with no clip, highcut −3 dB @ 8 kHz, THD ~0.1%.
+- Per-stage CTest gates (`tests/`): bypass flat 20 Hz–15 kHz ±0.5 dB (±0.1 at 1 kHz; the owned 5 Hz −3 dB DC-block corner is by design), tones fit to digitized curves within ±0.5 dB, boost +3 dB/step with no clip, highcut −3 dB @ 8 kHz, THD ~0.38% at +10 dB stage level.
 - Tone shapes cross-checked against IR measurements ([tone curves](docs/tone-curves.png), [signal flow](docs/signal-flow.png)).
 
 ![Abalone W5 tone bank — all 6 tones, highcut off/on](docs/tone-curves-12panel.png)
-- Passes pluginval at strictness 5 and 10 (logs: `docs/pluginval/strictness-5.txt`, `docs/pluginval/strictness-10.txt`).
-- AU passes Apple's `auval` on every CI/release macOS leg (state round-trip included).
+- Every CI run and release gates the formats: pluginval at strictness 10 (VST3, all OSes) and `auval -strict` (AU, macOS) — see `.github/workflows/`.
 
 ## License
 
