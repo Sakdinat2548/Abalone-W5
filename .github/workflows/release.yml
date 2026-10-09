@@ -175,7 +175,7 @@ jobs:
             sleep 2
           done
           auval -a 2>/dev/null | grep "AbW5" || { echo "AU never registered"; exit 1; }
-          auval -v -strict aufx AbW5 SA48
+          auval -strict -v aufx AbW5 SA48
 
       # ZIP_NAME via env keeps ${{ }} out of the script body so the script is
       # statically parse-clean (Task-31 lesson).

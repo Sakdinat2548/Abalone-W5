@@ -161,7 +161,7 @@ jobs:
             sleep 2
           done
           auval -a 2>/dev/null | grep "AbW5" || { echo "AU never registered"; exit 1; }
-          auval -v -strict aufx AbW5 SA48
+          auval -strict -v aufx AbW5 SA48
 
       # pluginval (pinned v1.0.4 binary from Tracktion/pluginval releases —
       # building it from source would double CI time for zero gain). Validates
