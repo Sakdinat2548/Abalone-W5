@@ -34,6 +34,16 @@ plus an AU component (macOS, for Logic — auval-validated). 0 dBFS = +24 dBu
 
 Editor is aspect-locked, corner-drag resizable 1x–2x (748x304 to 1496x608).
 
+## Dynamics
+
+Boost isn't just level — each step bends into the color stage's soft knee
+at a different point. Unity-trimmed transfer curves:
+
+![Boost transfer curves](docs/dynamics.png)
+
+Boost 1–3 rides the diagonal (pure level); 6 peels off on peaks; 10 dives
+early. Pick compression by boost step — no threshold knob needed.
+
 ## Build from source
 
 From repo root, `cmd` (NOT a MinGW shell — JUCE hard-rejects MinGW gcc on PATH, so force `CC=cl`/`CXX=cl`):
