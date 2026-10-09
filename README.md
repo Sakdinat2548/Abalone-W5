@@ -39,7 +39,7 @@ Editor is aspect-locked, corner-drag resizable 1x–2x (748x304 to 1496x608).
 Boost isn't just level — each step bends into the color stage's soft knee
 at a different point. Unity-trimmed transfer curves:
 
-![Boost transfer curves](docs/dynamics.png)
+<img src="docs/dynamics.png" width="550" alt="Boost transfer curves">
 
 Boost 1–3 rides the diagonal (pure level); 6 peels off on peaks; 10 dives
 early. Pick compression by boost step — no threshold knob needed.
