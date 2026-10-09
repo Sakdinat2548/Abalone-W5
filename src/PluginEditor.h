@@ -1,4 +1,4 @@
-// Abalone W5 - U5-inspired clean bass DI.
+// Abalone W5 - U5-inspired clean DI.
 // Copyright (C) 2026 Sakdinat2548.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 

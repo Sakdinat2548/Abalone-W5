@@ -1,4 +1,4 @@
-// Abalone W5 - U5-inspired clean bass DI.
+// Abalone W5 - U5-inspired clean DI.
 // Copyright (C) 2026 Sakdinat2548.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -117,7 +117,7 @@ struct ProcessorChain
         cookTiltShelf (true, 5441.0, 0.62, -0.34, sampleRate_, tiltB_[1], tiltA_[1]);
         cookTiltPeak (180.0, 1.97, 0.11, sampleRate_, tiltB_[2], tiltA_[2]);
         tiltZ_[0][0] = tiltZ_[0][1] = tiltZ_[1][0] = tiltZ_[1][1] = tiltZ_[2][0] = tiltZ_[2][1] = 0.0f;
-        xfadeLen_ = static_cast<int> (0.01 * sampleRate + 0.5);
+        xfadeLen_ = static_cast<int> (std::lround (0.01 * sampleRate));
         if (xfadeLen_ < 1)
             xfadeLen_ = 1;
         if (xfadePos_ > xfadeLen_)
@@ -130,7 +130,7 @@ struct ProcessorChain
         os4Up2D_.fill (0.0f);
         os4Dn2D_.fill (0.0f);
         os4Dn1D_.fill (0.0f);
-        osLen_ = static_cast<int> (0.005 * sampleRate + 0.5);
+        osLen_ = static_cast<int> (std::lround (0.005 * sampleRate));
         if (osLen_ < 1)
             osLen_ = 1;
         if (osPos_ > osLen_)
