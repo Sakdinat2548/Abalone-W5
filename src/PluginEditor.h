@@ -205,7 +205,7 @@ private:
 
     juce::Slider boostSlider;
     juce::Slider toneSlider;   // manual: values 1-6, never engages (see note above).
-    juce::Slider outputSlider; // attached; cut-only -30..0dB mini-knob on the
+    juce::Slider outputSlider; // attached; -32..+6dB mini-knob on the
                                // black oval right of the THRU jack (see CSV trim_dial).
     juce::Slider osSlider;     // attached to the `osfactor` Choice (1x/2x/4x);
                                // 3-position mini-knob in the trim art family,
@@ -214,7 +214,7 @@ private:
                                // both drive it via the attachment.
     juce::Label trimReadout;   // in-code dB readout on the silver strip below
                                // the oval (black plate ink). Single-click editable: type a
-                               // number, Enter commits (clamped -30..0), Esc cancels.
+                               // number, Enter commits (clamped -32..+6), Esc cancels.
                                // Follows the param while idle (see timerCallback).
     FloatArtButton highcutButton;
     FloatArtButton toneEngageButton; // attached to `toneIn`.

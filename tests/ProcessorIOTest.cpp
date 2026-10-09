@@ -529,6 +529,43 @@ void checkBypassSync ()
     }
 }
 
+// (g) Trim range −32…+6 dB, default −3 dB: fresh instances boot at −3,
+// full-scale normalized drives +6 dB end-to-end through processBlock.
+void checkTrimRangeAndDefault ()
+{
+    {
+        AbaloneW5AudioProcessor proc; // fresh: no setFlatParams
+        CHECK (*proc.getApvts().getRawParameterValue ("output") == -3.0f);
+        std::puts ("trim default -3 dB on fresh instances");
+    }
+    {
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+        auto* output = proc.getApvts().getParameter ("output");
+        output->setValueNotifyingHost (1.0f); // top of range
+        CHECK (*proc.getApvts().getRawParameterValue ("output") == 6.0f);
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        static float input0[kBlock];
+        std::memcpy (input0, buffer.getReadPointer (0), sizeof (input0));
+
+        juce::MidiBuffer midi;
+        proc.processBlock (buffer, midi);
+
+        ProcessorChain ref;
+        makeFlatReference (ref);
+        ref.setTrimDb (6.0f); // same trim inside: like-with-like, no post-scaling
+        static float expected[kBlock];
+        for (int i = 0; i < kBlock; ++i)
+            expected[i] = ref.processSample (input0[i]);
+        const float err = maxAbsDiff (buffer.getReadPointer (0), expected, kBlock);
+        std::printf ("trim +6dB end-to-end: max|proc-ref| = %.9f (expect < %.0e)\n", err, static_cast<double> (kTol));
+        CHECK (err < kTol);
+    }
+}
+
 int main ()
 {
     checkMonoInStereoOut();
@@ -538,6 +575,7 @@ int main ()
     checkActiveOffPassthrough();
     checkActiveToggleNoClick();
     checkBypassSync();
+    checkTrimRangeAndDefault();
 
     if (failures == 0)
     {
