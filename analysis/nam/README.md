@@ -17,6 +17,12 @@ Nothing here ships in the plugin; the gated evidence lives in `tests/`.
   ladders (H2/H3, floor-hinged, known boost staging). Result: k≈0.064,
   a≈1.5e-3 (adopted rounded: k=0.06, a=1.5e-3).
 - `tilt_fit.py` — fits LS+HS tilt to mean capture-vs-chain FR delta.
+- `tilt_ls.py` / `tilt_hs.py` / `tilt_mid.py` (+ `.txt` data, `tilt_lsplot.png`,
+  `tilt_hsplot.png`, `tilt_mid.png`, `tilt_candidates.png`): LS retune, HS
+  retune, extra low-mid peak probes; `tilt_median.png` / `tilt_now.png` /
+  `tilt_shipped.png` show shipped chain vs median target.
+- `tiltchain.cpp`, `c6_probe.cpp`: end-to-end chain sweeps (tilt verification,
+  C6 prediction).
   Result: LS 120 Hz +0.7 dB + HS 8 kHz −0.5 dB (residual 0.10 dB).
 - `measure_tone_gain.py`, `alias_probe.cpp` — broadband per-tone gains;
   folded-alias census.
