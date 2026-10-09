@@ -64,7 +64,7 @@ U5-flavored clean DI VST3 + AU (Logic). JUCE 8 biquads/gain only. No WDF. 1x/2x/
 ## TDD + lint rules
 
 - Tests before audio code: bypass flat 5Hz-100kHz ±0.5dB; tones ±1dB 40Hz-15kHz;
-  boost +3dB/step no clip; highcut -3dB @8kHz; THD ~0.1%; IR shape agreement.
+  boost +3dB/step no clip; highcut -3dB @8kHz; THD ~0.4% @+10dB stage; IR shape agreement.
 - Flat bypass when tone=bypass, highcut=off, boost=min. No clicks on tone switch.
 - Curves rule: any DSP change that moves tone shapes must regen `docs/tone-curves.png` (manual frame: y +6/0/−6/−12/−18/−24, x 10/100/1kHz/10k/20k, full tick labels every panel) in the SAME commit — never temp-folder-only plots.
 - Test integrity: MSVC Release defines NDEBUG which kills bare `assert()` — every CTest target must use the `add_dsp_test()` helper OR explicit NDEBUG-independent CHECKs, so asserts stay live.

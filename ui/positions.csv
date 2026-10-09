@@ -19,5 +19,5 @@ highcut_button,0.164044,0.734043,0.052311,0.060075,red HIGH CUT slot x272-374 y5
 active_button,0.742512,0.734043,0.052311,0.060075,red ACTIVE slot x1411-1513 y563-610, art 103x48 drawn 1:1
 tone_button,0.836461,0.734043,0.052311,0.060075,red TONE slot x1596-1698 y563-610, art 103x48 drawn 1:1
 signal_led,0.320213,0.734043,0.024378,0.060075,live SIGNAL LED, red slot x607-654 y563-610 48x48; OFF art 48 core 1:1, ON art 79 (core at (42,43)) centered by core
-trim_dial,0.618080,0.838548,0.055863,0.137672,small baked knob (1217,670) r~34, needle 6x20 natural, tip at rim r33 (spans radii 13-33), cut-only OUTPUT TRIM -30..0dB linear 225/270, readout label below in-code
+trim_dial,0.618080,0.838548,0.055863,0.137672,small baked knob (1217,670) r~34, needle 6x20 natural, tip at rim r33 (spans radii 13-33), OUTPUT TRIM -32..+6dB linear 225/270, readout label below in-code
 os_dial,0.379380,0.838548,0.055863,0.137672,small baked knob (747,670) r~34, needle 6x20 natural, tip at rim r33 (spans radii 13-33), 3-position OS FACTOR 1x/2x/4x linear 225/270, readout label below in-code
