@@ -535,7 +535,9 @@ void checkTrimRangeAndDefault ()
 {
     {
         AbaloneW5AudioProcessor proc; // fresh: no setFlatParams
-        CHECK (*proc.getApvts().getRawParameterValue ("output") == -3.0f);
+        // Epsilon, not ==: Clang fuses an FMA in the range conversion MSVC
+        // leaves unfused (mac CI caught this at exactly -3.0f).
+        CHECK (std::fabs (*proc.getApvts().getRawParameterValue ("output") + 3.0f) < 1e-6f);
         std::puts ("trim default -3 dB on fresh instances");
     }
     {
@@ -544,7 +546,7 @@ void checkTrimRangeAndDefault ()
         setFlatParams (proc);
         auto* output = proc.getApvts().getParameter ("output");
         output->setValueNotifyingHost (1.0f); // top of range
-        CHECK (*proc.getApvts().getRawParameterValue ("output") == 6.0f);
+        CHECK (std::fabs (*proc.getApvts().getRawParameterValue ("output") - 6.0f) < 1e-6f);
         juce::AudioBuffer<float> buffer (2, kBlock);
         fillSine (buffer, 0, 1000.0, 0.5f);
         fillSine (buffer, 1, 1000.0, 0.5f);
