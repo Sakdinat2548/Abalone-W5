@@ -1,11 +1,10 @@
 # Levels calibration + THD-vs-boost map (Task 29)
 
-## CANDIDATE 2026-10-09: hotter color drive (k=0.06, a=1.5e-3) — NOT ADOPTED
+## CANDIDATE 2026-10-09: hotter color drive (k=0.06, a=1.5e-3) — ADOPTED in v1.2
 
 Fit to four NAM captures' harmonic ladders (spike probe, `tone/v1.2` research).
-Old map below is the shipped (k=0.03, a=6e-4) behavior and stays authoritative
-until/unless the constants change. New candidate map, RMS-specified inputs
-(sine peak sits 3.01 dB above RMS; stage physics identical, grid relabeled):
+The map below (RMS-specified inputs) is the shipped behavior; the peak-grid
+3×3 map further down is the v1.1.x record, kept for history.
 
 | Boost | Input | Stage sees | Stage drive (peak) | THD @1 kHz |
 |-------|-------|-----------|---------------------|------------|
@@ -45,7 +44,7 @@ Stage-only numbers: `thdAt` drives `processSample` directly, so the chain's post
 2 Hz DC-blocker (Task 28) strips the `a*x^2` DC term in real use but does not change
 these harmonic THD figures.
 
-## Measured 3×3 map
+## Measured 3×3 map (v1.1.x record — k=0.03, a=6e-4; superseded above)
 
 | Boost | Input | Stage sees | Stage drive (`thdAt` level) | THD @1 kHz |
 |-------|-------|-----------|------------------------------|------------|
@@ -63,7 +62,15 @@ Sanity: THD rises monotonically with level in every row and every column; no NaN
 only the +54 dBu corner (30 dB past hardware maximum — insane drive, not a sane
 operating point) exceeds 5%, which is expected hard saturation, not a defect.
 
-## Plain-English reads
+## Plain-English reads (v1.2 RMS grid)
+
+- At +3 dB boost with a −20 dBFS RMS bass, the stage sees +7 dBu RMS and contributes ≈0.015% THD (inaudible).
+- At +15 dB boost with a −10 dBFS RMS bass, the stage sees +29 dBu RMS and contributes ≈0.27% THD (edge of warmth).
+- At +30 dB boost with a −20 dBFS RMS bass, the stage sees +34 dBu RMS and contributes ≈0.68% THD (audible color).
+- At +30 dB boost with a −10 dBFS RMS bass, the stage sees +44 dBu RMS and contributes ≈5.3% THD (grind).
+- At +30 dB boost with a 0 dBFS RMS input, the stage sees +54 dBu RMS and contributes ≈24% THD (documented, not assert-pinned — past hardware max, not a sane level).
+
+## Plain-English reads (v1.1.x record, peak grid)
 
 - At +3 dB boost with a −20 dBFS bass, the stage sees +7 dBu and contributes ≈0.004% THD (inaudible).
 - At +15 dB boost with a −10 dBFS bass, the stage sees +29 dBu and contributes ≈0.06% THD (subtle).
@@ -73,23 +80,21 @@ operating point) exceeds 5%, which is expected hard saturation, not a defect.
 
 ## Pinned calibration points (asserts in `tests/ColorStageTest.cpp`)
 
-- Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.0042%, pinned to [0.002%, 0.007%].
-- Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.058%, pinned to [0.040%, 0.080%].
-- Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.121%, pinned to [0.090%, 0.160%].
+- Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.0106%, pinned to [0.008%, 0.014%].
+- Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.1637%, pinned to [0.130%, 0.200%].
+- Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.3815%, pinned to [0.300%, 0.500%].
 
 ## Honesty note: relationship to the manual's distortion spec
 
 The Avalon literature states ~0.1% THD at "+10 dB" (an older manual revision
 says 0.05%) — with no stated level reference. Two readings are defensible
 and neither is confirmable without hardware:
-(a) +10 dBu at the stage → our model reads ≈0.006% there, i.e. ~17×
-cleaner than the spec figure; (b) the +34 dBu point above → ≈0.12%,
-near the spec figure by construction, not by calibration.
-We ship (b) as a CHOSEN OPERATING POINT, not a spec match: raising drive
-17× to hit reading (a) would make every sane playing level more colored
-than the unit players describe as "clean with weight" — tuning real DSP to
-an ambiguous number with a factor-of-17 error bar. The map, pins, and math
-above are unaffected by this naming; only the claim is corrected.
+(a) +10 dBu at the stage → our model reads ≈0.015% there, i.e. ~7×
+cleaner than the spec figure; (b) the +34 dBu point above → ≈0.38%,
+near the capture ladders by fit, not by manual calibration.
+v1.2 ships capture-matched drive: the manual figure is superseded (it also
+disagrees with the captures, which read 0.25–0.35% at +11 dB). The map,
+pins, and math above are unaffected by this naming; only the claim is corrected.
 
 ## Web-research cross-check (2026-10-05, no model change)
 
@@ -99,8 +104,9 @@ above are unaffected by this naming; only the claim is corrected.
 - Boost 3N dB/step CONFIRMED (manual + current spec + 10-detent/9-resistor
   hardware). The manual's "+2…+32 dB" needs 11 detents — stale rev, ignore.
 - THD spec drifted between revs: 0.05% (old manual) vs 0.1% (current site),
-  both at "+10 dB" with no level/load/frequency stated. Our 0.12% point
-  sits inside either reading; no evidence forces a move.
+  both at "+10 dB" with no level/load/frequency stated. v1.1.x sat inside
+  either reading by construction; v1.2 follows the captures instead (0.38%
+  at the operating point) — see the honesty note.
 - HEADROOM NOTE: max Class-A output is +30 dBu = +6 dBFS — 6 dB above
   digital clip. Hot boost + hot input (e.g. the +44/+54 dBu map corners)
   can exceed 0 dBFS inside the chain before Trim; that is modeled
