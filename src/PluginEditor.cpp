@@ -193,12 +193,12 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     };
     addAndMakeVisible (toneSlider);
 
-    // Cut-only output trim, attached (range must match the param exactly).
+    // Output trim (-32..+6dB, default -3), attached (range must match the param exactly).
     // Starting a trim drag while the readout is being edited cancels the
     // edit (the hide below restores the live value via onEditorHide).
     outputSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     outputSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    outputSlider.setRange (-30.0, 0.0, 0.1);
+    outputSlider.setRange (-32.0, 6.0, 0.1);
     outputSlider.setLookAndFeel (&trimDialLookAndFeel);
     outputSlider.onDragStart = [this]
     {
@@ -220,8 +220,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // In-code dB readout below the trim knob, following the output param
     // (set in resized(); text refreshed in timerCallback). Pale on the black
     // oval; Cinzel Black at a subordinate size. Single-click editable:
-    // Enter commits the typed number to the output param (clamped -30..0,
-    // so -40 lands at -30; non-numeric input is ignored and the live value
+    // Enter commits the typed number to the output param (clamped -32..+6,
+    // so -40 lands at -32; non-numeric input is ignored and the live value
     // returns), Esc cancels and restores the live value, and focus-loss
     // also exits editing (discards, never traps keyboard focus).
     trimReadout.setEditable (true, false, true);
@@ -275,7 +275,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
                 }
             if (hasDigit)
             {
-                const float clamped = juce::jlimit (-30.0f, 0.0f, typed.getFloatValue());
+                const float clamped = juce::jlimit (-32.0f, 6.0f, typed.getFloatValue());
                 outParam->setValueNotifyingHost (outParam->convertTo0to1 (clamped));
             }
         }

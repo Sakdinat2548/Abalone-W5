@@ -28,7 +28,7 @@ plus an AU component (macOS, for Logic — auval-validated). 0 dBFS = +24 dBu
 | TONE button | Tone in/out (default in) |
 | ACTIVE button | Active/Thru relay-style bypass, bit-transparent (default active; DAW bypass follows it, and also silences on its own) |
 | HighCut | On/off, −3 dB at 8 kHz, 1-pole min-phase (default off) |
-| TRIM | Cut-only −30..0 dB (default 0) |
+| TRIM | −32…+6 dB (default −3) |
 | SIGNAL LED | Signal-present at −2 dBFS, pre-trim tap (follows Boost staging, unaffected by TRIM) |
 | OS mini-knob | 1x/2x/4x oversampling on the Color stage only, default 1x (exact FIR delay 0/40/60 samples via `setLatencySamples`) |
 
@@ -63,7 +63,7 @@ from the first open.
 - Tone shapes cross-checked against IR measurements ([tone curves](docs/tone-curves.png), [signal flow](docs/signal-flow.png)).
 
 ![Abalone W5 tone bank — all 6 tones, highcut off/on](docs/tone-curves-12panel.png)
-- Passes pluginval at strictness 5 and 10 (logs: `docs/pluginval/strictness-5.txt`, `docs/pluginval/strictness-10.txt`).
+- Passes pluginval at strictness 10 (logs: `docs/pluginval/strictness-5.txt`, `docs/pluginval/strictness-10.txt`).
 - AU passes Apple's `auval` on every CI/release macOS leg (state round-trip included).
 
 ## License
