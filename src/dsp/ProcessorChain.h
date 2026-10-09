@@ -18,7 +18,8 @@
 // full chain without a plugin host. The processor delegates per sample.
 //
 // Chain order: GainStage (boost + 5Hz DC-block) -> ToneBank A/B xfade ->
-// ColorStage -> post-color 2Hz DC-block -> HighCut -> trim gain -> peak tracker.
+// ColorStage -> post-color 2Hz DC-block -> HighCut -> trim gain ->
+// fixed hardware tilt (LS120/HS8k, engaged only) -> peak tracker.
 //
 // Tone xfade: two ToneBank instances (active + shadow). On
 // setTone(new) != target, the shadow takes the new tone from a clean state
@@ -106,6 +107,16 @@ struct ProcessorChain
         constexpr double postFc = 2.0;
         constexpr double postTwoPi = 6.28318530717958647692;
         postHpCoeff_ = static_cast<float> (1.0 - std::exp (-postTwoPi * postFc / sampleRate_));
+        // Fixed hardware tilt (engaged path only — ACTIVE-off passthrough
+        // returns before processSample's tail, so bypass stays bit-exact):
+        // LS 75Hz +0.91dB Q0.54 + HS 5441Hz -0.34dB Q0.62 + peak 180Hz
+        // +0.11dB Q1.97, Q-parametrized RBJ (same cookbook as
+        // ToneBank::cook; the ChainTest tilt oracle pins it). States flushed
+        // like the OS lines: history is meaningless across rates.
+        cookTiltShelf (false, 75.0, 0.54, 0.91, sampleRate_, tiltB_[0], tiltA_[0]);
+        cookTiltShelf (true, 5441.0, 0.62, -0.34, sampleRate_, tiltB_[1], tiltA_[1]);
+        cookTiltPeak (180.0, 1.97, 0.11, sampleRate_, tiltB_[2], tiltA_[2]);
+        tiltZ_[0][0] = tiltZ_[0][1] = tiltZ_[1][0] = tiltZ_[1][1] = tiltZ_[2][0] = tiltZ_[2][1] = 0.0f;
         xfadeLen_ = static_cast<int> (0.01 * sampleRate + 0.5);
         if (xfadeLen_ < 1)
             xfadeLen_ = 1;
@@ -220,6 +231,21 @@ struct ProcessorChain
         const float deblocked = colored - postLp_;
         const float cut = highcut_.processSample (deblocked);
         const float out = cut * trimLin_;
+        // Fixed hardware tilt (see setSampleRate): three TDF-II sections
+        // (LS + HS + low-mid peak). Denormal snap mirrors ToneBank (states
+        // freeze exact at silence).
+        float tilted = out;
+        for (int s = 0; s < 3; ++s)
+        {
+            const float y = tiltB_[s][0] * tilted + tiltZ_[s][0];
+            tiltZ_[s][0] = tiltB_[s][1] * tilted - tiltA_[s][0] * y + tiltZ_[s][1];
+            tiltZ_[s][1] = tiltB_[s][2] * tilted - tiltA_[s][1] * y;
+            if (std::fabs (tiltZ_[s][0]) < 1.0e-15f)
+                tiltZ_[s][0] = 0.0f;
+            if (std::fabs (tiltZ_[s][1]) < 1.0e-15f)
+                tiltZ_[s][1] = 0.0f;
+            tilted = y;
+        }
 
         // Pre-trim tap (post-HighCut, pre-trim-gain peak) for the SIGNAL LED:
         // the hardware has no trim so its LED can't see one; the pre-trim tap
@@ -230,10 +256,10 @@ struct ProcessorChain
         if (preMag > prePeak_.load (std::memory_order_relaxed))
             prePeak_.store (preMag, std::memory_order_relaxed);
 
-        const float mag = std::fabs (out);
+        const float mag = std::fabs (tilted);
         if (mag > peak_.load (std::memory_order_relaxed))
             peak_.store (mag, std::memory_order_relaxed);
-        return out;
+        return tilted;
     }
 
     // Max |post-trim| since the last call; resets to 0 on read. Legacy tap,
@@ -400,6 +426,72 @@ private:
     ColorStage color_;
     float postHpCoeff_ = 0.0f;
     float postLp_ = 0.0f;
+    // Fixed hardware tilt: RBJ sections (b = b0..b2 normalized, a = a1..a2)
+    // plus TDF-II states. Cooked in setSampleRate, applied in processSample.
+    float tiltB_[3][3] = {};
+    float tiltA_[3][2] = {};
+    float tiltZ_[3][2] = {};
+
+    // Q-parametrized RBJ shelf/peak cook, cookbook-identical to
+    // ToneBank::cook (same formulae, same normalization) so the test oracle
+    // and the chain can only disagree by float rounding.
+    static void cookTiltShelf (bool high, double f0, double q, double gainDb, double sampleRate, float (&b)[3],
+                               float (&a)[2])
+    {
+        constexpr double twoPi = 6.28318530717958647692;
+        const double w0 = twoPi * f0 / sampleRate;
+        const double cw = std::cos (w0);
+        const double sw = std::sin (w0);
+        const double alpha = sw / (2.0 * q);
+        const double A = std::pow (10.0, gainDb / 40.0);
+        const double sq = 2.0 * std::sqrt (A) * alpha;
+        double b0, b1, b2, a0, a1, a2;
+        if (!high)
+        {
+            b0 = A * ((A + 1.0) - (A - 1.0) * cw + sq);
+            b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cw);
+            b2 = A * ((A + 1.0) - (A - 1.0) * cw - sq);
+            a0 = (A + 1.0) + (A - 1.0) * cw + sq;
+            a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cw);
+            a2 = (A + 1.0) + (A - 1.0) * cw - sq;
+        }
+        else
+        {
+            b0 = A * ((A + 1.0) + (A - 1.0) * cw + sq);
+            b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cw);
+            b2 = A * ((A + 1.0) + (A - 1.0) * cw - sq);
+            a0 = (A + 1.0) - (A - 1.0) * cw + sq;
+            a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cw);
+            a2 = (A + 1.0) - (A - 1.0) * cw - sq;
+        }
+        b[0] = static_cast<float> (b0 / a0);
+        b[1] = static_cast<float> (b1 / a0);
+        b[2] = static_cast<float> (b2 / a0);
+        a[0] = static_cast<float> (a1 / a0);
+        a[1] = static_cast<float> (a2 / a0);
+    }
+
+    // Q-parametrized RBJ peak cook, cookbook-identical to ToneBank::cook.
+    static void cookTiltPeak (double f0, double q, double gainDb, double sampleRate, float (&b)[3], float (&a)[2])
+    {
+        constexpr double twoPi = 6.28318530717958647692;
+        const double w0 = twoPi * f0 / sampleRate;
+        const double cw = std::cos (w0);
+        const double sw = std::sin (w0);
+        const double alpha = sw / (2.0 * q);
+        const double A = std::pow (10.0, gainDb / 40.0);
+        const double b0 = 1.0 + alpha * A;
+        const double b1 = -2.0 * cw;
+        const double b2 = 1.0 - alpha * A;
+        const double a0 = 1.0 + alpha / A;
+        const double a1 = -2.0 * cw;
+        const double a2 = 1.0 - alpha / A;
+        b[0] = static_cast<float> (b0 / a0);
+        b[1] = static_cast<float> (b1 / a0);
+        b[2] = static_cast<float> (b2 / a0);
+        a[0] = static_cast<float> (a1 / a0);
+        a[1] = static_cast<float> (a2 / a0);
+    }
     HighCut highcut_;
     float trimLin_ = 1.0f;
     mutable std::atomic<float> peak_{0.0f};
