@@ -26,15 +26,16 @@ float blockerTheoryDb (double fc, double freqHz, double sampleRate)
     return static_cast<float> (20.0 * std::log10 (std::abs (h)));
 }
 
-// Tilt oracle (fitted hardware tilt, engaged path only): LS 120Hz +0.7dB +
-// HS 8kHz -0.5dB, Q-parametrized RBJ shelves (same cookbook family as
-// ToneBank::cook, Q = 0.71). Theoretical magnitude in dB — an independent
-// frequency-domain path from the chain's time-domain biquads, same pattern
-// as the blocker-loss oracle in audit10HzAnchors below.
+// Tilt oracle (fitted hardware tilt, engaged path only): LS 75Hz +0.91dB
+// Q0.54 + HS 5441Hz -0.34dB Q0.62 + peak 180Hz +0.11dB Q1.97,
+// Q-parametrized RBJ (same cookbook family as ToneBank::cook). Theoretical
+// magnitude in dB — an independent frequency-domain path from the chain's
+// time-domain biquads, same pattern as the blocker-loss oracle in
+// audit10HzAnchors below.
 float tiltTheoryDb (double freqHz, double sampleRate)
 {
     constexpr double twoPi = 6.28318530717958647692;
-    auto shelf = [&] (bool high, double f0, double q, double gainDb)
+    auto section = [&] (int kind, double f0, double q, double gainDb)
     {
         const double w0 = twoPi * f0 / sampleRate;
         const double cw = std::cos (w0);
@@ -43,7 +44,7 @@ float tiltTheoryDb (double freqHz, double sampleRate)
         const double A = std::pow (10.0, gainDb / 40.0);
         const double sq = 2.0 * std::sqrt (A) * alpha;
         double b0, b1, b2, a0, a1, a2;
-        if (!high)
+        if (kind == 0) // low shelf
         {
             b0 = A * ((A + 1.0) - (A - 1.0) * cw + sq);
             b1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cw);
@@ -52,7 +53,7 @@ float tiltTheoryDb (double freqHz, double sampleRate)
             a1 = -2.0 * ((A - 1.0) + (A + 1.0) * cw);
             a2 = (A + 1.0) + (A - 1.0) * cw - sq;
         }
-        else
+        else if (kind == 1) // high shelf
         {
             b0 = A * ((A + 1.0) + (A - 1.0) * cw + sq);
             b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cw);
@@ -61,20 +62,30 @@ float tiltTheoryDb (double freqHz, double sampleRate)
             a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cw);
             a2 = (A + 1.0) - (A - 1.0) * cw - sq;
         }
+        else // peak
+        {
+            b0 = 1.0 + alpha * A;
+            b1 = -2.0 * cw;
+            b2 = 1.0 - alpha * A;
+            a0 = 1.0 + alpha / A;
+            a1 = -2.0 * cw;
+            a2 = 1.0 - alpha / A;
+        }
         const double w = twoPi * freqHz / sampleRate;
         const std::complex<double> z = std::exp (std::complex<double> (0.0, -w));
         const std::complex<double> h = (b0 + b1 * z + b2 * z * z) / (a0 + a1 * z + a2 * z * z);
         return 20.0 * std::log10 (std::abs (h));
     };
-    return static_cast<float> (shelf (false, 120.0, 0.71, 0.7) + shelf (true, 8000.0, 0.71, -0.5));
+    return static_cast<float> (section (0, 75.0, 0.54, 0.91) + section (1, 5441.0, 0.62, -0.34) +
+                               section (2, 180.0, 1.97, 0.11));
 }
 
 // (a) End-to-end engaged-flat (tone 0, highcut off, boost step 1 (+3dB),
-// trim 0): output sits on +3dB PLUS the fitted hardware tilt (LS120 +0.7 /
-// HS8k -0.5, engaged path only — ACTIVE-off passthrough stays bit-exact,
-// see ProcessorIOTest). 1kHz within +/-0.1dB, 20Hz-15kHz spots within
-// +/-0.2dB of theory. 5Hz is the DC-block corner (-3dB by design, see
-// GainStage.h), so it asserts the block instead of flatness.
+// trim 0): output sits on +3dB PLUS the fitted hardware tilt (LS75 +0.91 /
+// HS5441 -0.34 + PK180 +0.11, engaged path only — ACTIVE-off passthrough
+// stays bit-exact, see ProcessorIOTest). 1kHz within +/-0.1dB, 20Hz-15kHz
+// spots within +/-0.2dB of theory. 5Hz is the DC-block corner (-3dB by
+// design, see GainStage.h), so it asserts the block instead of flatness.
 constexpr float kStep1Db = 3.0f;
 
 float rms (const float* data, int start, int count)
