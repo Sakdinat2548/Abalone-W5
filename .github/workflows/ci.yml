@@ -14,8 +14,8 @@
 #   JUCE_WEB_BROWSER=0 are set on the plugin target: ProcessorIOTest links the
 #   JUCE modules with default flags, so the headers must exist. cmake/ninja/g++
 #   ride the same apt line (no-op if preinstalled).
-# Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg + a
-# shared step that fails loud if a MinGW gcc is on PATH.
+# Ruling 5 travels: NO MinGW anywhere — native compiler pinned per leg (see
+# the CC/CXX pins on every configure step).
 # Builds all targets as proof (VST3 + AU on macOS + Standalone + tests);
 # CI publishes nothing (Standalone is dev-testing; the AU ships in the
 # macOS release zip, auval-gated on that leg too).
