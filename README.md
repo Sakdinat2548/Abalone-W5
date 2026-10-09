@@ -63,8 +63,7 @@ from the first open.
 - Tone shapes cross-checked against IR measurements ([tone curves](docs/tone-curves.png), [signal flow](docs/signal-flow.png)).
 
 ![Abalone W5 tone bank — all 6 tones, highcut off/on](docs/tone-curves-12panel.png)
-- Passes pluginval at strictness 10 (logs: `docs/pluginval/strictness-5.txt`, `docs/pluginval/strictness-10.txt`).
-- AU passes Apple's `auval` on every CI/release macOS leg (state round-trip included).
+- Every CI run and release gates the formats: pluginval at strictness 10 (VST3, all OSes) and `auval -strict` (AU, macOS) — see `.github/workflows/`.
 
 ## License
 
