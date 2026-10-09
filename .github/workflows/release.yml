@@ -138,9 +138,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      # pluginval at strictness 10 (release-grade proof; CI gates level 5 for
-      # speed). Same pinned binary + xvfb arrangement as ci.yml. A failing
-      # leg ships no zip (fail-fast is false, each leg gates itself).
+      # pluginval at strictness 10 (same gate as CI). Same pinned binary +
+      # xvfb arrangement as ci.yml. A failing leg ships no zip (fail-fast
+      # is false, each leg gates itself).
       - name: Validate VST3 with pluginval (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -175,7 +175,7 @@ jobs:
             sleep 2
           done
           auval -a 2>/dev/null | grep "AbW5" || { echo "AU never registered"; exit 1; }
-          auval -v aufx AbW5 SA48
+          auval -v -strict aufx AbW5 SA48
 
       # ZIP_NAME via env keeps ${{ }} out of the script body so the script is
       # statically parse-clean (Task-31 lesson).
