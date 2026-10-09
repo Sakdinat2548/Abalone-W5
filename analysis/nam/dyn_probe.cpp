@@ -30,11 +30,13 @@ int main()
 {
     ColorStage color;
     color.setEnabled(true);
-    std::printf("inDb,B1,B6,B10\n");
+    std::printf("inDb,B1,B3,B6,B8,B10\n");
     for (double inDb = -60.0; inDb <= 0.0; inDb += 1.0)
-        std::printf("%.0f,%.3f,%.3f,%.3f\n", inDb,
+        std::printf("%.0f,%.3f,%.3f,%.3f,%.3f,%.3f\n", inDb,
                     peakOut(color, 3.0, inDb),
+                    peakOut(color, 9.0, inDb),
                     peakOut(color, 18.0, inDb),
+                    peakOut(color, 24.0, inDb),
                     peakOut(color, 30.0, inDb));
     return 0;
 }

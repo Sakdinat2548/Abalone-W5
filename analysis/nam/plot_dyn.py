@@ -4,7 +4,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-xs, b1, b6, b10 = [], [], [], []
+xs, b1, b3, b6, b8, b10 = [], [], [], [], [], []
 with open(r"C:\Users\<you>\AppData\Local\Temp\opencode\dyn.csv") as f:
     for line in f:
         line = line.strip()
@@ -13,13 +13,17 @@ with open(r"C:\Users\<you>\AppData\Local\Temp\opencode\dyn.csv") as f:
         p = [float(x) for x in line.split(",")]
         xs.append(p[0])
         b1.append(p[1])
-        b6.append(p[2])
-        b10.append(p[3])
+        b3.append(p[2])
+        b6.append(p[3])
+        b8.append(p[4])
+        b10.append(p[5])
 
 fig, ax = plt.subplots(figsize=(7, 7))
 ax.plot(xs, xs, color="#8b949e", lw=1, ls="--", label="linear")
 ax.plot(xs, b1, color="#2dd4bf", lw=1.8, label="Boost 1 (+3 dB)")
+ax.plot(xs, b3, color="#00bfff", lw=1.8, label="Boost 3 (+9 dB)")
 ax.plot(xs, b6, color="#39d353", lw=1.8, label="Boost 6 (+18 dB)")
+ax.plot(xs, b8, color="#a371f7", lw=1.8, label="Boost 8 (+24 dB)")
 ax.plot(xs, b10, color="#ff7b00", lw=1.8, label="Boost 10 (+30 dB)")
 ax.set_xlim(-60, 0)
 ax.set_ylim(-60, 0)
@@ -30,7 +34,8 @@ ax.set_xlabel("input peak (dBFS)")
 ax.set_ylabel("output peak (dB, unity trim per curve)")
 ax.set_title("Abalone W5 dynamics — transfer curves")
 details = []
-for name, yy, color in [("B1", b1, "#2dd4bf"), ("B6", b6, "#39d353"), ("B10", b10, "#ff7b00")]:
+for name, yy, color in [("B1", b1, "#2dd4bf"), ("B3", b3, "#00bfff"), ("B6", b6, "#39d353"),
+                        ("B8", b8, "#a371f7"), ("B10", b10, "#ff7b00")]:
     gr0 = xs[-1] - yy[-1]  # gain reduction with 0 dBFS in
     knee = next((x for x, y in zip(xs, yy) if y - x <= -1.0), None)
     details.append("%-3s %+6.2f%s" % (
