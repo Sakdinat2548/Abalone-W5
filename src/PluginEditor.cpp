@@ -164,6 +164,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // scale at its oval spot, so it keeps the conventional 7-to-5-o'clock
     // sweep; OS keeps the shared trim sweep.
     boostDialLookAndFeel.detentDeg = {224.9f, 254.9f, 285.0f, 314.5f, 345.0f, 374.0f, 404.6f, 434.6f, 464.4f, 494.8f};
+    boostDialLookAndFeel.pivotOffXPx = 1.0f;
+    boostDialLookAndFeel.pivotOffYPx = -1.0f;
     toneDialLookAndFeel.detentDeg = {285.1f, 314.9f, 345.5f, 374.3f, 404.9f, 434.9f};
     trimDialLookAndFeel.needleStartDeg = 225.0f;
     trimDialLookAndFeel.needleSweepDeg = 270.0f;

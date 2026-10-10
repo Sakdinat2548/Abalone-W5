@@ -64,6 +64,8 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
     float rimPx = 113.0f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
+    float pivotOffXPx = 0.0f; // per-dial axle nudge, art px (+right/+down)
+    float pivotOffYPx = 0.0f;
     std::vector<float> detentDeg;
 
     float needleAngleFor (float sliderPos) const
@@ -101,8 +103,8 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
             const float pw = needleWPx * k;
             const float ph = needleHPx * k;
             const float rim = rimPx * k;
-            const float cx = fx + static_cast<float> (width) * 0.5f;
-            const float cy = fy + static_cast<float> (height) * 0.5f;
+            const float cx = fx + static_cast<float> (width) * 0.5f + pivotOffXPx * k;
+            const float cy = fy + static_cast<float> (height) * 0.5f + pivotOffYPx * k;
             const float angle = needleAngleFor (sliderPos) * juce::MathConstants<float>::pi / 180.0f;
             g.saveState();
             g.addTransform (juce::AffineTransform::rotation (angle, cx, cy));
