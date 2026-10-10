@@ -1,5 +1,5 @@
-# Abalone W5 — editor geometry (v120 faceplate, same 1969x799 frame).
-# All positions are ratios of the texture (ui/v120background.png, 1969x799).
+# Abalone W5 — editor geometry (v110 faceplate, 1969x799 frame).
+# All positions are ratios of the texture (ui/V110Bakedbackground.png, 1969x799).
 # cx,cy = element center (x/1969, y/799); w,h = element size (w/1969, h/799).
 # Big-dial centers fit off the baked tick arcs; small-knob centers off the
 # metal faces. Knob bodies are BAKED (never drawn/rotated by code) — only

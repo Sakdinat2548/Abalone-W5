@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Pre-release tree toward v1.2.0 (tone/v1.2 integration); drop nothing at tag time.
-project(AbaloneW5 VERSION 1.2.0)
+project(AbaloneW5 VERSION 1.2.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -83,7 +83,7 @@ target_sources(AbaloneW5 PRIVATE
 
 # UI skins + layout data, embedded as BinaryData (decoded once on the message
 # thread in the editor constructor, never on the audio thread).
-# - v120background.png: v120 faceplate (ui/, 1969x799) drawn 1:1;
+# - V110Bakedbackground.png: v110 faceplate (ui/, 1969x799) drawn 1:1;
 #   knob bodies, captions, and button/LED slots all baked in. The dial rings
 #   print ticks/numerals on an exact 30-degree clock grid, so boost/tone
 #   needles use exact per-detent tables (see PluginEditor.cpp) instead of a
@@ -103,7 +103,7 @@ target_sources(AbaloneW5 PRIVATE
 #   SVG drawable; static black in every OS state. (A previous CinzelBlack
 #   fallback face + OFL.txt were removed: the embedded SVG cannot
 #   realistically fail to parse, so nothing falls back to it.)
-# Superseded (kept on disk, no longer embedded): ui/V110Bakedbackground.png,
+# Superseded (kept on disk, no longer embedded): ui/v120background.png,
 # ui/u5_front_clean.png,
 # ui/knob_boost_no_pointer.png, ui/knob_tone_no_pointer.png,
 # ui/pointer_boost.png, ui/pointer_tone.png, ui/pointer_trim.png,
@@ -113,7 +113,7 @@ juce_add_binary_data(AbaloneW5Assets
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
-        ui/v120background.png
+        ui/V110Bakedbackground.png
         ui/V110big_pointer.png
         ui/V110small_pointer.png
         ui/V110button_on.png

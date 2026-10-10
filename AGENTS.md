@@ -52,7 +52,7 @@ U5-flavored clean DI VST3 + AU (Logic). JUCE 8 biquads/gain only. No WDF. 1x/2x/
 
 ## DSP chain (fixed order)
 
-`Boost -> DC-block -> Tone -> Color -> HighCut -> Trim -> Tilt + LED`
+`Boost -> DC-block -> Tone -> Color -> HighCut -> Trim -> Voicing + LED`
 
 - Boost: Choice 1-10, 3dB/step (~+3 to +30dB). Clean float, no hard clip.
 - DC-block: 5Hz input. Tone: bypass (TONE0) + 1-6 biquads, default Tone 3, 10ms xfade.

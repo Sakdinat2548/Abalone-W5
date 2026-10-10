@@ -26,13 +26,13 @@ float blockerTheoryDb (double fc, double freqHz, double sampleRate)
     return static_cast<float> (20.0 * std::log10 (std::abs (h)));
 }
 
-// Tilt oracle (fitted hardware tilt, engaged path only): LS 75Hz +0.91dB
+// Voicing oracle (fitted hardware voicing, engaged path only): LS 75Hz +0.91dB
 // Q0.54 + HS 5441Hz -0.34dB Q0.62 + peak 180Hz +0.11dB Q1.97,
 // Q-parametrized RBJ (same cookbook family as ToneBank::cook). Theoretical
 // magnitude in dB — an independent frequency-domain path from the chain's
 // time-domain biquads, same pattern as the blocker-loss oracle in
 // audit10HzAnchors below.
-float tiltTheoryDb (double freqHz, double sampleRate)
+float voiceTheoryDb (double freqHz, double sampleRate)
 {
     constexpr double twoPi = 6.28318530717958647692;
     auto section = [&] (int kind, double f0, double q, double gainDb)
@@ -81,7 +81,7 @@ float tiltTheoryDb (double freqHz, double sampleRate)
 }
 
 // (a) End-to-end engaged-flat (tone 0, highcut off, boost step 1 (+3dB),
-// trim 0): output sits on +3dB PLUS the fitted hardware tilt (LS75 +0.91 /
+// trim 0): output sits on +3dB PLUS the fitted hardware voicing (LS75 +0.91 /
 // HS5441 -0.34 + PK180 +0.11, engaged path only — ACTIVE-off passthrough
 // stays bit-exact, see ProcessorIOTest). 1kHz within +/-0.1dB, 20Hz-15kHz
 // spots within +/-0.2dB of theory. 5Hz is the DC-block corner (-3dB by
@@ -132,9 +132,9 @@ void checkBypassFlat ()
             chain.setHighcut (false);
             chain.setTrimDb (0.0f);
             const float gainDb = steadyGainDb (chain, sampleRate, spots[f], 0.5f);
-            // Expectation models the full engaged tail: boost + tilt +
+            // Expectation models the full engaged tail: boost + voicing +
             // both DC-blockers (5Hz in, 2Hz post-color).
-            const float expectDb = kStep1Db + tiltTheoryDb (spots[f], sampleRate) +
+            const float expectDb = kStep1Db + voiceTheoryDb (spots[f], sampleRate) +
                                    blockerTheoryDb (5.0, spots[f], sampleRate) +
                                    blockerTheoryDb (2.0, spots[f], sampleRate);
             const float tol = spots[f] == 1000.0 ? 0.1f : 0.2f;
@@ -850,9 +850,9 @@ void checkPostColorTransparency1k ()
     ref.setSampleRate (48000.0);
     ref.setTone (3);
     // Boost step 1 (+3dB) + tone theory + color small-signal gain k/tanh(k)
-    // (k = 0.06 post drive-fit) + engaged tilt theory (LS120/HS8k at 1kHz).
+    // (k = 0.06 post drive-fit) + engaged voicing theory (LS120/HS8k at 1kHz).
     const float expected = 3.0f + ref.magnitudeAt (1000.0f) + 20.0f * std::log10 (0.06f / std::tanh (0.06f)) +
-                           tiltTheoryDb (1000.0, 48000.0);
+                           voiceTheoryDb (1000.0, 48000.0);
     std::printf ("post-color transparency @1kHz/tone3: %+0.4fdB (expect %+0.4f +/- 0.05)\n", measured, expected);
     std::fflush (stdout);
     assert (std::fabs (measured - expected) < 0.05f);
@@ -862,8 +862,8 @@ void checkPostColorTransparency1k ()
 // assert — the controller rules compensate-vs-document from these numbers).
 // Per tone (boost step 1, highcut off, trim 0): raw chain magnitude at 10Hz
 // vs the absolute anchors (T1/T3/T4 -3, T2 -0.25, T5/T6 -22), with the exact
-// blocker losses plus the engaged tilt shown separately (5Hz input blocker
-// + 2Hz post-color blocker per Ruling 30 + LS120/HS8k tilt — one column per
+// blocker losses plus the engaged voicing shown separately (5Hz input blocker
+// + 2Hz post-color blocker per Ruling 30 + LS120/HS8k voicing — one column per
 // stage, so the audit names the actual chain).
 void audit10HzAnchors ()
 {
@@ -879,11 +879,11 @@ void audit10HzAnchors ()
     };
     const float loss5 = blockerLossDb (5.0);
     const float loss2 = blockerLossDb (2.0);
-    const float tilt10 = tiltTheoryDb (10.0, fs);
+    const float voice10 = voiceTheoryDb (10.0, fs);
 
     const float anchors[7] = {0.0f, -3.0f, -0.25f, -3.0f, -3.0f, -22.0f, -22.0f};
-    std::printf ("10Hz audit @48k (5Hz-blocker %+0.4fdB, 2Hz-blocker %+0.4fdB, tilt %+0.4fdB):\n", loss5, loss2,
-                 tilt10);
+    std::printf ("10Hz audit @48k (5Hz-blocker %+0.4fdB, 2Hz-blocker %+0.4fdB, voice %+0.4fdB):\n", loss5, loss2,
+                 voice10);
     for (int tone = 1; tone <= 6; ++tone)
     {
         ProcessorChain chain;
@@ -894,16 +894,17 @@ void audit10HzAnchors ()
         chain.setTrimDb (0.0f);
         const float raw = steadyGainDb (chain, fs, 10.0, 0.1f);
         // Chain adds boost (+3dB), color small-signal gain, the blockers,
-        // and the engaged tilt.
+        // and the engaged voicing.
         const float colorDb = 20.0f * std::log10 (0.06f / std::tanh (0.06f));
-        const float tiltDb = tiltTheoryDb (10.0, fs);
+        const float voiceDb = voiceTheoryDb (10.0, fs);
         const float comp1 = raw - 3.0f - colorDb - loss5;
         const float comp2 = raw - 3.0f - colorDb - loss5 - loss2;
-        const float comp3 = comp2 - tiltDb;
-        std::printf ("  T%d: raw %+0.3f | -5Hz %+0.3f (d %+0.3f) | -both %+0.3f (d %+0.3f) | -tilt %+0.3f (d %+0.3f) | "
-                     "anchor %+0.2f\n",
-                     tone, raw, comp1, comp1 - anchors[tone], comp2, comp2 - anchors[tone], comp3,
-                     comp3 - anchors[tone], anchors[tone]);
+        const float comp3 = comp2 - voiceDb;
+        std::printf (
+            "  T%d: raw %+0.3f | -5Hz %+0.3f (d %+0.3f) | -both %+0.3f (d %+0.3f) | -voice %+0.3f (d %+0.3f) | "
+            "anchor %+0.2f\n",
+            tone, raw, comp1, comp1 - anchors[tone], comp2, comp2 - anchors[tone], comp3, comp3 - anchors[tone],
+            anchors[tone]);
     }
     std::fflush (stdout);
 }

@@ -19,7 +19,7 @@
 //
 // Chain order: GainStage (boost + 5Hz DC-block) -> ToneBank A/B xfade ->
 // ColorStage -> post-color 2Hz DC-block -> HighCut -> trim gain ->
-// fixed hardware tilt (LS120/HS8k, engaged only) -> peak tracker.
+// fixed hardware voicing (LS120/HS8k successors, engaged only) -> peak tracker.
 //
 // Tone xfade: two ToneBank instances (active + shadow). On
 // setTone(new) != target, the shadow takes the new tone from a clean state
@@ -107,16 +107,16 @@ struct ProcessorChain
         constexpr double postFc = 2.0;
         constexpr double postTwoPi = 6.28318530717958647692;
         postHpCoeff_ = static_cast<float> (1.0 - std::exp (-postTwoPi * postFc / sampleRate_));
-        // Fixed hardware tilt (engaged path only — ACTIVE-off passthrough
+        // Fixed hardware voicing (engaged path only — ACTIVE-off passthrough
         // returns before processSample's tail, so bypass stays bit-exact):
         // LS 75Hz +0.91dB Q0.54 + HS 5441Hz -0.34dB Q0.62 + peak 180Hz
         // +0.11dB Q1.97, Q-parametrized RBJ (same cookbook as
-        // ToneBank::cook; the ChainTest tilt oracle pins it). States flushed
+        // ToneBank::cook; the ChainTest voicing oracle pins it). States flushed
         // like the OS lines: history is meaningless across rates.
-        cookTiltShelf (false, 75.0, 0.54, 0.91, sampleRate_, tiltB_[0], tiltA_[0]);
-        cookTiltShelf (true, 5441.0, 0.62, -0.34, sampleRate_, tiltB_[1], tiltA_[1]);
-        cookTiltPeak (180.0, 1.97, 0.11, sampleRate_, tiltB_[2], tiltA_[2]);
-        tiltZ_[0][0] = tiltZ_[0][1] = tiltZ_[1][0] = tiltZ_[1][1] = tiltZ_[2][0] = tiltZ_[2][1] = 0.0f;
+        cookVoiceShelf (false, 75.0, 0.54, 0.91, sampleRate_, voiceB_[0], voiceA_[0]);
+        cookVoiceShelf (true, 5441.0, 0.62, -0.34, sampleRate_, voiceB_[1], voiceA_[1]);
+        cookVoicePeak (180.0, 1.97, 0.11, sampleRate_, voiceB_[2], voiceA_[2]);
+        voiceZ_[0][0] = voiceZ_[0][1] = voiceZ_[1][0] = voiceZ_[1][1] = voiceZ_[2][0] = voiceZ_[2][1] = 0.0f;
         xfadeLen_ = static_cast<int> (std::lround (0.01 * sampleRate));
         if (xfadeLen_ < 1)
             xfadeLen_ = 1;
@@ -231,20 +231,20 @@ struct ProcessorChain
         const float deblocked = colored - postLp_;
         const float cut = highcut_.processSample (deblocked);
         const float out = cut * trimLin_;
-        // Fixed hardware tilt (see setSampleRate): three TDF-II sections
+        // Fixed hardware voicing (see setSampleRate): three TDF-II sections
         // (LS + HS + low-mid peak). Denormal snap mirrors ToneBank (states
         // freeze exact at silence).
-        float tilted = out;
+        float voiced = out;
         for (int s = 0; s < 3; ++s)
         {
-            const float y = tiltB_[s][0] * tilted + tiltZ_[s][0];
-            tiltZ_[s][0] = tiltB_[s][1] * tilted - tiltA_[s][0] * y + tiltZ_[s][1];
-            tiltZ_[s][1] = tiltB_[s][2] * tilted - tiltA_[s][1] * y;
-            if (std::fabs (tiltZ_[s][0]) < 1.0e-15f)
-                tiltZ_[s][0] = 0.0f;
-            if (std::fabs (tiltZ_[s][1]) < 1.0e-15f)
-                tiltZ_[s][1] = 0.0f;
-            tilted = y;
+            const float y = voiceB_[s][0] * voiced + voiceZ_[s][0];
+            voiceZ_[s][0] = voiceB_[s][1] * voiced - voiceA_[s][0] * y + voiceZ_[s][1];
+            voiceZ_[s][1] = voiceB_[s][2] * voiced - voiceA_[s][1] * y;
+            if (std::fabs (voiceZ_[s][0]) < 1.0e-15f)
+                voiceZ_[s][0] = 0.0f;
+            if (std::fabs (voiceZ_[s][1]) < 1.0e-15f)
+                voiceZ_[s][1] = 0.0f;
+            voiced = y;
         }
 
         // Pre-trim tap (post-HighCut, pre-trim-gain peak) for the SIGNAL LED:
@@ -256,10 +256,10 @@ struct ProcessorChain
         if (preMag > prePeak_.load (std::memory_order_relaxed))
             prePeak_.store (preMag, std::memory_order_relaxed);
 
-        const float mag = std::fabs (tilted);
+        const float mag = std::fabs (voiced);
         if (mag > peak_.load (std::memory_order_relaxed))
             peak_.store (mag, std::memory_order_relaxed);
-        return tilted;
+        return voiced;
     }
 
     // Max |post-trim| since the last call; resets to 0 on read. Legacy tap,
@@ -426,17 +426,17 @@ private:
     ColorStage color_;
     float postHpCoeff_ = 0.0f;
     float postLp_ = 0.0f;
-    // Fixed hardware tilt: RBJ sections (b = b0..b2 normalized, a = a1..a2)
+    // Fixed hardware voicing: RBJ sections (b = b0..b2 normalized, a = a1..a2)
     // plus TDF-II states. Cooked in setSampleRate, applied in processSample.
-    float tiltB_[3][3] = {};
-    float tiltA_[3][2] = {};
-    float tiltZ_[3][2] = {};
+    float voiceB_[3][3] = {};
+    float voiceA_[3][2] = {};
+    float voiceZ_[3][2] = {};
 
     // Q-parametrized RBJ shelf/peak cook, cookbook-identical to
     // ToneBank::cook (same formulae, same normalization) so the test oracle
     // and the chain can only disagree by float rounding.
-    static void cookTiltShelf (bool high, double f0, double q, double gainDb, double sampleRate, float (&b)[3],
-                               float (&a)[2])
+    static void cookVoiceShelf (bool high, double f0, double q, double gainDb, double sampleRate, float (&b)[3],
+                                float (&a)[2])
     {
         constexpr double twoPi = 6.28318530717958647692;
         const double w0 = twoPi * f0 / sampleRate;
@@ -472,7 +472,7 @@ private:
     }
 
     // Q-parametrized RBJ peak cook, cookbook-identical to ToneBank::cook.
-    static void cookTiltPeak (double f0, double q, double gainDb, double sampleRate, float (&b)[3], float (&a)[2])
+    static void cookVoicePeak (double f0, double q, double gainDb, double sampleRate, float (&b)[3], float (&a)[2])
     {
         constexpr double twoPi = 6.28318530717958647692;
         const double w0 = twoPi * f0 / sampleRate;

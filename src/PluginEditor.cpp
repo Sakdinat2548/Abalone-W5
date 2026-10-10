@@ -121,7 +121,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     setOpaque (false);
     // PNG skins + layout CSV are decoded/parsed once here on the message
     // thread, never on audio.
-    faceImage = imageFromBinary (BinaryData::v120background_png, BinaryData::v120background_pngSize);
+    faceImage = imageFromBinary (BinaryData::V110Bakedbackground_png, BinaryData::V110Bakedbackground_pngSize);
     // v110: knob bodies are BAKED (never drawn by code) — only the needles
     // rotate, pivot at needle-art bottom-center (12 o'clock art).
     boostDialLookAndFeel.needleImage =
