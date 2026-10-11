@@ -60,16 +60,36 @@
 //   0.9*Nyquist < -80 dB rel H1 at 1x. If a future fit breaks it, the stage
 //   rides the existing 2x/4x OS path (exact 0/40/60 latency untouched).
 //
-// Header-only, dependency-free C++17 (<cmath> only). Stateless per-sample
-// function: no state to denormalize. JUCE-free, MSYS2-GCC-syntax-clean.
+// Header-only, dependency-free C++17 (<cmath> only). One state (the gate
+// envelope); denormal-safe by construction (snaps + FTZ-friendly zeroing).
+// exp() underflows to exact 0 past |x| ~= 5.2 — by design, not a hazard
+// (zero, never denormal). JUCE-free, MSYS2-GCC-syntax-clean.
 struct ColorStage
 {
-    ColorStage () : norm_ (fastTanh (kDrive_)) {}
+    ColorStage () : norm_ (fastTanh (kDrive_)) { setSampleRate (48000.0); }
 
     void setEnabled (bool enabled)
     {
         enabled_ = enabled;
-        env_ = 0.0f;
+        reset();
+    }
+
+    // Output silence on the next block. Also clears the envelope (stale
+    // level history is meaningless across resets).
+    void reset () { env_ = 0.0f; }
+
+    // Envelope time constants from rate (tau ~= 100 ms release, 0.1 ms
+    // attack): identical seconds at 44.1/48 kHz and on the 2x/4x hot path
+    // (the chain retunes on OS factor change, so hot-rate timing matches).
+    void setSampleRate (double sampleRate)
+    {
+        if (!(sampleRate > 0.0))
+            sampleRate = 48000.0;
+
+        constexpr double kTauRel = 0.1;    // seconds.
+        constexpr double kTauAtk = 0.0001; // seconds.
+        kEnvRel_ = static_cast<float> (1.0 - std::exp (-1.0 / (kTauRel * sampleRate)));
+        kEnvAtk_ = static_cast<float> (1.0 - std::exp (-1.0 / (kTauAtk * sampleRate)));
     }
 
     // Fast tanh (Lambert continued fraction, 5 levels): max abs error
@@ -96,14 +116,22 @@ struct ColorStage
         // H-task 2026-10-12: envelope-gated harmonic branch (DE fit, loss
         // 1861 vs 170k+ for every static family). One gate scales odd+even
         // resonant bumps coherently: quiet -> shut (laws intact), mid-drive
-        // -> open (paints H3-H6), hot -> relatively shut again. Envelope is
+        // -> open (paints H3-H6), hot -> relatively shut again (the branch /
+        // tanh ratio shrinks with drive — Gaussian tails vanish while tanh
+        // saturates; the gate itself saturates open, which is why hot
+        // behavior still belongs to the core). Envelope is
         // peak-hold with fast attack + slow release (steady sine reads peak
         // amplitude, matching the fit); this is the stage's only state
         // (memory is what static curves provably cannot do — see fit notes).
         // Attack smoothing (0.1 ms) exists so sharp transients cannot step
         // the gate audibly (zipper); instant-vs-0.5 ms attack differs
         // <= -65 dBFS peak on slap material.
+        // Non-finite input (NaN/Inf from a sick host): hold silence, touch
+        // nothing, latch nothing. The old stateless stage recovered alone;
+        // the envelope must not learn garbage.
         const float ax = std::fabs (x);
+        if (!(ax <= 3.402823466e+38f))
+            return 0.0f;
         if (ax > env_)
             env_ += kEnvAtk_ * (ax - env_);
         else
@@ -166,7 +194,10 @@ struct ColorStage
 private:
     static constexpr double kPi_ = 3.14159265358979323846;
     static constexpr float kDrive_ = 0.06f;  // tanh drive: sets H3 (see derivation above).
-    static constexpr float kEven_ = 0.0015f; // 2nd-harmonic blend: sets H2 (see derivation above).
+    static constexpr float kEven_ = 0.0015f; // 2nd-harmonic blend: sets H2 at low drive (see derivation above).
+                                             // Minority H2 contributor above ~-36 dB stage, where the even bump
+                                             // dominates by fit; kept (removing it would refit everything for
+                                             // nothing audible).
     // H-task gated branch (DE fit 2026-10-12, loss 1861): odd bump paints
     // H3/H5, even bump paints H4/H6; gate opens mid-drive only. Hot-safe by
     // construction (Gaussian tails vanish for |x| >> w; gate saturates).
@@ -176,11 +207,11 @@ private:
     static constexpr float kEvenW_ = 0.82f;
     static constexpr float kGateN0_ = 10.526f;
     static constexpr float kGateQ_ = 0.60f;
-    // Envelope release: tau ~= 100 ms at 48 kHz (2% ripple at 440 Hz;
-    // rate difference 44.1/48 kHz shifts timing 8%, inaudible). Attack
-    // ~= 0.1 ms: kills gate-step zipper, sonically identical otherwise.
-    static constexpr float kEnvRel_ = 0.000208f;
-    static constexpr float kEnvAtk_ = 0.19f;
+    // Envelope release/attack coefficients (per-second taus, retuned in
+    // setSampleRate): tau ~= 100 ms release (2% ripple at 440 Hz) and
+    // ~= 0.1 ms attack (kills gate-step zipper, sonically identical).
+    float kEnvRel_ = 0.000208f;
+    float kEnvAtk_ = 0.19f;
 
     bool enabled_ = true;
     float env_ = 0.0f;  // peak-hold envelope for the harmonic gate (see processSample).

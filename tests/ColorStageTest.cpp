@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 
 namespace
 {
@@ -483,12 +484,36 @@ void checkAliasCleanAt (double freqHz)
 
 void checkAliasHighNotes ()
 {
-    // 3/5/8 kHz @ +10 dB share the 1 kHz alias bound. Decides the
-    // oversampling question: if the fitted tail breaks this at 1x, the
-    // stage runs hot at OS or the tail gets shorter.
-    checkAliasCleanAt (3000.0);
+    // 5/7/11 kHz @ +10 dB share the -60 dB bound. Chosen so aliased
+    // harmonics cannot hide on harmonic bins (1/3/8 kHz are integer ratios
+    // to 48 kHz, where every fold lands on a true bin and the check would
+    // pass for the wrong reason).
     checkAliasCleanAt (5000.0);
-    checkAliasCleanAt (8000.0);
+    checkAliasCleanAt (7000.0);
+    checkAliasCleanAt (11000.0);
+}
+
+void checkNanRecovery ()
+{
+    // One NaN (or Inf) sample must not latch: output stays finite forever
+    // after, and the envelope relearns (holds silence, never NaN).
+    ColorStage stage;
+    stage.setEnabled (true);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    assert (stage.processSample (nan) == 0.0f);
+    assert (stage.processSample (inf) == 0.0f);
+    assert (stage.processSample (-inf) == 0.0f);
+    const int total = static_cast<int> (kSampleRate);
+    for (int n = 0; n < total; ++n)
+    {
+        const float x =
+            0.5f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / kSampleRate));
+        const float y = stage.processSample (x);
+        assert (std::isfinite (y));
+    }
+    std::puts ("NaN/Inf in: silence out, finite forever after");
 }
 
 } // namespace
@@ -511,6 +536,7 @@ int main ()
     checkHotBranchBound();
     checkNoDcBlowup();
     checkAliasHighNotes();
+    checkNanRecovery();
     std::puts ("ColorStageTest: all checks passed");
     return 0;
 }

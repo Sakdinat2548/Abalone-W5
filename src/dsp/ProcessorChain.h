@@ -99,6 +99,7 @@ struct ProcessorChain
 
         sampleRate_ = sampleRate;
         gain_.setSampleRate (sampleRate);
+        color_.setSampleRate (sampleRate); // envelope taus are per-second.
         banks_[0].setSampleRate (sampleRate);
         banks_[1].setSampleRate (sampleRate);
         highcut_.setSampleRate (sampleRate);
@@ -175,6 +176,9 @@ struct ProcessorChain
         osTarget_ = target;
         osPos_ = 0;
         osBlending_ = true;
+        // The color stage runs at the hot rate under OS: retune its envelope
+        // taus so seconds stay seconds (else 2x/4x halves/quarters them).
+        color_.setSampleRate (sampleRate_ * static_cast<double> (target));
     }
 
     int getOsFactor () const { return osTarget_; }
