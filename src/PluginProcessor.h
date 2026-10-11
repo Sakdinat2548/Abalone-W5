@@ -23,8 +23,9 @@ public:
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
-    // Host bypass: TRUE passthrough — the buffer is left untouched (zero DSP,
-    // chain states frozen), exactly like ACTIVE off. The input peak is still
+    // Host bypass: TRUE passthrough — the input delayed by the reported
+    // latency (0 at 1x, i.e. untouched; 40/60 under OS, matching the engaged
+    // FIR path), exactly like ACTIVE off. The input peak is still
     // tracked so the SIGNAL LED follows the input while bypassed.
     // Mono-in exception: with a single main-bus input and >= 2 buffer
     // channels, ch0 is copied to the extra channels (same dual-mono rule as
@@ -111,6 +112,31 @@ private:
     // cover live toggles, which is the click being fixed).
     float bypassMix_ = 0.0f;
     bool firstAudioBlock_ = true;
+
+    // Dry-path alignment delay: the engaged path delays by the hot FIR group
+    // delay (0/40/60 at 1x/2x/4x, reported to the host), so the dry path
+    // carries the same delay — otherwise toggling ACTIVE shifts timing and
+    // breaks PDC, and the crossfade combs. Per-channel circular lines sized
+    // to the max (4x) latency; at 1x the latency is 0 and the lines are
+    // bypassed entirely (bit-exact fast path preserved). Fed in every path
+    // (engaged included) so the history is always live on toggle.
+    static constexpr int kMaxDryLatency = 60;
+    std::array<std::array<float, 60>, 2> dryDelay_ = {};
+    std::array<int, 2> dryPos_ = {0, 0};
+
+    float peekDry (int ch, int latency) const
+    {
+        const int p = dryPos_[static_cast<size_t> (ch)] - latency;
+        const int n = kMaxDryLatency;
+        return dryDelay_[static_cast<size_t> (ch)][static_cast<size_t> ((p % n + n) % n)];
+    }
+
+    void pushDry (int ch, float x)
+    {
+        auto& line = dryDelay_[static_cast<size_t> (ch)];
+        line[static_cast<size_t> (dryPos_[static_cast<size_t> (ch)])] = x;
+        dryPos_[static_cast<size_t> (ch)] = (dryPos_[static_cast<size_t> (ch)] + 1) % kMaxDryLatency;
+    }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessor)
 };

@@ -355,6 +355,82 @@ void checkActiveOffPassthrough ()
     }
 }
 
+// (e2) Bypass latency alignment: under 2x/4x the dry path carries the same
+// FIR group delay as the engaged path (40/60 samples), so toggling ACTIVE
+// never shifts timing and PDC holds. Impulse in -> impulse out exactly at
+// the latency index, zeros before. At 1x the fast path stays bit-exact.
+void checkBypassLatencyAligned ()
+{
+    const int latencies[3] = {0, 40, 60};
+    const float osRaw[3] = {0.0f, 1.0f, 2.0f};
+    for (int c = 0; c < 3; ++c)
+    {
+        { // ACTIVE-off internal bypass.
+            AbaloneW5AudioProcessor proc;
+            setFlatParams (proc);
+            *proc.getApvts().getRawParameterValue ("osfactor") = osRaw[c];
+            *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+            proc.prepareToPlay (kSampleRate, kBlock);
+
+            juce::AudioBuffer<float> buffer (2, kBlock);
+            buffer.clear();
+            buffer.setSample (0, 0, 1.0f);
+            buffer.setSample (1, 0, 1.0f);
+            juce::MidiBuffer midi;
+            proc.processBlock (buffer, midi);
+
+            const float* ch0 = buffer.getReadPointer (0);
+            int peak = -1;
+            float peakV = 0.0f;
+            for (int i = 0; i < kBlock; ++i)
+            {
+                const float a = std::fabs (ch0[i]);
+                if (a > peakV)
+                {
+                    peakV = a;
+                    peak = i;
+                }
+            }
+            std::printf ("bypass latency osRaw %.0f: peak @%d val %.4f (expect @%d val 1.0)\n", osRaw[c], peak,
+                         static_cast<double> (peakV), latencies[c]);
+            CHECK (peak == latencies[c]);
+            CHECK (peakV == 1.0f);
+            for (int i = 0; i < peak; ++i)
+                CHECK (ch0[i] == 0.0f);
+        }
+        { // Host bypass entry point, same contract.
+            AbaloneW5AudioProcessor proc;
+            setFlatParams (proc);
+            *proc.getApvts().getRawParameterValue ("osfactor") = osRaw[c];
+            proc.prepareToPlay (kSampleRate, kBlock);
+
+            juce::AudioBuffer<float> buffer (2, kBlock);
+            buffer.clear();
+            buffer.setSample (0, 0, 1.0f);
+            buffer.setSample (1, 0, 1.0f);
+            juce::MidiBuffer midi;
+            proc.processBlockBypassed (buffer, midi);
+
+            const float* ch0 = buffer.getReadPointer (0);
+            int peak = -1;
+            float peakV = 0.0f;
+            for (int i = 0; i < kBlock; ++i)
+            {
+                const float a = std::fabs (ch0[i]);
+                if (a > peakV)
+                {
+                    peakV = a;
+                    peak = i;
+                }
+            }
+            std::printf ("host-bypass latency osRaw %.0f: peak @%d val %.4f (expect @%d val 1.0)\n", osRaw[c], peak,
+                         static_cast<double> (peakV), latencies[c]);
+            CHECK (peak == latencies[c]);
+            CHECK (peakV == 1.0f);
+        }
+    }
+}
+
 // (f) ACTIVE toggle must not click: settle engaged on a continuous 220Hz
 // sine, flip off mid-stream and bound every sample-to-sample jump (block
 // boundary included), then flip back on and bound again. A 5ms equal-power
@@ -575,6 +651,7 @@ int main ()
     checkMonoInMonoOut();
     checkHostBypass();
     checkActiveOffPassthrough();
+    checkBypassLatencyAligned();
     checkActiveToggleNoClick();
     checkBypassSync();
     checkTrimRangeAndDefault();
