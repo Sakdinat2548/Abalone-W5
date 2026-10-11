@@ -158,13 +158,17 @@ struct ToneBank
         switch (tone)
         {
         case 1:
-            return -6.8239f;
+            return -3.4872f;
+        case 2:
+            return -4.8591f;
+        case 3:
+            return 4.4248f;
         case 4:
-            return -0.7323f;
+            return 0.7784f;
         case 5:
-            return 2.4954f;
+            return 2.6038f;
         case 6:
-            return 2.81f;
+            return 5.3969f;
         default:
             break;
         }
@@ -272,51 +276,51 @@ private:
         switch (tone * 10 + stage)
         {
         case 10:
-            return {Type::HighPass, 3.8136, 0.46776, 0.0};
+            return {Type::HighPass, 5.827048, 0.61509, 0.0};
         case 11:
-            return {Type::Peak, 19.966, 0.27101, 6.0138};
+            return {Type::Peak, 17.809303, 0.510313, 2.386098};
         case 12:
-            return {Type::Peak, 919.3987, 0.16448, -9.7137};
+            return {Type::Peak, 576.308198, 0.238087, -8.7206};
         case 13:
-            return {Type::Peak, 1927.2658, 0.17827, 9.1515};
+            return {Type::Peak, 316.362377, 0.156875, 8.244914};
         case 14:
-            return {Type::HighShelf, 8986.3445, 0.48574, 8.1929};
+            return {Type::HighShelf, 4282.69202, 0.472141, 7.93173};
         case 15:
-            return {Type::Peak, 135.9733, 0.26901, 5.335};
+            return {Type::Peak, 35.227056, 0.495389, 2.057284};
         case 20:
-            return {Type::Peak, 644.5752, 0.31635, -9.5942};
+            return {Type::Peak, 729.990772, 0.399998, -7.043765};
         case 21:
-            return {Type::Peak, 715.0513, 1.6408, -12.8167};
+            return {Type::Peak, 678.226926, 1.43118, -12.582057};
         case 22:
-            return {Type::LowShelf, 12.4907, 0.91201, -1.5117};
+            return {Type::LowShelf, 5.0, 1.2, 9.375711};
         case 23:
-            return {Type::Peak, 34.9406, 0.50216, 1.5057};
+            return {Type::Peak, 54.514871, 0.280132, 5.812911};
         case 24:
-            return {Type::Peak, 3159.9499, 0.61821, -0.7183};
+            return {Type::Peak, 1813.7874, 0.503095, -2.166755};
         case 25:
-            return {Type::HighShelf, 610.9243, 1.6477, 1.3745};
+            return {Type::HighShelf, 651.611076, 0.490301, 8.389202};
         case 30:
-            return {Type::Peak, 1139.8615, 0.15462, -3.7423};
+            return {Type::Peak, 849.884661, 0.155052, -10.732894};
         case 31:
-            return {Type::Peak, 18852.0009, 0.17095, 0.4067};
+            return {Type::Peak, 14243.1507, 0.15, -2.115138};
         case 32:
-            return {Type::LowShelf, 12.9996, 0.78994, -3.6748};
+            return {Type::LowShelf, 10.056113, 0.88107, -7.999959};
         case 33:
-            return {Type::Peak, 40.4319, 0.64122, 0.8181};
+            return {Type::Peak, 13.767599, 0.664759, -4.67115};
         case 34:
-            return {Type::Peak, 677.6882, 1.72978, -0.2364};
+            return {Type::Peak, 979.030698, 0.193848, 5.332838};
         case 40:
-            return {Type::LowShelf, 23.3315, 0.66438, -2.1291};
+            return {Type::LowShelf, 28.464636, 0.627733, -3.408831};
         case 41:
             return {Type::Peak, 16931.4281, 0.23498, -0.9418};
         case 42:
-            return {Type::HighShelf, 12.6487, 1.02216, 2.0772};
+            return {Type::HighShelf, 16.822681, 1.719369, 0.739329};
         case 43:
-            return {Type::Peak, 7500.0, 0.69283, -4.128};
+            return {Type::Peak, 7342.94425, 0.602455, -4.263846};
         case 44:
             return {Type::HighShelf, 20928.6602, 0.42978, 1.3207};
         case 45:
-            return {Type::Peak, 9.9251, 3.37706, -0.4468};
+            return {Type::Peak, 10.81717, 4.534375, -1.624585};
         case 50:
             return {Type::LowShelf, 10.7876, 0.53104, -5.696};
         case 51:
@@ -328,17 +332,17 @@ private:
         case 54:
             return {Type::Peak, 9.3407, 1.41276, -1.7296};
         case 60:
-            return {Type::LowShelf, 19.5861, 0.84932, -3.652};
+            return {Type::LowShelf, 14.857262, 0.58017, -5.663124};
         case 61:
-            return {Type::LowShelf, 51.7034, 0.42067, -19.1111};
+            return {Type::LowShelf, 55.137982, 0.426738, -21.94624};
         case 62:
-            return {Type::HighShelf, 292.1971, 0.94755, -0.1584};
+            return {Type::HighShelf, 138.753866, 0.477581, -1.631875};
         case 63:
-            return {Type::HighShelf, 9158.3184, 0.54857, -6.8765};
+            return {Type::HighShelf, 10751.5081, 0.477924, -8.041181};
         case 64:
-            return {Type::Peak, 18976.0169, 0.8665, -0.9109};
+            return {Type::Peak, 21998.938, 0.537264, -0.739306};
         case 65:
-            return {Type::Peak, 9.3951, 4.00708, -1.8879};
+            return {Type::Peak, 10.033716, 2.32244, -0.90871};
         default:
             break;
         }

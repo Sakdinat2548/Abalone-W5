@@ -21,8 +21,8 @@ asserted: --verify-port (run on every invocation as part of the self-test
 section) recomputes the six per-tone either-oracle worst deltas
 (min(|port-header|, |port-CSV|) over the 60 eye-read header points, same
 algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires each
-to match the recorded C++ reference within 0.05 dB (current references:
-  T1 1.46 / T2 0.12 / T3 0.07 / T4 2.00 / T5 2.24 / T6 4.15 dB).
+to match the recorded C++ reference within 0.05 dB (current references, C++ checkHeaderOracle worst either-oracle deltas:
+  T1 0.02 / T2 0.58 / T3 0.27 / T4 0.11 / T5 0.24 / T6 0.02 dB).
 (The check verifies port fidelity to C++, not fit quality — large
 references only mean the approved curves sit off the eye-read oracles.)
 
@@ -67,49 +67,50 @@ SELFTEST_TOL_DB = 0.05  # end-to-end (time-domain synth IR -> FFT -> analytic)
 # ----------------------------------------------------------------------------
 # Section 1: Python port of src/dsp/ToneBank.h + src/dsp/HighCut.h.
 # (tone, stage) -> (type, f0 Hz, Q, gain dB); HP stages have no gain.
-# Verbatim from src/dsp/ToneBank.h (manual retune 2026-10-08);
+# Fit8 sweep refit + pink-noise staging: transcribed from live src/dsp/ToneBank.h.
+# Verbatim from src/dsp/ToneBank.h (sweep refit fit8 2026-10-11);
 # TONE_GAIN mirrors ToneBank::toneGainDb (global per-tone staging).
 # ----------------------------------------------------------------------------
 TONE_PARAMS = {
-    10: ("hp", 3.8136, 0.46776, 0.0),
-    11: ("pk", 19.966, 0.27101, 6.0138),
-    12: ("pk", 919.3987, 0.16448, -9.7137),
-    13: ("pk", 1927.2658, 0.17827, 9.1515),
-    14: ("hs", 8986.3445, 0.48574, 8.1929),
-    15: ("pk", 135.9733, 0.26901, 5.335),
-    20: ("pk", 644.5752, 0.31635, -9.5942),
-    21: ("pk", 715.0513, 1.6408, -12.8167),
-    22: ("ls", 12.4907, 0.91201, -1.5117),
-    23: ("pk", 34.9406, 0.50216, 1.5057),
-    24: ("pk", 3159.9499, 0.61821, -0.7183),
-    25: ("hs", 610.9243, 1.6477, 1.3745),
-    30: ("pk", 1139.8615, 0.15462, -3.7423),
-    31: ("pk", 18852.0009, 0.17095, 0.4067),
-    32: ("ls", 12.9996, 0.78994, -3.6748),
-    33: ("pk", 40.4319, 0.64122, 0.8181),
-    34: ("pk", 677.6882, 1.72978, -0.2364),
-    40: ("ls", 23.3315, 0.66438, -2.1291),
+    10: ("hp", 5.827048, 0.61509, 0.0),
+    11: ("pk", 17.809303, 0.510313, 2.386098),
+    12: ("pk", 576.308198, 0.238087, -8.7206),
+    13: ("pk", 316.362377, 0.156875, 8.244914),
+    14: ("hs", 4282.69202, 0.472141, 7.93173),
+    15: ("pk", 35.227056, 0.495389, 2.057284),
+    20: ("pk", 729.990772, 0.399998, -7.043765),
+    21: ("pk", 678.226926, 1.43118, -12.582057),
+    22: ("ls", 5.0, 1.2, 9.375711),
+    23: ("pk", 54.514871, 0.280132, 5.812911),
+    24: ("pk", 1813.7874, 0.503095, -2.166755),
+    25: ("hs", 651.611076, 0.490301, 8.389202),
+    30: ("pk", 849.884661, 0.155052, -10.732894),
+    31: ("pk", 14243.1507, 0.15, -2.115138),
+    32: ("ls", 10.056113, 0.88107, -7.999959),
+    33: ("pk", 13.767599, 0.664759, -4.67115),
+    34: ("pk", 979.030698, 0.193848, 5.332838),
+    40: ("ls", 28.464636, 0.627733, -3.408831),
     41: ("pk", 16931.4281, 0.23498, -0.9418),
-    42: ("hs", 12.6487, 1.02216, 2.0772),
-    43: ("pk", 7500.0, 0.69283, -4.128),
+    42: ("hs", 16.822681, 1.719369, 0.739329),
+    43: ("pk", 7342.94425, 0.602455, -4.263846),
     44: ("hs", 20928.6602, 0.42978, 1.3207),
-    45: ("pk", 9.9251, 3.37706, -0.4468),
+    45: ("pk", 10.81717, 4.534375, -1.624585),
     50: ("ls", 10.7876, 0.53104, -5.696),
     51: ("ls", 52.824, 0.42485, -21.2452),
     52: ("hs", 217.3673, 0.91213, 0.2316),
     53: ("pk", 388.14, 1.30292, -0.2101),
     54: ("pk", 9.3407, 1.41276, -1.7296),
-    60: ("ls", 19.5861, 0.84932, -3.652),
-    61: ("ls", 51.7034, 0.42067, -19.1111),
-    62: ("hs", 292.1971, 0.94755, -0.1584),
-    63: ("hs", 9158.3184, 0.54857, -6.8765),
-    64: ("pk", 18976.0169, 0.8665, -0.9109),
-    65: ("pk", 9.3951, 4.00708, -1.8879),
+    60: ("ls", 14.857262, 0.58017, -5.663124),
+    61: ("ls", 55.137982, 0.426738, -21.94624),
+    62: ("hs", 138.753866, 0.477581, -1.631875),
+    63: ("hs", 10751.5081, 0.477924, -8.041181),
+    64: ("pk", 21998.938, 0.537264, -0.739306),
+    65: ("pk", 10.033716, 2.32244, -0.90871),
 }
 
 # Overall per-tone gain (dB); mirrors ToneBank::toneGainDb. The cascade
 # coefficients already carry per-section gains — this is the global staging.
-TONE_GAIN = {1: -6.8239, 2: 0.0, 3: 0.0, 4: -0.7323, 5: 2.4954, 6: 2.81}
+TONE_GAIN = {1: -3.4872, 2: -4.8591, 3: 4.4248, 4: 0.7784, 5: 2.6038, 6: 5.3969}
 
 
 def num_sections(tone):
@@ -202,10 +203,10 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # same algorithm as tests/ToneBankTest.cpp checkHeaderOracle) and requires
 # each to match the recorded C++ reference within PORT_VERIFY_TOL_DB.
 # Reference values: C++ checkHeaderOracle output at 48 kHz, 2-decimal
-# (re-pointed 2026-10-08 to the approved manual T4/T5 retune; T1/T6 zone
-# points were already off the Task-24 numbers at HEAD).
+# (re-pointed 2026-10-11 to fit8 + pink staging; the sweep leg carries every
+# tone, so these are fit residuals, not staging offsets).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 1.46, 2: 0.12, 3: 0.07, 4: 2.00, 5: 2.24, 6: 4.15}
+CXX_EITHER_REF_DB = {1: 0.02, 2: 0.58, 3: 0.27, 4: 0.11, 5: 0.24, 6: 0.02}
 PORT_VERIFY_TOL_DB = 0.05
 
 
@@ -224,22 +225,46 @@ def load_header_targets(path):
     return out
 
 
-def verify_port(csv_path, header_path, fs=48000.0):
-    """Check the Python port against the C++ reference. Returns (ok, lines)."""
+def load_sweep_csv(path):
+    """Load the 1 kHz-normalized sweep-FFT oracle; returns (freqs, {tone: dbs})."""
+    freqs, curves = [], {t: [] for t in range(1, 7)}
+    with open(path, newline="") as fh:
+        rows = [ln for ln in fh if not ln.startswith("#")]
+    for row in csv.DictReader(rows):
+        freqs.append(float(row["freq"]))
+        for t in range(1, 7):
+            curves[t].append(float(row["t%d" % t]))
+    return np.array(freqs), {t: np.array(v) for t, v in curves.items()}
+
+
+def verify_port(csv_path, header_path, sweep_path, fs=48000.0):
+    """Check the Python port against the C++ reference. Returns (ok, lines).
+
+    Same three-leg algorithm as tests/ToneBankTest.cpp checkHeaderOracle:
+    min(header-absolute, chart-absolute, sweep-1kHz-normalized) per point.
+    """
     chart_freqs, chart = load_chart_csv(csv_path)
+    sweep_freqs, sweep = load_sweep_csv(sweep_path)
     targets = load_header_targets(header_path)
     ok = True
     lines = []
     for tone in range(1, 7):
+        norm = tone_magnitude_at(tone, 1000.0, fs)
         worst = 0.0
         for t, f, db in targets:
             if t != tone:
                 continue
             m = tone_magnitude_at(tone, f, fs)
             csvv = float(log_interp(f, chart_freqs, chart[tone]))
-            d = dHeader = abs(m - db)
+            swpv = float(log_interp(f, sweep_freqs, sweep[tone]))
+            dHeader = abs(m - db)
             dCsv = abs(m - csvv)
-            dEither = dHeader if dHeader < dCsv else dCsv
+            dSweep = abs((m - norm) - swpv)
+            dEither = dHeader
+            if dCsv < dEither:
+                dEither = dCsv
+            if dSweep < dEither:
+                dEither = dSweep
             if dEither > worst:
                 worst = dEither
         diff = abs(worst - CXX_EITHER_REF_DB[tone])
@@ -549,6 +574,8 @@ def main():
                                                   "u5_tone_curves_from_claude.csv"))
     ap.add_argument("--header-targets", default=os.path.join(HERE,
                                                              "tone_targets.h"))
+    ap.add_argument("--sweep", default=os.path.join(HERE,
+                                                    "u5_tone_targets_sweep.csv"))
     args = ap.parse_args()
 
     chart_freqs, chart = load_chart_csv(args.csv)
@@ -556,13 +583,13 @@ def main():
 
     if args.verify_port:
         print("== ir_check.py port verification (Python port vs C++ ref) ==")
-        ok, lines = verify_port(args.csv, args.header_targets)
+        ok, lines = verify_port(args.csv, args.header_targets, args.sweep)
         print("\n".join(lines))
         print("port verification: %s" % ("GREEN" if ok else "FAILED"))
         return 0 if ok else 1
 
     print("== ir_check.py port verification (Python port vs C++ ref) ==")
-    port_ok, port_lines = verify_port(args.csv, args.header_targets)
+    port_ok, port_lines = verify_port(args.csv, args.header_targets, args.sweep)
     print("\n".join(port_lines))
     if not port_ok:
         print("PORT VERIFICATION FAILED -- port disagrees with C++, "
