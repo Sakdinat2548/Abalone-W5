@@ -55,9 +55,11 @@
 // - DC offset = a*A^2/2: 7.5mV at +10dB, 188mV at +24dB hot (stripped by the
 //   post-color 2Hz DC-blocker in real use). Hardware U5 output
 //   is DC-coupled anyway; downstream Trim/HighCut pass it unchanged.
-// - No oversampling needed: harmonics decay geometrically (H5 ~ -100dB rel fund
-//   at +10dB); spectrum above Nyquist*0.9 is DFT noise floor (test asserts
-//   < -80dB rel H1).
+// - Harmonics decay fast past H8 (Gaussian tails); the gated branch adds
+//   H3-H8 at mid drive only. Aliasing is measured, not assumed:
+//   checkAliasCleanAt (1/3/5/8 kHz) requires non-harmonic content above
+//   0.9*Nyquist < -80 dB rel H1 at 1x. If a future fit breaks it, the stage
+//   rides the existing 2x/4x OS path (exact 0/40/60 latency untouched).
 //
 // Header-only, dependency-free C++17 (<cmath> only). Stateless per-sample
 // function: no state to denormalize. JUCE-free, MSYS2-GCC-syntax-clean.
@@ -65,7 +67,11 @@ struct ColorStage
 {
     ColorStage () : norm_ (fastTanh (kDrive_)) {}
 
-    void setEnabled (bool enabled) { enabled_ = enabled; }
+    void setEnabled (bool enabled)
+    {
+        enabled_ = enabled;
+        env_ = 0.0f;
+    }
 
     // Fast tanh (Lambert continued fraction, 5 levels): max abs error
     // 5.6e-7 vs std::tanh on [-2, 2], THD-identical to 4 decimals at every
@@ -88,12 +94,36 @@ struct ColorStage
         if (!enabled_)
             return x; // bit-transparent bypass.
 
-        return fastTanh (kDrive_ * x) / norm_ + kEven_ * x * x;
+        // H-task 2026-10-12: envelope-gated harmonic branch (DE fit, loss
+        // 1861 vs 170k+ for every static family). One gate scales odd+even
+        // resonant bumps coherently: quiet -> shut (laws intact), mid-drive
+        // -> open (paints H3-H6), hot -> relatively shut again. Envelope is
+        // peak-hold with fast attack + slow release (steady sine reads peak
+        // amplitude, matching the fit); this is the stage's only state
+        // (memory is what static curves provably cannot do — see fit notes).
+        // Attack smoothing (0.1 ms) exists so sharp transients cannot step
+        // the gate audibly (zipper); instant-vs-0.5 ms attack differs
+        // <= -65 dBFS peak on slap material.
+        const float ax = std::fabs (x);
+        if (ax > env_)
+            env_ += kEnvAtk_ * (ax - env_);
+        else
+        {
+            env_ += kEnvRel_ * (ax - env_);
+            if (env_ < 1.0e-15f)
+                env_ = 0.0f;
+        }
+        const float gate = std::pow (env_ / (env_ + kGateN0_), kGateQ_);
+        const float uo = x / kOddW_;
+        const float ue = x / kEvenW_;
+        const float branch =
+            gate * (kOddC_ * uo * uo * uo * std::exp (-uo * uo) + kEvenC_ * ue * ue * std::exp (-ue * ue));
+        return fastTanh (kDrive_ * x) / norm_ + kEven_ * x * x + branch;
     }
 
     // Measurement helper (not part of the audio path): drives the stage with a
     // sine of `freqHz` at peak amplitude 10^(levelDb/20) and returns the THD
-    // ratio sqrt(sum(H2..H8)^2)/H1 via coherent correlation (1s @48kHz, so
+    // ratio sqrt(sum(H2..H12)^2)/H1 via coherent correlation (1s @48kHz, so
     // 100Hz/1kHz/5kHz complete integer cycles). Respects the enabled flag:
     // enable the stage before measuring (a disabled stage reads THD ~= 0).
     float thdAt (float freqHz, float levelDb)
@@ -103,7 +133,7 @@ struct ColorStage
 
         constexpr double fs = 48000.0;
         constexpr int total = 48000; // 1s window.
-        constexpr int maxHarm = 8;
+        constexpr int maxHarm = 12;
         const double amp = std::pow (10.0, static_cast<double> (levelDb) / 20.0);
 
         double magSq[maxHarm + 1] = {};
@@ -138,8 +168,23 @@ private:
     static constexpr double kPi_ = 3.14159265358979323846;
     static constexpr float kDrive_ = 0.06f;  // tanh drive: sets H3 (see derivation above).
     static constexpr float kEven_ = 0.0015f; // 2nd-harmonic blend: sets H2 (see derivation above).
+    // H-task gated branch (DE fit 2026-10-12, loss 1861): odd bump paints
+    // H3/H5, even bump paints H4/H6; gate opens mid-drive only. Hot-safe by
+    // construction (Gaussian tails vanish for |x| >> w; gate saturates).
+    static constexpr float kOddC_ = 0.03475f;
+    static constexpr float kOddW_ = 0.56f;
+    static constexpr float kEvenC_ = -0.05f;
+    static constexpr float kEvenW_ = 0.82f;
+    static constexpr float kGateN0_ = 10.526f;
+    static constexpr float kGateQ_ = 0.60f;
+    // Envelope release: tau ~= 100 ms at 48 kHz (2% ripple at 440 Hz;
+    // rate difference 44.1/48 kHz shifts timing 8%, inaudible). Attack
+    // ~= 0.1 ms: kills gate-step zipper, sonically identical otherwise.
+    static constexpr float kEnvRel_ = 0.000208f;
+    static constexpr float kEnvAtk_ = 0.19f;
 
     bool enabled_ = true;
+    float env_ = 0.0f;  // peak-hold envelope for the harmonic gate (see processSample).
     float norm_ = 1.0f; // tanh(k): normalizes the tanh term to 1 at x=1
                         // (full transfer 1.0015 there with the blend;
                         // small-signal gain 1.0012).

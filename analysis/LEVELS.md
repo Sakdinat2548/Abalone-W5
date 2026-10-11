@@ -1,5 +1,17 @@
 # Levels calibration + THD-vs-boost map (Task 29)
 
+## CANDIDATE 2026-10-12: gated harmonic branch (DE fit, loss 1861) — UNCOMMITTED (dev branch dsp/color-h12)
+
+y = tanh(kx)/tanh(k) + ax^2 + gate(env) * (c_o*(x/w_o)^3*e^{-(x/w_o)^2} + c_e*(x/w_e)^2*e^{-(x/w_e)^2}),
+k = 0.06, a = 1.5e-3 (frozen), c_o = 3.475e-2, w_o = 0.56, c_e = -5e-2, w_e = 0.82,
+gate(env) = (env/(env+10.526))^0.60, env = peak-hold + 100 ms release.
+Ladder (440 Hz, dB rel H1; render-validated B3/DI targets): H2 nailed +/-2
+everywhere; H3/H4/H5 within capture spread (worst +6.5); H6-H8 signal;
+H9+ below -65. THD @+10 dB = 0.47% (ceiling 0.5). Rejected first: static
+tanh/tanh^2 branch (H4 13-23 dB short, H2 +3.8 over), bias-through-tanh
+(all orders miss), signed bumps, windowed bumps (see fit notes in chat
+2026-10-11/12).
+
 ## CANDIDATE 2026-10-09: hotter color drive (k=0.06, a=1.5e-3) — ADOPTED in v1.2
 
 Fit to four NAM captures' harmonic ladders (spike probe, `tone/v1.2` research).
