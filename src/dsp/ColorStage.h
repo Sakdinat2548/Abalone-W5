@@ -94,11 +94,17 @@ struct ColorStage
 
     // Fast tanh (Lambert continued fraction, 5 levels): max abs error
     // 5.6e-7 vs std::tanh on [-2, 2], THD-identical to 4 decimals at every
-    // operating point (gated in ColorStageTest). Valid here because the
-    // argument z = k*x stays within |z| <= 1.9 (k = 0.06, |x| <= 31.6 =
-    // 0 dBFS through Boost 10); never use it beyond +-2 without rechecking.
+    // operating point (gated in ColorStageTest). Input clamps at +-3 (the
+    // fraction folds back past ~|6|: 0.997 at 6, 0.34 at 60 — saturation
+    // must saturate, never fold); the clamp value computes normally, so
+    // hot inputs clip instead of un-clipping. Chain peaks reach |z| ~2.6
+    // at 0 dBFS/Boost 10 through mid-forward tones, inside the clamp.
     static float fastTanh (float x)
     {
+        if (x > 3.0f)
+            x = 3.0f;
+        else if (x < -3.0f)
+            x = -3.0f;
         const float x2 = x * x;
         float t = 9.0f + x2 / 11.0f;
         t = 7.0f + x2 / t;

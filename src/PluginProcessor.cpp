@@ -128,6 +128,10 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
     // re-prepare; the switch path in processBlock covers factor changes).
     lastReportedLatency_ = chains[0].getLatencySamples();
     setLatencySamples (lastReportedLatency_);
+    // Dry-alignment history is meaningless across rates/prepares.
+    for (auto& line : dryDelay_)
+        line.fill (0.0f);
+    dryPos_ = {0, 0};
 }
 
 void AbaloneW5AudioProcessor::releaseResources () {}
@@ -183,8 +187,10 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     // ACTIVE-to-THRU: TRUE bypass (relay-style). Zero DSP: the chains are not
     // fed at all and their states freeze. The buffer already holds the input
-    // (in-place processing), so leaving it untouched IS the passthrough —
-    // only unmapped extra channels are cleared, as in the engaged path.
+    // (in-place processing), so the passthrough is the input delayed by the
+    // reported latency (0 at 1x — untouched; 40/60 under OS, matching the
+    // engaged FIR path, so toggles never shift timing and PDC holds) — only
+    // unmapped extra channels are cleared, as in the engaged path.
     // Re-engage settle: filters resume from the frozen state, so a brief
     // transient is possible on re-engage (authentic relay behavior), settling
     // within milliseconds as the DC-blocker re-converges.
@@ -202,6 +208,24 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (bypassTarget >= 1.0f)
         {
             trackBypassPeak (buffer, monoDuplicate ? 1 : activeChannels, numSamples);
+            // Latency-aligned dry: same FIR group delay as the engaged path
+            // (frozen while bypassed — chains are not re-pushed here, so the
+            // delay matches the last reported value by construction).
+            const int nCh = monoDuplicate ? 1 : activeChannels;
+            const int dryLatency = chains[0].getLatencySamples();
+            if (dryLatency > 0)
+            {
+                for (int ch = 0; ch < nCh; ++ch)
+                {
+                    float* data = buffer.getWritePointer (ch);
+                    for (int i = 0; i < numSamples; ++i)
+                    {
+                        const float x = data[i];
+                        data[i] = peekDry (ch, dryLatency);
+                        pushDry (ch, x);
+                    }
+                }
+            }
             if (monoDuplicate)
                 duplicateMonoToOutputs (buffer, numSamples);
             else
@@ -219,6 +243,9 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         // reverses smoothly: no restart jump, the trajectory just turns.
         pushChainParams (boostStep, tone, highcut, trimDb, osFactor, monoDuplicate ? 1 : activeChannels);
         const int nCh = monoDuplicate ? 1 : activeChannels;
+        // Aligned dry for the fade: the wet path carries the FIR delay, so
+        // the dry side waits the same samples (else the fade combs).
+        const int fadeLatency = chains[0].getLatencySamples();
         float* chPtr[2] = {nullptr, nullptr};
         for (int ch = 0; ch < nCh; ++ch)
             chPtr[ch] = buffer.getWritePointer (ch);
@@ -240,8 +267,10 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             for (int ch = 0; ch < nCh; ++ch)
             {
                 const float dry = chPtr[ch][i];
+                const float dryAligned = (fadeLatency > 0) ? peekDry (ch, fadeLatency) : dry;
                 const float wet = chains[static_cast<size_t> (ch)].processSample (dry);
-                chPtr[ch][i] = dry * dryW + wet * wetW;
+                pushDry (ch, dry);
+                chPtr[ch][i] = dryAligned * dryW + wet * wetW;
             }
         }
         if (monoDuplicate)
@@ -280,7 +309,11 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
         float* data = buffer.getWritePointer (0);
         for (int i = 0; i < numSamples; ++i)
-            data[i] = chain.processSample (data[i]);
+        {
+            const float x = data[i];
+            data[i] = chain.processSample (x);
+            pushDry (0, x); // keep the alignment history live for the next toggle.
+        }
 
         duplicateMonoToOutputs (buffer, numSamples);
         return;
@@ -292,7 +325,11 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
         float* data = buffer.getWritePointer (ch);
         for (int i = 0; i < numSamples; ++i)
-            data[i] = chain.processSample (data[i]);
+        {
+            const float x = data[i];
+            data[i] = chain.processSample (x);
+            pushDry (ch, x);
+        }
     }
 
     for (int ch = activeChannels; ch < numChannels; ++ch)
@@ -338,7 +375,8 @@ void AbaloneW5AudioProcessor::trackBypassPeak (const juce::AudioBuffer<float>& b
 void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     // Host bypass: same TRUE passthrough as ACTIVE off — zero DSP, states
-    // frozen, buffer untouched. Only the input peak is tracked for the LED.
+    // frozen, input delayed by the reported latency (see processBlock).
+    // Only the input peak is tracked for the LED.
     // Mono-in exception: the extra channels hold no input data, so ch0 is
     // copied out (same dual-mono rule as the other paths) — still no DSP.
     const int numChannels = buffer.getNumChannels();
@@ -347,6 +385,22 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
 
     trackBypassPeak (buffer, monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size())),
                      numSamples);
+
+    const int nCh = monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size()));
+    const int dryLatency = chains[0].getLatencySamples();
+    if (dryLatency > 0)
+    {
+        for (int ch = 0; ch < nCh; ++ch)
+        {
+            float* data = buffer.getWritePointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float x = data[i];
+                data[i] = peekDry (ch, dryLatency);
+                pushDry (ch, x);
+            }
+        }
+    }
 
     if (monoDuplicate)
         duplicateMonoToOutputs (buffer, numSamples);

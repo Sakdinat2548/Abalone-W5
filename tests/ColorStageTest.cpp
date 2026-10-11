@@ -245,6 +245,19 @@ void checkFastTanhAccuracy ()
     assert (worst < 1e-6f);
 }
 
+void checkFastTanhSaturates ()
+{
+    // Beyond ~|6| the unclamped fraction folds back (0.997 at 6, 0.34 at
+    // 60): saturation must saturate, never fold. Clamped at +-3, so hot
+    // inputs clip instead of un-clipping.
+    assert (ColorStage::fastTanh (10.0f) > 0.99f);
+    assert (ColorStage::fastTanh (60.0f) > 0.99f);
+    assert (ColorStage::fastTanh (-60.0f) < -0.99f);
+    assert (ColorStage::fastTanh (10.0f) == ColorStage::fastTanh (3.0f));
+    assert (ColorStage::fastTanh (10.0f) >= ColorStage::fastTanh (6.0f));
+    std::puts ("fastTanh saturates past +-3, never folds");
+}
+
 // --- Higher-harmonic series (H4-H12 task) ---
 
 // 440 Hz ladder baselines, current stage, dB rel H1 (coherent 1 s DFT,
@@ -530,6 +543,7 @@ int main ()
     checkNoAliasEnergy();
     checkCalibratedLevelMap();
     checkFastTanhAccuracy();
+    checkFastTanhSaturates();
     checkHigherHarmonicEnvelope();
     checkH2H3Invariant();
     checkSmallSignalGain();

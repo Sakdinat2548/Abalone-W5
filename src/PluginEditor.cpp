@@ -191,6 +191,16 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     toneSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     toneSlider.setRange (1.0, 6.0, 1.0);
     toneSlider.setLookAndFeel (&toneDialLookAndFeel);
+    toneSlider.onDragStart = [this]
+    {
+        if (auto* param = processor.getApvts().getParameter ("tone"))
+            param->beginChangeGesture();
+    };
+    toneSlider.onDragEnd = [this]
+    {
+        if (auto* param = processor.getApvts().getParameter ("tone"))
+            param->endChangeGesture();
+    };
     toneSlider.onValueChange = [this]
     {
         const int value = static_cast<int> (toneSlider.getValue());
@@ -282,7 +292,9 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
             if (hasDigit)
             {
                 const float clamped = juce::jlimit (-32.0f, 6.0f, typed.getFloatValue());
+                outParam->beginChangeGesture();
                 outParam->setValueNotifyingHost (outParam->convertTo0to1 (clamped));
+                outParam->endChangeGesture();
             }
         }
         lastTrimText = outParam->getCurrentValueAsText() + " dB";
