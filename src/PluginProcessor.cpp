@@ -94,7 +94,14 @@ const juce::String AbaloneW5AudioProcessor::getName () const { return JucePlugin
 bool AbaloneW5AudioProcessor::acceptsMidi () const { return false; }
 bool AbaloneW5AudioProcessor::producesMidi () const { return false; }
 bool AbaloneW5AudioProcessor::isMidiEffect () const { return false; }
-double AbaloneW5AudioProcessor::getTailLengthSeconds () const { return 0.0; }
+double AbaloneW5AudioProcessor::getTailLengthSeconds () const
+{
+    // Measured 1.0 s (not the reviewer's 0.3 s estimate, and not from the
+    // tone sections either): a hot stopped 55 Hz note rings the 5 Hz/2 Hz
+    // DC-blockers + low-heavy tones above -60 dBFS for 0.6 s realistic
+    // (0.96 s pathological full-scale-DC case), so 1.0 s covers both.
+    return 1.0;
+}
 
 int AbaloneW5AudioProcessor::getNumPrograms () { return 1; }
 int AbaloneW5AudioProcessor::getCurrentProgram () { return 0; }

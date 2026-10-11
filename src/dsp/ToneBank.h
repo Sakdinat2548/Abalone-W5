@@ -36,8 +36,9 @@
 // Anchors all PASS (T1-T4 <= 1.0, T5/T6 <= 2.0); eye low-end green on the
 // strict gates (T1-20Hz, T3/T4-20Hz+convex, T6-slope-vs-T5red delta 0.219
 // vs 1.0 — the Task-22 T6-slope deviation is SUPERSEDED).
-// Poles < 1 at 44.1k + 48k + 96k incl. float32-quantized radii (worst
-// 0.999904 on T4's micro-peak at 48k, stable and deterministic).
+// Poles < 1 at 44.1k + 48k + 96k (radii now double-held at runtime; the
+// recorded float32-quantized worst was 0.999904 on T4's micro-peak at 48k —
+// stable and deterministic either way).
 //
 // Method (optimizer on DIGITAL RBJ responses, joint 48+44.1 kHz quantized
 // objective — one number set out; Ruling 24's fit@48/verify@44.1 is met and
@@ -125,7 +126,9 @@
 //
 // Biquad form: Transposed Direct Form II, RBJ cookbook coefficients with
 // shelf alpha = sin(w0)/(2Q) (Q-parametrized shelf knee, same family as the
-// Python fit prototype, verified bit-consistent). setSampleRate recomputes
+// Python fit prototype, verified bit-consistent). Coefficients and states
+// are double (review 2026-10-12: float32 states cost -51 dB roundoff on
+// T4/T6). setSampleRate recomputes
 // every tone's coefficients, so 44.1k/48k/any-rate give identical dB shapes
 // (rate-invariance test: <=0.1dB at 40Hz-15kHz probes). magnitudeAt evaluates
 // the exact theoretical cascade transfer function in double precision.
@@ -181,7 +184,7 @@ struct ToneBank
             tone = 6;
 
         tone_ = tone;
-        gainLin_ = static_cast<float> (std::pow (10.0, toneGainDb (tone_) / 20.0));
+        gainLin_ = std::pow (10.0, static_cast<double> (toneGainDb (tone_)) / 20.0);
         select();
     }
 
@@ -190,20 +193,25 @@ struct ToneBank
         if (tone_ == 0)
             return x;
 
-        float y = x;
+        // Double states/accumulators: float32 roundoff vs a double cascade
+        // measured -51 dB rel RMS on T4/T6 white noise (review 2026-10-12) —
+        // inside the Color stage's own 0.3% THD neighborhood, so the EQ
+        // burned audibility budget for nothing. Cost is trivial at <=6
+        // sections; the in/out contract stays float.
+        double y = static_cast<double> (x);
         for (int s = 0; s < numSections (tone_); ++s)
         {
             Coeffs& c = active_[s];
-            const float out = c.b0 * y + c.z1;
+            const double out = c.b0 * y + c.z1;
             c.z1 = c.b1 * y - c.a1 * out + c.z2;
             c.z2 = c.b2 * y - c.a2 * out;
-            if (std::fabs (c.z1) < 1.0e-15f)
-                c.z1 = 0.0f;
-            if (std::fabs (c.z2) < 1.0e-15f)
-                c.z2 = 0.0f;
+            if (std::fabs (c.z1) < 1.0e-15)
+                c.z1 = 0.0;
+            if (std::fabs (c.z2) < 1.0e-15)
+                c.z2 = 0.0;
             y = out;
         }
-        return y * gainLin_;
+        return static_cast<float> (y * gainLin_);
     }
 
     // Exact theoretical cascade response of the selected tone in dB.
@@ -258,13 +266,13 @@ private:
 
     struct Coeffs
     {
-        float b0 = 1.0f;
-        float b1 = 0.0f;
-        float b2 = 0.0f;
-        float a1 = 0.0f;
-        float a2 = 0.0f;
-        float z1 = 0.0f;
-        float z2 = 0.0f;
+        double b0 = 1.0;
+        double b1 = 0.0;
+        double b2 = 0.0;
+        double a1 = 0.0;
+        double a2 = 0.0;
+        double z1 = 0.0;
+        double z2 = 0.0;
     };
 
     static Params params (int tone, int stage)
@@ -412,13 +420,13 @@ private:
             break;
         }
 
-        c.b0 = static_cast<float> (b0 / a0);
-        c.b1 = static_cast<float> (b1 / a0);
-        c.b2 = static_cast<float> (b2 / a0);
-        c.a1 = static_cast<float> (a1 / a0);
-        c.a2 = static_cast<float> (a2 / a0);
-        c.z1 = 0.0f;
-        c.z2 = 0.0f;
+        c.b0 = b0 / a0;
+        c.b1 = b1 / a0;
+        c.b2 = b2 / a0;
+        c.a1 = a1 / a0;
+        c.a2 = a2 / a0;
+        c.z1 = 0.0;
+        c.z2 = 0.0;
     }
 
     // Atomically select the active coefficient set (no torn state).
@@ -428,8 +436,8 @@ private:
         for (int s = 0; s < n; ++s)
         {
             active_[s] = bank_[tone_ < 1 ? 1 : tone_][s];
-            active_[s].z1 = 0.0f;
-            active_[s].z2 = 0.0f;
+            active_[s].z1 = 0.0;
+            active_[s].z2 = 0.0;
         }
     }
 
@@ -457,7 +465,7 @@ private:
     }
 
     int tone_ = 0;
-    float gainLin_ = 1.0f;
+    double gainLin_ = 1.0;
     double sampleRate_ = 48000.0;
     Coeffs bank_[7][6];
     Coeffs active_[6];
