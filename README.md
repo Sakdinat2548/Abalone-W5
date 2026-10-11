@@ -10,7 +10,7 @@ Windows is host-tested (Sonar, Reaper); macOS/Linux builds are CI-tested only.
 
 Inspired by the Avalon U5. Not affiliated with or endorsed by Avalon Design.
 
-[Download latest release](https://github.com/Sakdinat2548/Abalone-W5/releases/latest)
+[Download latest release](https://github.com/Sakdinat2548/Abalone-W5/releases/latest) · [Nightly prerelease (dev builds)](https://github.com/Sakdinat2548/Abalone-W5/releases/tag/nightly)
 
 ## What it is
 
