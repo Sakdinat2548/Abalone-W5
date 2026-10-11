@@ -707,11 +707,12 @@ void checkAbsoluteAnchors ()
     // drift into the reference; the gains then restored shipped staging.
     // PINK STAGING 2026-10-11 (user ruling: gain in = gain out on pink
     // noise): toneGainDb now level-matches broadband pink in/out, so the
-    // anchors move to the pink absolute levels (shapes unchanged):
-    // T1 -2.13, T2 -4.25 (gate 1.0 ? float32 shelf warp at 5 Hz),
-    // T3 -3.61, T4 -3.79 (gate 1.2 ? 10 Hz shape miss, gain-invariant),
-    // T5 -21.96, T6 -20.27.
-    const float anchors[7] = {0.0f, -2.13f, -4.25f, -3.61f, -3.79f, -21.96f, -20.27f};
+    // anchors move to the pink absolute levels (shapes unchanged).
+    // Re-pinned 2026-10-11 after the final pink trim (measured absolute):
+    // T1 -2.52, T2 -3.08 (gate 1.0 ? float32 shelf warp at 5 Hz),
+    // T3 -3.99, T4 -4.19 (gate 1.2 ? 10 Hz shape miss, gain-invariant),
+    // T5 -22.78, T6 -21.15.
+    const float anchors[7] = {0.0f, -2.52f, -3.08f, -3.99f, -4.19f, -22.78f, -21.15f};
     for (int tone = 1; tone <= 6; ++tone)
     {
         ToneBank bank;

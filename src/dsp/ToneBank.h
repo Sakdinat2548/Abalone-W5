@@ -158,17 +158,17 @@ struct ToneBank
         switch (tone)
         {
         case 1:
-            return -3.4872f;
+            return -3.9308f;
         case 2:
-            return -4.8591f;
+            return -4.0374f;
         case 3:
-            return 4.4248f;
+            return 4.0325f;
         case 4:
-            return 0.7784f;
+            return 0.4536f;
         case 5:
-            return 2.6038f;
+            return 1.8810f;
         case 6:
-            return 5.3969f;
+            return 4.5376f;
         default:
             break;
         }
@@ -288,9 +288,9 @@ private:
         case 15:
             return {Type::Peak, 35.227056, 0.495389, 2.057284};
         case 20:
-            return {Type::Peak, 729.990772, 0.399998, -7.043765};
+            return {Type::Peak, 729.990772, 0.399998, -7.0};
         case 21:
-            return {Type::Peak, 678.226926, 1.4, -11.2};
+            return {Type::Peak, 678.226926, 1.3, -11.5};
         case 22:
             return {Type::LowShelf, 5.0, 1.2, 9.375711};
         case 23:

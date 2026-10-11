@@ -78,8 +78,8 @@ TONE_PARAMS = {
     13: ("pk", 316.362377, 0.156875, 8.244914),
     14: ("hs", 4282.69202, 0.472141, 7.93173),
     15: ("pk", 35.227056, 0.495389, 2.057284),
-    20: ("pk", 729.990772, 0.399998, -7.043765),
-    21: ("pk", 678.226926, 1.43118, -12.582057),
+    20: ("pk", 729.990772, 0.399998, -7.0),
+    21: ("pk", 678.226926, 1.3, -11.5),
     22: ("ls", 5.0, 1.2, 9.375711),
     23: ("pk", 54.514871, 0.280132, 5.812911),
     24: ("pk", 1813.7874, 0.503095, -2.166755),
@@ -110,7 +110,7 @@ TONE_PARAMS = {
 
 # Overall per-tone gain (dB); mirrors ToneBank::toneGainDb. The cascade
 # coefficients already carry per-section gains — this is the global staging.
-TONE_GAIN = {1: -3.4872, 2: -4.8591, 3: 4.4248, 4: 0.7784, 5: 2.6038, 6: 5.3969}
+TONE_GAIN = {1: -3.9308, 2: -4.0374, 3: 4.0325, 4: 0.4536, 5: 1.8810, 6: 4.5376}
 
 
 def num_sections(tone):
@@ -206,7 +206,7 @@ def chain_db(tone, freq_hz, fs=48000.0, highcut=False):
 # (re-pointed 2026-10-11 to fit8 + pink staging; the sweep leg carries every
 # tone, so these are fit residuals, not staging offsets).
 # ----------------------------------------------------------------------------
-CXX_EITHER_REF_DB = {1: 0.02, 2: 0.58, 3: 0.27, 4: 0.11, 5: 0.24, 6: 0.02}
+CXX_EITHER_REF_DB = {1: 0.02, 2: 0.34, 3: 0.27, 4: 0.11, 5: 0.24, 6: 0.02}
 PORT_VERIFY_TOL_DB = 0.05
 
 
