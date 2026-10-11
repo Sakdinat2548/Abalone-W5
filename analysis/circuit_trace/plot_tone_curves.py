@@ -7,10 +7,10 @@ import os
 import sys
 import numpy as np
 
-sys.path.insert(0, r"C:\Users\kluis\Code\Abalone-W5\analysis")
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(REPO, "analysis"))
 from ir_check import rbj_cook
 
-REPO = r"C:\Users\kluis\Code\Abalone-W5"
 FS = 48000.0
 # (type, f0, q, gain) LIVE fit8 numbers (ToneBank.h params table)
 PARAMS = {
