@@ -48,15 +48,15 @@ float levelDb (double sampleRate, double freqHz)
     return 20.0f * std::log10 (rms (out, skip, total - skip) / rms (in, skip, total - skip));
 }
 
-void checkMinus3dBAt8k ()
+void checkMinus3dBAt4k ()
 {
-    // (a)+(b): 8kHz sine measures -3dB +/-0.3dB vs bypass when enabled,
+    // (a)+(b): 4kHz sine measures -3dB +/-0.3dB vs bypass when enabled,
     // at 48kHz, 44.1kHz and 96kHz (proves setSampleRate retunes).
     const double rates[3] = {48000.0, 44100.0, 96000.0};
     for (int r = 0; r < 3; ++r)
     {
-        const float db = levelDb (rates[r], 8000.0);
-        std::printf ("8kHz @ %.0fHz: %+0.3fdB (expect -3.0)\n", rates[r], db);
+        const float db = levelDb (rates[r], 4000.0);
+        std::printf ("4kHz @ %.0fHz: %+0.3fdB (expect -3.0)\n", rates[r], db);
         assert (std::fabs (db + 3.0f) < 0.3f);
     }
 }
@@ -94,21 +94,18 @@ void checkDisabledPassthrough ()
 
 void checkStopbandSlope ()
 {
-    // (d): stopband sanity. NOTE: deviation from the brief's literal
-    // "16kHz < -8dB": no true one-pole lowpass with -3dB at 8kHz can reach
-    // -8dB at 16kHz (exact digital response is -6.02dB @48k, -5.84dB @44.1k;
-    // analog prototype 1/sqrt(5) = -6.99dB). Asserts the implementable intent:
-    // 16kHz is strictly more attenuated than the 8kHz point (one-pole slope,
-    // ~3dB/oct between fc and 2fc) with real stopband attenuation.
+    // (d): stopband sanity for the 4kHz corner: 8kHz ≈ -6.7dB, 16kHz ≈
+    // -10.7dB (one-pole settling into its slope past fc; exact digital
+    // response at 48k/44.1k verified numerically when the corner moved).
     const double rates[2] = {48000.0, 44100.0};
     for (int r = 0; r < 2; ++r)
     {
         const float db8 = levelDb (rates[r], 8000.0);
         const float db16 = levelDb (rates[r], 16000.0);
         std::printf ("stopband @ %.0fHz: 8k %+0.3fdB, 16k %+0.3fdB\n", rates[r], db8, db16);
-        assert (db16 < db8);
-        assert (db8 - db16 > 2.0f);
-        assert (db16 < -5.0f);
+        assert (db8 < -6.0f && db8 > -7.6f);
+        assert (db16 < -10.0f);
+        assert (db8 - db16 > 3.0f);
     }
 }
 
@@ -128,7 +125,7 @@ void checkPassbandFlat ()
 
 int main ()
 {
-    checkMinus3dBAt8k();
+    checkMinus3dBAt4k();
     checkDisabledPassthrough();
     checkStopbandSlope();
     checkPassbandFlat();

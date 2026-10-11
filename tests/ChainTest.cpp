@@ -242,8 +242,8 @@ void checkBoostAndTrim ()
 }
 
 // (d) Highcut end-to-end (chain-level sanity, not a Task 5 retest): 12kHz
-// sine, on-vs-off. One-pole theory at 48k is -4.77dB, so the window is
-// -4.8 +/- 1.0dB (the brief's -6dB assumed a steeper slope; see report).
+// sine, on-vs-off. One-pole theory at 48k is -9.56dB, so the window is
+// -9.6 +/- 1.0dB.
 void checkHighcutEndToEnd ()
 {
     ProcessorChain off;
@@ -262,8 +262,8 @@ void checkHighcutEndToEnd ()
     on.setTrimDb (0.0f);
     const float onDb = steadyGainDb (on, 48000.0, 12000.0, 0.1f);
 
-    std::printf ("highcut 12kHz on-vs-off: %+0.3fdB (expect -4.8 +/- 1.0)\n", onDb - offDb);
-    assert (std::fabs ((onDb - offDb) + 4.8f) < 1.0f);
+    std::printf ("highcut 12kHz on-vs-off: %+0.3fdB (expect -9.6 +/- 1.0)\n", onDb - offDb);
+    assert (std::fabs ((onDb - offDb) + 9.6f) < 1.0f);
 }
 
 // (e) Peak tracker: silence -> 0; driven sine -> within 5% of true peak

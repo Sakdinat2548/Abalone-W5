@@ -172,8 +172,8 @@ def tone_magnitude_at(tone, freq_hz, fs=48000.0):
 
 
 def highcut_coeff(fs):
-    """Exact -3 dB @ 8 kHz one-pole coefficient; mirrors HighCut::setSampleRate."""
-    w = 2.0 * math.pi * 8000.0 / fs
+    """Exact -3 dB @ 4 kHz one-pole coefficient; mirrors HighCut::setSampleRate."""
+    w = 2.0 * math.pi * 4000.0 / fs
     t = 2.0 - math.cos(w)
     return 1.0 - (t - math.sqrt(t * t - 1.0))
 

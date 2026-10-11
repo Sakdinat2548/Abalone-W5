@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-// Switchable 8kHz high-cut (lowpass) stage (Abalone W5 v1).
+// Switchable 4kHz high-cut (lowpass) stage (Abalone W5 v1).
 //
 // Chain position: ... -> Color -> HighCut -> Trim. One-pole causal smoother
 //   y[n] = y[n-1] + a * (x[n] - y[n-1]),
@@ -14,30 +14,28 @@
 // 5Hz highpass (there: hp = x - lp with the same smoother form). Plain causal
 // one-pole, hence minimum-phase by construction (no linear-phase FIR).
 //
-// Coefficient derivation (exact -3dB match at 8kHz for any sample rate):
+// Coefficient derivation (exact -3dB match at fc for any sample rate):
 //   H(z) = a / (1 - b*z^-1), b = 1 - a.
-//   |H(e^jw)|^2 = a^2 / (1 + b^2 - 2*b*cos w), w = 2*pi*8000/fs.
+//   |H(e^jw)|^2 = a^2 / (1 + b^2 - 2*b*cos w), w = 2*pi*fc/fs.
 //   Setting |H|^2 = 1/2 at w with a = 1 - b:
 //     2*(1 - 2b + b^2) = 1 + b^2 - 2b*cos w
 //     b^2 - 2*(2 - cos w)*b + 1 = 0
 //     b = (2 - cos w) - sqrt ((2 - cos w)^2 - 1)  (smaller root, 0 < b < 1),
 //     a = 1 - b.
-//   At 48kHz a ~= 0.6180, at 44.1kHz a ~= 0.6439; both measure -3.01dB at 8kHz.
+//   At 48kHz a ~= 0.4006, at 44.1kHz a ~= 0.4261; both measure -3.01dB at 4kHz.
 //
-// NOTE (deviation from the plan brief's suggested a = 1 - exp(-2*pi*8000/fs)):
-// that matched-z form is the same smoother family but its -3dB point sits
-// ~0.4dB high (-2.63dB @48k, -2.57dB @44.1k, verified numerically), outside
-// the +/-0.3dB test tolerance and off the "-3dB at 8kHz" spec. The exact-match
-// coefficient above keeps the identical filter structure and meets spec.
+// NOTE (deviation from the plan brief's suggested a = 1 - exp(-2*pi*4000/fs)):
+// that matched-z form reads -2.91dB @48k (-2.90dB @44.1k, verified
+// numerically) — inside the +/-0.3dB test tolerance now, but still off the
+// "-3dB at 4kHz" spec. The exact-match coefficient above keeps the identical
+// filter structure and meets spec exactly.
 //
-// CORNER DISPUTE (web research 2026-10-05, Ruling A stands: 8 kHz ships):
-// three numbers exist and no measurement adjudicates — current spec/literature
-// say 8 kHz, the 2002 manual says 1.8 kHz (confirmed in 3 extractions, quoted
-// by users at the time), and our own T0 on/off capture pair fits ~3.65 kHz.
-// No order/slope/values are published anywhere ("minimum phase" is
-// content-free marketing for "analog"); 1-pole is a hypothesis from "gentle
-// roll off", not a fact. The coefficient stays one trivially-retunable float;
-// settling this needs one on/off capture at bypass + tones 2/4 on hardware.
+// CORNER RESOLVED (sweep IR 2026-10-11): TONE0_HIGHCUT/TONE0 fits 1-pole
+// fc = 4.0kHz at RMSE 0.13dB (Ruling A 8kHz superseded; user ear-check on
+// hardware demos agreed — less treble than the 8kHz ship). The 2002 manual
+// says 1.8kHz and our earlier T0 on/off capture pair fit ~3.65kHz — same
+// neighborhood, measurement spread. 1-pole retained: 0.13dB RMSE needs no
+// second pole. The coefficient stays one trivially-retunable float.
 //
 // Header-only, dependency-free C++17 (<cmath> only). No new/heap in the audio
 // path. Denormal-safe by construction: state snaps to 0 below 1e-15.
@@ -58,7 +56,7 @@ struct HighCut
             sampleRate = 48000.0;
 
         sampleRate_ = sampleRate;
-        constexpr double fc = 8000.0;
+        constexpr double fc = 4000.0;
         constexpr double twoPi = 6.28318530717958647692;
         const double w = twoPi * fc / sampleRate_;
         const double c = std::cos (w);
