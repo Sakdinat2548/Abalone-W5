@@ -71,6 +71,43 @@ void checkNoHarshBands ()
     assert (thdHi < 0.005f);
 }
 
+void checkCcifImd ()
+{
+    // CCIF twin-tone (19+20 kHz) @ +10 dB stage: 2nd-order (1 kHz) and
+    // 3rd-order (18 kHz) products each < 0.5% (measured 0.31/0.30).
+    // The IMD half of the <0.5% THD/IMD ceiling (red-team Q10).
+    ColorStage stage;
+    stage.setEnabled (true);
+
+    const int total = static_cast<int> (kSampleRate);
+    const float amp = kPlus10dB * 0.5f;
+    double d2re = 0.0, d2im = 0.0, d3re = 0.0, d3im = 0.0, f1re = 0.0, f1im = 0.0;
+    for (int n = 0; n < total; ++n)
+    {
+        const float x =
+            amp * (static_cast<float> (std::sin (2.0 * kPi * 19000.0 * static_cast<double> (n) / kSampleRate)) +
+                   static_cast<float> (std::sin (2.0 * kPi * 20000.0 * static_cast<double> (n) / kSampleRate)));
+        const double y = static_cast<double> (stage.processSample (x));
+        const double t = static_cast<double> (n) / kSampleRate;
+        double a = 2.0 * kPi * 1000.0 * t;
+        d2re += y * std::cos (a);
+        d2im += y * std::sin (a);
+        a = 2.0 * kPi * 18000.0 * t;
+        d3re += y * std::cos (a);
+        d3im += y * std::sin (a);
+        a = 2.0 * kPi * 19000.0 * t;
+        f1re += y * std::cos (a);
+        f1im += y * std::sin (a);
+    }
+    const double f1 = 2.0 * std::hypot (f1re, f1im) / static_cast<double> (total);
+    const float imd2 = static_cast<float> (2.0 * std::hypot (d2re, d2im) / static_cast<double> (total) / f1);
+    const float imd3 = static_cast<float> (2.0 * std::hypot (d3re, d3im) / static_cast<double> (total) / f1);
+    std::printf ("CCIF @+10dB: 2nd %0.4f%%, 3rd %0.4f%% (expect both < 0.5)\n", 100.0 * imd2, 100.0 * imd3);
+    std::fflush (stdout);
+    assert (imd2 < 0.005f);
+    assert (imd3 < 0.005f);
+}
+
 void checkDisabledBitTransparent ()
 {
     // (d) disabled bypass is bit-transparent on a noise buffer.
@@ -461,6 +498,7 @@ int main ()
     checkThdAtPlus10dB();
     checkCleanAtNominal();
     checkNoHarshBands();
+    checkCcifImd();
     checkDisabledBitTransparent();
     checkHotInputFinite();
     checkSecondHarmonicDominates();
