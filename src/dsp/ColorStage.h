@@ -8,16 +8,15 @@
 
 // Subtle fixed Class-A color stage (Abalone W5 v1). No knob in v1.
 //
-// Chain position: Tone -> Color -> HighCut. Adds ~0.38% THD at +10dB input
-// (capture-fitted operating point, 2026-10-09 spike: k=0.06, a=1.5e-3 fit
-// four NAM ladders at RMSE 12 dB vs 16.4 for the old 0.03/6e-4 — see
-// analysis/LEVELS.md candidate map. The manual's "0.1% at +10dB" carries no
-// level reference, so no spec match is claimed either way. Features list
-// <0.5% THD/IMD as the only hard ceiling.)
-// Bypassable for test.
+// Chain position: Tone -> Color -> HighCut. Adds ~0.47% THD at +10dB input
+// (tanh core 0.38%, capture-fitted 2026-10-09, + gated mid-drive harmonics
+// fitted 2026-10-12); bypassable for test. The manual's "0.1% at +10dB"
+// carries no level reference, so no spec match is claimed either way.
+// Features list <0.5% THD/IMD as the only hard ceiling.
 //
 // Transfer (enabled):
-//     y = tanh(k*x) / tanh(k)  +  a*x^2,   k = 0.06, a = 1.5e-3.
+//     y = tanh(k*x) / tanh(k) + a*x^2 + gate(env) * branch(x),
+//     k = 0.06, a = 1.5e-3, branch = odd+even resonant bumps (see below).
 //
 // Why not pure tanh: tanh is an odd function, so tanh(k*x)/tanh(k) produces
 // ONLY odd harmonics (H2 = 0 to numerical precision, ~1e-15 relative). The
