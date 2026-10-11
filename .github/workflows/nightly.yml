@@ -1,9 +1,12 @@
 # Nightly: rebuild dev HEAD per OS + ship rolling `nightly` prerelease.
 #
 # Cron workflows only run on the DEFAULT branch, so this file lives on main
-# but checks out + builds `dev`. Rolling tag: `nightly` is force-moved to the
-# built dev SHA, then each matrix leg appends its zip to that prerelease via
-# softprops/action-gh-release (same uploader as release.yml).
+# but checks out + builds `dev`. Rolling tag: each matrix leg appends its
+# zip to the `nightly` prerelease via softprops/action-gh-release (same
+# uploader as release.yml), and a final job force-moves the `nightly` tag
+# to the built dev SHA only when ALL legs succeed — a failed leg must never
+# move the tag, or the skip-if-unchanged guard would see dev == nightly next
+# night and skip, leaving that OS's zip missing until the next dev push.
 # Skip-if-unchanged guard: no new dev commits since the last nightly tag means
 # no build (saves CI legs). Same per-OS setup, sccache, pluginval-10, and
 # auval-strict gates as release.yml — nightlies meet the release bar.
@@ -216,16 +219,43 @@ jobs:
           cp LICENSE README.md stage/
           (cd stage && zip -r "../$ZIP_NAME" "Abalone-W5.vst3" LICENSE README.md)
 
-      - name: Move nightly tag to dev HEAD
-        shell: bash
-        run: |
-          git tag -f nightly ${{ needs.guard.outputs.sha }}
-          git push -f origin nightly
-
       - name: Upload nightly prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
           prerelease: true
           name: Nightly (${{ needs.guard.outputs.sha }})
+          # First-run/recovery: if the tag does not exist yet the action
+          # creates it — pin the creation target to the built SHA, never the
+          # default branch's HEAD.
+          target_commitish: ${{ needs.guard.outputs.sha }}
           files: Abalone-W5-nightly-${{ matrix.tag }}.zip
+
+  # Moved-tag gate: runs once, after every leg, and only on full success.
+  # Partial releases (a failed OS leg) never advance the tag, so the guard
+  # retriggers next night instead of deadlocking on dev == nightly. Also
+  # collapses the old per-leg triple force-push into one.
+  tag:
+    needs: [guard, nightly]
+    if: needs.nightly.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - name: Move nightly tag to built SHA
+        shell: bash
+        run: |
+          git tag -f nightly ${{ needs.guard.outputs.sha }}
+          git push -f origin nightly
+
+      - name: Rename nightly prerelease to built SHA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          prerelease: true
+          name: Nightly (${{ needs.guard.outputs.sha }})
+          target_commitish: ${{ needs.guard.outputs.sha }}
