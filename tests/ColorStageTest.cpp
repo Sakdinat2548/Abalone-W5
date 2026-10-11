@@ -50,7 +50,7 @@ void checkThdAtPlus10dB ()
 void checkCleanAtNominal ()
 {
     // (b) 1kHz @ 0dB THD < 0.35%: nominal drive carries real harmonics now
-    // (captures ~0.15%; ours 0.27% — the +6 dB H4 residue at 0 dB lives
+    // (captures ~0.15%; ours 0.20% — the +6 dB H4 residue at 0 dB lives
     // here, accepted: audibly identical, see ladder gates).
     ColorStage stage;
     stage.setEnabled (true);

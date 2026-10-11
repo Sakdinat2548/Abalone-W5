@@ -850,7 +850,7 @@ void checkPostColorTransparency1k ()
     ref.setSampleRate (48000.0);
     ref.setTone (3);
     // Boost step 1 (+3dB) + tone theory + color small-signal gain k/tanh(k)
-    // (k = 0.06 post drive-fit) + engaged voicing theory (LS120/HS8k at 1kHz).
+    // (k = 0.06 post drive-fit) + engaged voicing theory (LS75/HS5441/PK180 at 1kHz).
     const float expected = 3.0f + ref.magnitudeAt (1000.0f) + 20.0f * std::log10 (0.06f / std::tanh (0.06f)) +
                            voiceTheoryDb (1000.0, 48000.0);
     std::printf ("post-color transparency @1kHz/tone3: %+0.4fdB (expect %+0.4f +/- 0.05)\n", measured, expected);
@@ -863,7 +863,7 @@ void checkPostColorTransparency1k ()
 // Per tone (boost step 1, highcut off, trim 0): raw chain magnitude at 10Hz
 // vs the absolute anchors (T1/T3/T4 -3, T2 -0.25, T5/T6 -22), with the exact
 // blocker losses plus the engaged voicing shown separately (5Hz input blocker
-// + 2Hz post-color blocker per Ruling 30 + LS120/HS8k voicing — one column per
+// + 2Hz post-color blocker per Ruling 30 + LS75/HS5441/PK180 voicing — one column per
 // stage, so the audit names the actual chain).
 void audit10HzAnchors ()
 {

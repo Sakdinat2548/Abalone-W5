@@ -85,6 +85,19 @@ U5-flavored clean DI VST3 + AU (Logic). JUCE 8 biquads/gain only. No WDF. 1x/2x/
   build exactly as today. In the Standalone: Options > Audio Settings >
   Device Type > ASIO, then pick the driver and enable mono/stereo inputs.
 
+## Working agreements (human + agents)
+
+- Explicit word before any commit, push, tag, or release.
+- Pictures before commits (plots re-rendered, UI screenshot eyeballed).
+- Never rebase published history (tags point into it); squash only
+  local-only or post-tag work.
+- DSP shape changes regen `docs/tone-curves.png` in the same commit.
+- Licensed files (IR WAVs, `.nam`, manual PDF, forum photos) never enter
+  the repo; machine paths sanitized (`<you>`); third-party binaries out.
+- Branch pointer moves announced (shared worktrees share refs).
+- `main`/`dev` protection lives in repo rulesets (PR-only main, no
+  force-push/deletion).
+
 ## References
 
 - Spec: `u5-spec.md` (session plan dir — machine-local, not in repo)

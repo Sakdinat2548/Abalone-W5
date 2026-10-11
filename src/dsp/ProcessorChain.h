@@ -14,7 +14,7 @@
 #include "ToneBank.h"
 
 // Testable U5 signal chain (Abalone W5 v1). JUCE-free, header-only C++17
-// (<cmath> + <atomic> only); owns every DSP stage so CTest can drive the
+// (<cmath> + <array> + <atomic>); owns every DSP stage so CTest can drive the
 // full chain without a plugin host. The processor delegates per sample.
 //
 // Chain order: GainStage (boost + 5Hz DC-block) -> ToneBank A/B xfade ->

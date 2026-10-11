@@ -149,10 +149,7 @@ struct ToneBank
         select();
     }
 
-    // Overall per-tone gain (dB): reproduces the approved hardware-fit
-    // curves exactly (T1/T4/T5 10 Hz-anchored to shipped staging,
-    // T6 1 kHz-anchored +2.81 dB per user approval). Level is staging,
-    // not oracle data — shapes carry the hardware truth.
+    // Per-tone staging gain (dB): pink-matched broadband in≈out.
     static float toneGainDb (int tone)
     {
         switch (tone)
