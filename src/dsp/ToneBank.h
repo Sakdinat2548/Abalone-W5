@@ -290,7 +290,7 @@ private:
         case 20:
             return {Type::Peak, 729.990772, 0.399998, -7.043765};
         case 21:
-            return {Type::Peak, 678.226926, 1.43118, -12.582057};
+            return {Type::Peak, 678.226926, 1.4, -11.2};
         case 22:
             return {Type::LowShelf, 5.0, 1.2, 9.375711};
         case 23:
