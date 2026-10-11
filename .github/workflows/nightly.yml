@@ -51,9 +51,12 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_CACHE_MULTIARCH: "1"
     steps:
+      # Pinned to the guard SHA, not floating `dev`: a push landing mid-run
+      # must not mix new binaries with the old tag (tag + release name would
+      # lie about what was built).
       - uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ needs.guard.outputs.sha }}
 
       - name: Enable sccache
         uses: mozilla-actions/sccache-action@v0.0.11
