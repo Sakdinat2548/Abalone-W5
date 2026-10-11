@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Pre-release tree toward v1.2.0 (tone/v1.2 integration); drop nothing at tag time.
-project(AbaloneW5 VERSION 1.2.2)
+project(AbaloneW5 VERSION 1.3.0)
 
 # Display-only version suffix badge ("-dev", "-nightly"; empty = release).
 # project() VERSION stays numeric (it feeds the VST3 version struct — letters
