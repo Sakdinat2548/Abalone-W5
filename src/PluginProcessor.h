@@ -138,6 +138,11 @@ private:
 
     float peekDry (int ch, int latency) const
     {
+        // Internal invariant: taps only ever come from our own
+        // getLatencySamples() (0/40/60), so this can never fire unless a
+        // future factor outgrows the lines — fail loud in debug, not silent
+        // mistiming in release.
+        jassert (latency >= 0 && latency <= kMaxDryLatency);
         const int p = dryPos_[static_cast<size_t> (ch)] - latency;
         const int n = kMaxDryLatency;
         return dryDelay_[static_cast<size_t> (ch)][static_cast<size_t> ((p % n + n) % n)];
