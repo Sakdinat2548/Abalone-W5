@@ -29,6 +29,10 @@ AppVersion={#AppVersion}
 AppPublisher=Sakdinat2548
 AppPublisherURL=https://github.com/Sakdinat2548/Abalone-W5
 DefaultDirName={commoncf}\VST3
+; The destination is a SHARED scan folder that always exists on DAW
+; machines — never warn about that (the warning reads as an error to
+; average joes, and merging in is the entire point).
+DirExistsWarning=no
 UninstallFilesDir={autopf}\Abalone W5
 OutputBaseFilename={#OutFile}
 Compression=lzma2/max
