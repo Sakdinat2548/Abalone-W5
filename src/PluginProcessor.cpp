@@ -568,8 +568,44 @@ void AbaloneW5AudioProcessor::setStateInformation (const void* data, int sizeInB
 
 void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
 {
+    // An explicit bypass write always wins over a pending mirror (auval bulk
+    // sets replay every parameter independently — see checkBypassSync).
+    if (parameterID == "bypass")
+    {
+        mirrorPending_.store (false, std::memory_order_relaxed);
+        return;
+    }
+    if (parameterID != "active" || loadingState_)
+        return;
+    // Audio-thread arrivals defer (see header); message thread and headless
+    // (no MessageManager at all) stay direct, exactly as before — so the
+    // headless sync gates pin the direct path with no message loop involved
+    // (spinning one up in a DSP test TU risks the JUCE_DEBUG class-layout
+    // ODR mismatch ProcessorIOTest documents; the meat, mirrorActive, is
+    // what checkBypassSync gates).
+    auto* mm = juce::MessageManager::getInstanceWithoutCreating();
+    if (mm != nullptr && !mm->isThisTheMessageThread())
+    {
+        mirrorValue_.store (newValue, std::memory_order_relaxed);
+        mirrorPending_.store (true, std::memory_order_relaxed);
+        triggerAsyncUpdate();
+        return;
+    }
+    mirrorPending_.store (false, std::memory_order_relaxed);
+    mirrorActive (newValue);
+}
+
+void AbaloneW5AudioProcessor::handleAsyncUpdate ()
+{
+    if (!mirrorPending_.exchange (false, std::memory_order_relaxed))
+        return;
     if (loadingState_)
         return;
+    mirrorActive (mirrorValue_.load (std::memory_order_relaxed));
+}
+
+void AbaloneW5AudioProcessor::mirrorActive (float newValue)
+{
     // One-way mirror, ACTIVE -> bypass only (diverge-only write so the pair
     // can never chase itself). Gesture-bracketed: some hosts ignore
     // unbracketed performEdit on kIsBypass, so the DAW bypass button would
@@ -580,8 +616,6 @@ void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID,
     // (Active 0.112305 restored as 1.0). Host bypass still silences the DSP
     // (processBlock obeys either control); only the ACTIVE button display
     // no longer follows host-bypass presses.
-    if (parameterID != "active")
-        return;
     const bool on = newValue > 0.5f;
     if (bypassParam_ != nullptr)
         if ((bypassParam_->getValue() > 0.5f) == on) // bypass must read !active

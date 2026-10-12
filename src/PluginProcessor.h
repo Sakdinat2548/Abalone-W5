@@ -10,7 +10,9 @@
 
 #include "dsp/ProcessorChain.h"
 
-class AbaloneW5AudioProcessor : public juce::AudioProcessor, private juce::AudioProcessorValueTreeState::Listener
+class AbaloneW5AudioProcessor : public juce::AudioProcessor,
+                                private juce::AudioProcessorValueTreeState::Listener,
+                                private juce::AsyncUpdater
 {
 public:
     AbaloneW5AudioProcessor ();
@@ -75,14 +77,26 @@ private:
 
     // ACTIVE->bypass one-way mirror (diverge-only write so the pair can never
     // chase itself; the reverse echo is gone — auval writes every parameter
-    // independently and an eager echo clobbers bulk sets). Runs on the
-    // message thread; the audio thread only reads raw values. Suppressed
+    // independently and an eager echo clobbers bulk sets). Runs on EITHER
+    // thread: host automation arrives on the audio thread (verified in JUCE
+    // 8.0.15: VST3 process() applies input parameter changes there), UI and
+    // headless on the message thread (or none). Suppressed
     // while setStateInformation bulk-loads (loadingState_): mid-load mirrors
     // fight the incoming values — alignment happens once, explicitly, after
     // the load instead (missing-`bypass`-child blobs only; current-format
     // blobs replay bit-exact).
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     bool loadingState_ = false;
+
+    // Deferred mirror: audio-thread arrivals park the latest value and run
+    // on the message thread (gesture-bracketed host writes must not run on
+    // audio — host locks mean dropouts). An explicit bypass write always
+    // cancels a pending mirror, so auval bulk order (active-then-bypass,
+    // bypass is laid out last) replays verbatim exactly as before.
+    void handleAsyncUpdate () override;
+    void mirrorActive (float activeValue);
+    std::atomic<float> mirrorValue_{0.0f};
+    std::atomic<bool> mirrorPending_{false};
 
     // Tracks max |input| over the kept channels into bypassPeak_ (read side
     // of the chains is never touched: bypass runs zero DSP, states frozen).
