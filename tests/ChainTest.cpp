@@ -8,6 +8,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <limits>
 
 namespace
 {
@@ -242,8 +243,8 @@ void checkBoostAndTrim ()
 }
 
 // (d) Highcut end-to-end (chain-level sanity, not a Task 5 retest): 12kHz
-// sine, on-vs-off. One-pole theory at 48k is -4.77dB, so the window is
-// -4.8 +/- 1.0dB (the brief's -6dB assumed a steeper slope; see report).
+// sine, on-vs-off. One-pole theory at 48k is -9.56dB, so the window is
+// -9.6 +/- 1.0dB.
 void checkHighcutEndToEnd ()
 {
     ProcessorChain off;
@@ -262,8 +263,8 @@ void checkHighcutEndToEnd ()
     on.setTrimDb (0.0f);
     const float onDb = steadyGainDb (on, 48000.0, 12000.0, 0.1f);
 
-    std::printf ("highcut 12kHz on-vs-off: %+0.3fdB (expect -4.8 +/- 1.0)\n", onDb - offDb);
-    assert (std::fabs ((onDb - offDb) + 4.8f) < 1.0f);
+    std::printf ("highcut 12kHz on-vs-off: %+0.3fdB (expect -9.6 +/- 1.0)\n", onDb - offDb);
+    assert (std::fabs ((onDb - offDb) + 9.6f) < 1.0f);
 }
 
 // (e) Peak tracker: silence -> 0; driven sine -> within 5% of true peak
@@ -850,7 +851,7 @@ void checkPostColorTransparency1k ()
     ref.setSampleRate (48000.0);
     ref.setTone (3);
     // Boost step 1 (+3dB) + tone theory + color small-signal gain k/tanh(k)
-    // (k = 0.06 post drive-fit) + engaged voicing theory (LS120/HS8k at 1kHz).
+    // (k = 0.06 post drive-fit) + engaged voicing theory (LS75/HS5441/PK180 at 1kHz).
     const float expected = 3.0f + ref.magnitudeAt (1000.0f) + 20.0f * std::log10 (0.06f / std::tanh (0.06f)) +
                            voiceTheoryDb (1000.0, 48000.0);
     std::printf ("post-color transparency @1kHz/tone3: %+0.4fdB (expect %+0.4f +/- 0.05)\n", measured, expected);
@@ -863,7 +864,7 @@ void checkPostColorTransparency1k ()
 // Per tone (boost step 1, highcut off, trim 0): raw chain magnitude at 10Hz
 // vs the absolute anchors (T1/T3/T4 -3, T2 -0.25, T5/T6 -22), with the exact
 // blocker losses plus the engaged voicing shown separately (5Hz input blocker
-// + 2Hz post-color blocker per Ruling 30 + LS120/HS8k voicing — one column per
+// + 2Hz post-color blocker per Ruling 30 + LS75/HS5441/PK180 voicing — one column per
 // stage, so the audit names the actual chain).
 void audit10HzAnchors ()
 {
@@ -909,6 +910,192 @@ void audit10HzAnchors ()
     std::fflush (stdout);
 }
 
+void checkNonFiniteRecovery ()
+{
+    // One NaN (or Inf) at the chain input must not kill the plugin: the
+    // entry sanitize turns it into silence before any stage state can latch
+    // it, so the very next finite samples process normally (pre-fix the
+    // GainStage lp_ latched NaN and output RMS sat at 0.000 for seconds).
+    for (float bad : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+                      -std::numeric_limits<float>::infinity()})
+    {
+        ProcessorChain chain;
+        chain.setSampleRate (48000.0);
+        chain.setBoostStep (3);
+        chain.setTone (3);
+        chain.setHighcut (false);
+        chain.setTrimDb (0.0f);
+        assert (chain.processSample (bad) == 0.0f);
+        double sumSq = 0.0;
+        int count = 0;
+        for (int n = 0; n < 48000; ++n)
+        {
+            const float x =
+                0.5f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / 48000.0));
+            const float y = chain.processSample (x);
+            assert (std::isfinite (y));
+            if (n >= 24000)
+            {
+                sumSq += static_cast<double> (y) * y;
+                ++count;
+            }
+        }
+        const float rms = static_cast<float> (std::sqrt (sumSq / count));
+        std::printf ("non-finite in: recovered RMS %.4f (expect > 0.1)\n", rms);
+        assert (rms > 0.1f);
+    }
+}
+
+void checkColorTimingAcrossReprepare ()
+{
+    // Re-prepare with OS engaged must keep hot-rate envelope timing:
+    // setSampleRate retunes the color stage at sampleRate * osTarget_
+    // (setOsFactor early-returns on an unchanged target, so nothing else
+    // re-arms it — pre-fix the release silently quartered, 100 ms to 25 ms
+    // at 4x, on every transport start).
+    for (int factor : {1, 2, 4})
+    {
+        ProcessorChain chain;
+        chain.setSampleRate (48000.0);
+        chain.setOsFactor (factor); // prepare order: rate first, factor second.
+        const float armed = chain.colorEnvReleaseCoeff();
+        chain.setSampleRate (48000.0); // re-prepare (host transport start).
+        chain.setOsFactor (factor);    // no-op: target unchanged.
+        const float rearmed = chain.colorEnvReleaseCoeff();
+        const float expected = 1.0f - static_cast<float> (std::exp (-1.0 / (0.1 * 48000.0 * factor)));
+        std::printf ("OS %dx: coeff %.3e == %.3e, formula %.3e\n", factor, armed, rearmed, expected);
+        assert (armed == rearmed);
+        // 1e-6, not tighter: the header subtracts in double before casting
+        // while the oracle above subtracts in float (cancellation rounding
+        // ~1e-7) — but a host-rate timing slip differs 4x (~1.5e-4), so the
+        // gate still discriminates the real bug.
+        assert (std::fabs (armed - expected) < 1.0e-6f);
+    }
+}
+
+void checkOsRetargetDefers ()
+{
+    // 1x->2x->4x within ~1 ms: the retarget defers (latest wins), the armed
+    // target stays 2x while pending, it lands on 4x, and the whole sequence
+    // steps no worse than ~1.1x a SINGLE 1x->2x blend (pre-fix the
+    // mid-flight source swap stepped ~4.4x steady). Single blends already
+    // step ~2.7x steady (delay-mixing transient), so steady is the wrong
+    // reference — the gate is retarget <= single.
+    auto sine = [] (int n)
+    { return 0.5f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / 48000.0)); };
+    auto settle = [&sine] (ProcessorChain& c)
+    {
+        c.setSampleRate (48000.0);
+        c.setBoostStep (1);
+        c.setTone (0);
+        c.setHighcut (false);
+        c.setTrimDb (0.0f);
+        for (int n = 0; n < 48000; ++n)
+            c.processSample (sine (n));
+    };
+    // Reference: single 1x->2x blend worst over 1200 samples.
+    ProcessorChain ref;
+    settle (ref);
+    ref.setOsFactor (2);
+    float singleWorst = 0.0f;
+    float prevRef = ref.processSample (sine (48000));
+    for (int k = 1, n = 48001; k <= 1200; ++k, ++n)
+    {
+        const float y = ref.processSample (sine (n));
+        const float d = std::fabs (y - prevRef);
+        if (d > singleWorst)
+            singleWorst = d;
+        prevRef = y;
+    }
+    // Retarget sequence (same arming phase as the reference: blend starts
+    // at sample 48001 in both, so delay-mixing interference is comparable).
+    ProcessorChain chain;
+    settle (chain);
+    float prev = chain.processSample (sine (48000));
+    chain.setOsFactor (2);
+    float worst = 0.0f;
+    int n = 48001;
+    auto step = [&] ()
+    {
+        const float y = chain.processSample (sine (n++));
+        const float d = std::fabs (y - prev);
+        if (d > worst)
+            worst = d;
+        prev = y;
+    };
+    for (int k = 0; k < 48; ++k)
+        step();
+    assert (chain.getOsFactor() == 2); // armed 2x, nothing pending yet.
+    chain.setOsFactor (4);
+    assert (chain.getOsFactor() == 2);        // still armed: 4x parks pending.
+    assert (chain.getLatencySamples() == 40); // reporting follows armed, not pending.
+    for (int k = 0; k < 1200; ++k)
+        step();
+    std::printf ("os retarget: lands %dx, worst %.5f vs single %.5f (expect 4x, < 1.1x)\n", chain.getOsFactor(), worst,
+                 singleWorst);
+    std::fflush (stdout);
+    assert (chain.getOsFactor() == 4);
+    assert (worst < 1.1f * singleWorst);
+}
+
+void checkToneRetargetDefers ()
+{
+    // 3->6->3 within ~1 ms: defers, lands back on 3, steps no worse than a
+    // single 3->6 fade (pre-fix the shadow restart stepped ~1.8x steady;
+    // single fades already step ~1.9x steady, so single is the reference).
+    auto sine = [] (int n)
+    { return 0.5f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / 48000.0)); };
+    auto settle = [&sine] (ProcessorChain& c)
+    {
+        c.setSampleRate (48000.0);
+        c.setBoostStep (1);
+        c.setHighcut (false);
+        c.setTrimDb (0.0f);
+        for (int n = 0; n < 48000; ++n)
+            c.processSample (sine (n));
+    };
+    ProcessorChain ref;
+    settle (ref);
+    ref.setTone (6);
+    float singleWorst = 0.0f;
+    float prevRef = ref.processSample (sine (48000));
+    for (int k = 1, n = 48001; k <= 1200; ++k, ++n)
+    {
+        const float y = ref.processSample (sine (n));
+        const float d = std::fabs (y - prevRef);
+        if (d > singleWorst)
+            singleWorst = d;
+        prevRef = y;
+    }
+    // Retarget sequence (same arming phase as the reference).
+    ProcessorChain chain;
+    settle (chain);
+    float prev = chain.processSample (sine (48000));
+    chain.setTone (6);
+    float worst = 0.0f;
+    int n = 48001;
+    auto step = [&] ()
+    {
+        const float y = chain.processSample (sine (n++));
+        const float d = std::fabs (y - prev);
+        if (d > worst)
+            worst = d;
+        prev = y;
+    };
+    for (int k = 0; k < 48; ++k)
+        step();
+    assert (chain.getToneTarget() == 6);
+    chain.setTone (3);
+    assert (chain.getToneTarget() == 6); // still armed: 3 parks pending.
+    for (int k = 0; k < 1200; ++k)
+        step();
+    std::printf ("tone retarget: lands %d, worst %.5f vs single %.5f (expect 3, < 1.1x)\n", chain.getToneTarget(),
+                 worst, singleWorst);
+    std::fflush (stdout);
+    assert (chain.getToneTarget() == 3);
+    assert (worst < 1.1f * singleWorst);
+}
+
 } // namespace
 
 int main ()
@@ -932,6 +1119,10 @@ int main ()
     checkPostColorTransparency1k();
     audit10HzAnchors();
     checkHotSineDc();
+    checkNonFiniteRecovery();
+    checkColorTimingAcrossReprepare();
+    checkOsRetargetDefers();
+    checkToneRetargetDefers();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }

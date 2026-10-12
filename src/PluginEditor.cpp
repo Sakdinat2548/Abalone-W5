@@ -106,6 +106,38 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
 
 } // namespace
 
+// Unbounded-drag knobs: absolute mapping (the original feel — position maps
+// straight to value, detents exact), with the OS cursor unhooked from the
+// screen edge for the drag duration so long sweeps never run out of room.
+// The anchor is only revisited on release.
+void AbaloneW5AudioProcessorEditor::startUnboundedDrag ()
+{
+    // By value: getMainMouseSource() returns a lightweight handle (rvalue),
+    // and GCC/Clang reject binding it to `auto&` (MSVC accepts as an
+    // extension — which is how this ever compiled locally).
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    dragAnchor_ = source.getScreenPosition();
+    dragging_ = true;
+    source.enableUnboundedMouseMovement (true, false);
+}
+
+void AbaloneW5AudioProcessorEditor::endUnboundedDrag ()
+{
+    dragging_ = false;
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    source.enableUnboundedMouseMovement (false);
+    source.setScreenPosition (dragAnchor_);
+}
+
+void AbaloneW5AudioProcessorEditor::visibilityChanged ()
+{
+    // Hide-without-destroy mid-drag delivers no mouseUp: close the drag
+    // here or the cursor stays hidden until the next click. (Destroy path
+    // is covered by the destructor.)
+    if (!isVisible() && dragging_)
+        endUnboundedDrag();
+}
+
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
     // Bold system sans at plate-caption presence: baked captions are bold
     // sans ~7px on screen; UI readouts render one step larger for legibility
@@ -164,6 +196,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // scale at its oval spot, so it keeps the conventional 7-to-5-o'clock
     // sweep; OS keeps the shared trim sweep.
     boostDialLookAndFeel.detentDeg = {224.9f, 254.9f, 285.0f, 314.5f, 345.0f, 374.0f, 404.6f, 434.6f, 464.4f, 494.8f};
+    boostDialLookAndFeel.pivotOffXPx = 1.0f;
+    boostDialLookAndFeel.pivotOffYPx = -1.0f;
     toneDialLookAndFeel.detentDeg = {285.1f, 314.9f, 345.5f, 374.3f, 404.9f, 434.9f};
     trimDialLookAndFeel.needleStartDeg = 225.0f;
     trimDialLookAndFeel.needleSweepDeg = 270.0f;
@@ -180,6 +214,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     boostSlider.valueFromTextFunction = [] (const juce::String& t)
     { return static_cast<double> (juce::jlimit (0, 9, t.getIntValue() - 1)); };
     boostSlider.setLookAndFeel (&boostDialLookAndFeel);
+    boostSlider.onDragStart = [this] { startUnboundedDrag(); };
+    boostSlider.onDragEnd = [this] { endUnboundedDrag(); };
     addAndMakeVisible (boostSlider);
 
     // Manual tone knob, 1-6 only, NOT attached (see header note). Turning it
@@ -189,6 +225,18 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     toneSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     toneSlider.setRange (1.0, 6.0, 1.0);
     toneSlider.setLookAndFeel (&toneDialLookAndFeel);
+    toneSlider.onDragStart = [this]
+    {
+        if (auto* param = processor.getApvts().getParameter ("tone"))
+            param->beginChangeGesture();
+        startUnboundedDrag();
+    };
+    toneSlider.onDragEnd = [this]
+    {
+        if (auto* param = processor.getApvts().getParameter ("tone"))
+            param->endChangeGesture();
+        endUnboundedDrag();
+    };
     toneSlider.onValueChange = [this]
     {
         const int value = static_cast<int> (toneSlider.getValue());
@@ -208,7 +256,9 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     {
         if (trimReadout.isBeingEdited())
             trimReadout.hideEditor (true);
+        startUnboundedDrag();
     };
+    outputSlider.onDragEnd = [this] { endUnboundedDrag(); };
     addAndMakeVisible (outputSlider);
 
     // OS factor mini-knob in the trim art family (tone body + trim
@@ -219,6 +269,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     osSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     osSlider.setRange (0.0, 2.0, 1.0);
     osSlider.setLookAndFeel (&trimDialLookAndFeel);
+    osSlider.onDragStart = [this] { startUnboundedDrag(); };
+    osSlider.onDragEnd = [this] { endUnboundedDrag(); };
     addAndMakeVisible (osSlider);
 
     // In-code dB readout below the trim knob, following the output param
@@ -280,7 +332,9 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
             if (hasDigit)
             {
                 const float clamped = juce::jlimit (-32.0f, 6.0f, typed.getFloatValue());
+                outParam->beginChangeGesture();
                 outParam->setValueNotifyingHost (outParam->convertTo0to1 (clamped));
+                outParam->endChangeGesture();
             }
         }
         lastTrimText = outParam->getCurrentValueAsText() + " dB";
@@ -370,6 +424,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 AbaloneW5AudioProcessorEditor::~AbaloneW5AudioProcessorEditor ()
 {
     stopTimer();
+    // A hide/close mid-drag never delivers mouseUp: leave nothing enabled.
+    juce::Desktop::getInstance().getMainMouseSource().enableUnboundedMouseMovement (false);
     boostSlider.setLookAndFeel (nullptr);
     toneSlider.setLookAndFeel (nullptr);
     outputSlider.setLookAndFeel (nullptr);
@@ -393,8 +449,9 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
     // CMake project() VERSION — single source, bump there on release.
     g.setFont (juce::Font (juce::FontOptions (11.0f * scale)));
     g.setColour (juce::Colour (0xff8a8f96));
-    g.drawText ("v" JucePlugin_VersionString, juce::roundToInt (8.0f * scale), h - juce::roundToInt (20.0f * scale),
-                juce::roundToInt (120.0f * scale), juce::roundToInt (14.0f * scale), juce::Justification::left, false);
+    g.drawText ("v" JucePlugin_VersionString ABALONEW5_VERSION_SUFFIX, juce::roundToInt (8.0f * scale),
+                h - juce::roundToInt (20.0f * scale), juce::roundToInt (170.0f * scale),
+                juce::roundToInt (14.0f * scale), juce::Justification::left, false);
 
     // ABALONE masthead: the SVG asset centered in the header slot (texture
     // y=98.5 cap-center, ~50px cap to match the hardware badge; the slot box

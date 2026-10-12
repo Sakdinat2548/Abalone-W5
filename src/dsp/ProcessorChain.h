@@ -14,7 +14,7 @@
 #include "ToneBank.h"
 
 // Testable U5 signal chain (Abalone W5 v1). JUCE-free, header-only C++17
-// (<cmath> + <atomic> only); owns every DSP stage so CTest can drive the
+// (<cmath> + <array> + <atomic>); owns every DSP stage so CTest can drive the
 // full chain without a plugin host. The processor delegates per sample.
 //
 // Chain order: GainStage (boost + 5Hz DC-block) -> ToneBank A/B xfade ->
@@ -99,6 +99,12 @@ struct ProcessorChain
 
         sampleRate_ = sampleRate;
         gain_.setSampleRate (sampleRate);
+        // Hot-rate retune, not host-rate: re-prepare with OS engaged must
+        // NOT fall back to host timing (setOsFactor early-returns on an
+        // unchanged target, so this line is the only retune that fires —
+        // without the factor it silently quarters the release, 100 ms to
+        // 25 ms at 4x; hosts re-prepare on every transport start).
+        color_.setSampleRate (sampleRate * static_cast<double> (osTarget_));
         banks_[0].setSampleRate (sampleRate);
         banks_[1].setSampleRate (sampleRate);
         highcut_.setSampleRate (sampleRate);
@@ -141,6 +147,14 @@ struct ProcessorChain
 
     // Tone 0-6, 0 = bypass. Out-of-range values clamp. Arms the 10ms
     // equal-power xfade; a no-op when the tone is already targeted.
+    // Retarget mid-fade defers (latest wins): the new value parks in
+    // tonePending_ and arms at landing, so the shadow is never restarted
+    // mid-flight (that restart stepped ~1.8x). Setting the fading-in
+    // target again cancels the pending change. A retarget before the fade
+    // consumes any sample (xfadePos_ == 0) still re-arms immediately:
+    // nothing was output under the new blend, so there is nothing to be
+    // discontinuous about — this keeps back-to-back synchronous calls
+    // (compat shim, prepare sequences) exact.
     void setTone (int tone)
     {
         if (tone < 0)
@@ -148,13 +162,20 @@ struct ProcessorChain
         if (tone > 6)
             tone = 6;
         if (tone == targetTone_)
+        {
+            hasTonePending_ = false;
             return;
-
-        targetTone_ = tone;
-        banks_[1 - active_].setTone (tone); // shadow starts clean.
-        xfadePos_ = 0;
-        xfading_ = true;
+        }
+        if (xfading_ && xfadePos_ > 0)
+        {
+            tonePending_ = tone;
+            hasTonePending_ = true;
+            return;
+        }
+        armTone (tone);
     }
+
+    int getToneTarget () const { return targetTone_; }
 
     void setHighcut (bool enabled) { highcut_.setEnabled (enabled); }
 
@@ -163,21 +184,38 @@ struct ProcessorChain
     // Oversample factor for the ColorStage path (1, 2, or 4; anything else
     // clamps to the nearest). Arms the 5ms equal-power xfade from the
     // previous target; a no-op when already targeted. Called once per block
-    // by the processor (never mid-block). The FIR states are NOT wiped here
+    // by the processor (never mid-block). Retarget mid-blend defers like
+    // setTone (latest wins, cancels on set-back, arms at landing — the
+    // mid-flight source swap stepped ~4.4x). Latency reporting follows the
+    // ARMED target (osTarget_), never the pending one, so the host never
+    // sees a double flip. A retarget before the blend consumes any sample
+    // (osPos_ == 0) still re-arms immediately, same discontinuity-free
+    // reasoning as setTone above. The FIR states are NOT wiped here
     // (see note above); they are zeroed on landing for every factor except
     // the landing target instead.
     void setOsFactor (int factor)
     {
         const int target = (factor <= 1) ? 1 : (factor == 2) ? 2 : (factor < 4) ? 2 : 4;
         if (target == osTarget_)
+        {
+            hasOsPending_ = false;
             return;
-        osBlendFrom_ = osTarget_;
-        osTarget_ = target;
-        osPos_ = 0;
-        osBlending_ = true;
+        }
+        if (osBlending_ && osPos_ > 0)
+        {
+            osPending_ = target;
+            hasOsPending_ = true;
+            return;
+        }
+        armOsFactor (target);
     }
 
     int getOsFactor () const { return osTarget_; }
+
+    // Test tap: the color envelope release coefficient (pins hot-rate timing
+    // across re-prepare — the re-prepare regression had no observable gate
+    // without it).
+    float colorEnvReleaseCoeff () const { return color_.envReleaseCoeff(); }
 
     // Task-18 compat shim: false->1x, true->2x.
     void setOversampled (bool oversampled) { setOsFactor (oversampled ? 2 : 1); }
@@ -196,6 +234,14 @@ struct ProcessorChain
 
     float processSample (float x)
     {
+        // Chain-entry sanitize: a non-finite sample (sick host) becomes
+        // silence HERE, so no stage state (GainStage lp_, biquad z1/z2,
+        // HighCut, voicing, post blocker) can ever latch NaN — one choke
+        // point where all channels route through beats a guard in every
+        // stage, and no state reset is needed: states never learn garbage,
+        // so output recovers on the very next finite sample.
+        if (!std::isfinite (x))
+            x = 0.0f;
         const float boosted = gain_.processSample (x);
 
         float shaped;
@@ -213,6 +259,15 @@ struct ProcessorChain
             {
                 xfading_ = false;
                 active_ = 1 - active_;
+                // Deferred retarget: arm the latest pending tone (or none).
+                // The just-landed bank becomes the new shadow from a clean
+                // state — same idiom as the initial arm, never a restart.
+                if (hasTonePending_)
+                {
+                    hasTonePending_ = false;
+                    if (tonePending_ != targetTone_)
+                        armTone (tonePending_);
+                }
             }
         }
         else
@@ -306,6 +361,13 @@ private:
                 os4Up2D_.fill (0.0f);
                 os4Dn2D_.fill (0.0f);
                 os4Dn1D_.fill (0.0f);
+            }
+            // Deferred retarget: arm the latest pending factor (or none).
+            if (hasOsPending_)
+            {
+                hasOsPending_ = false;
+                if (osPending_ != osTarget_)
+                    armOsFactor (osPending_);
             }
         }
         return out;
@@ -418,6 +480,28 @@ private:
         targetTone_ = tone;
         xfading_ = false;
         xfadePos_ = 0;
+        hasTonePending_ = false;
+    }
+
+    // Arm helpers: the single place a tone/OS change takes effect, used by
+    // both the immediate path and the deferred landing path.
+    void armTone (int tone)
+    {
+        targetTone_ = tone;
+        banks_[1 - active_].setTone (tone); // shadow starts clean.
+        xfadePos_ = 0;
+        xfading_ = true;
+    }
+
+    void armOsFactor (int target)
+    {
+        osBlendFrom_ = osTarget_;
+        osTarget_ = target;
+        osPos_ = 0;
+        osBlending_ = true;
+        // The color stage runs at the hot rate under OS: retune its envelope
+        // taus so seconds stay seconds (else 2x/4x halves/quarters them).
+        color_.setSampleRate (sampleRate_ * static_cast<double> (target));
     }
 
     double sampleRate_ = 48000.0;
@@ -502,6 +586,9 @@ private:
     bool xfading_ = false;
     int xfadePos_ = 0;
     int xfadeLen_ = 480;
+    // Deferred tone retarget (latest wins, armed at landing).
+    int tonePending_ = 3;
+    bool hasTonePending_ = false;
 
     static constexpr double kPiOs_ = 3.14159265358979323846;
 
@@ -522,4 +609,7 @@ private:
     int osBlendFrom_ = 1;
     int osPos_ = 0;
     int osLen_ = 240; // 5ms @48k; recomputed per rate in setSampleRate.
+    // Deferred OS retarget (latest wins, armed at landing).
+    int osPending_ = 1;
+    bool hasOsPending_ = false;
 };

@@ -278,6 +278,33 @@ void checkHostBypass ()
     }
 
     {
+        // Unmapped extra channels (>2, unreachable via our mono/stereo
+        // layouts but callable headless): cleared, never leaked — same
+        // contract as every other path.
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+
+        juce::AudioBuffer<float> buffer (3, kBlock);
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 100.0, 0.4f);
+        fillDc (buffer, 2, 0.9f); // garbage: no input data lives here.
+
+        static float snapshot0[kBlock];
+        static float snapshot1[kBlock];
+        std::memcpy (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0));
+        std::memcpy (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1));
+
+        juce::MidiBuffer midi;
+        proc.processBlockBypassed (buffer, midi);
+
+        CHECK (std::memcmp (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0)) == 0);
+        CHECK (std::memcmp (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1)) == 0);
+        CHECK (peakOf (buffer.getReadPointer (2), kBlock) == 0.0f);
+        std::puts ("bypass extra channel: cleared");
+    }
+
+    {
         AbaloneW5AudioProcessor proc;
         CHECK (setLayout (proc, juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo()));
         proc.prepareToPlay (kSampleRate, kBlock);
@@ -353,6 +380,170 @@ void checkActiveOffPassthrough ()
         std::printf ("active-off mono 1-in/2-out: ch0 untouched, max|ch1-ch0| = %.9f (expect 0)\n", dupErr);
         CHECK (dupErr == 0.0f);
     }
+}
+
+// (e2) Bypass latency alignment: under 2x/4x the dry path carries the same
+// FIR group delay as the engaged path (40/60 samples), so toggling ACTIVE
+// never shifts timing and PDC holds. Impulse in -> impulse out exactly at
+// the latency index, zeros before. At 1x the fast path stays bit-exact.
+void checkBypassLatencyAligned ()
+{
+    const int latencies[3] = {0, 40, 60};
+    const float osRaw[3] = {0.0f, 1.0f, 2.0f};
+    for (int c = 0; c < 3; ++c)
+    {
+        { // ACTIVE-off internal bypass.
+            AbaloneW5AudioProcessor proc;
+            setFlatParams (proc);
+            *proc.getApvts().getRawParameterValue ("osfactor") = osRaw[c];
+            *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+            proc.prepareToPlay (kSampleRate, kBlock);
+
+            juce::AudioBuffer<float> buffer (2, kBlock);
+            buffer.clear();
+            buffer.setSample (0, 0, 1.0f);
+            buffer.setSample (1, 0, 1.0f);
+            juce::MidiBuffer midi;
+            proc.processBlock (buffer, midi);
+
+            const float* ch0 = buffer.getReadPointer (0);
+            int peak = -1;
+            float peakV = 0.0f;
+            for (int i = 0; i < kBlock; ++i)
+            {
+                const float a = std::fabs (ch0[i]);
+                if (a > peakV)
+                {
+                    peakV = a;
+                    peak = i;
+                }
+            }
+            std::printf ("bypass latency osRaw %.0f: peak @%d val %.4f (expect @%d val 1.0)\n", osRaw[c], peak,
+                         static_cast<double> (peakV), latencies[c]);
+            CHECK (peak == latencies[c]);
+            CHECK (peakV == 1.0f);
+            for (int i = 0; i < peak; ++i)
+                CHECK (ch0[i] == 0.0f);
+        }
+        { // Host bypass entry point, same contract.
+            AbaloneW5AudioProcessor proc;
+            setFlatParams (proc);
+            *proc.getApvts().getRawParameterValue ("osfactor") = osRaw[c];
+            proc.prepareToPlay (kSampleRate, kBlock);
+
+            juce::AudioBuffer<float> buffer (2, kBlock);
+            buffer.clear();
+            buffer.setSample (0, 0, 1.0f);
+            buffer.setSample (1, 0, 1.0f);
+            juce::MidiBuffer midi;
+            proc.processBlockBypassed (buffer, midi);
+
+            const float* ch0 = buffer.getReadPointer (0);
+            int peak = -1;
+            float peakV = 0.0f;
+            for (int i = 0; i < kBlock; ++i)
+            {
+                const float a = std::fabs (ch0[i]);
+                if (a > peakV)
+                {
+                    peakV = a;
+                    peak = i;
+                }
+            }
+            std::printf ("host-bypass latency osRaw %.0f: peak @%d val %.4f (expect @%d val 1.0)\n", osRaw[c], peak,
+                         static_cast<double> (peakV), latencies[c]);
+            CHECK (peak == latencies[c]);
+            CHECK (peakV == 1.0f);
+        }
+    }
+}
+
+// (e3) OS flip landing mid-bypass must not click on re-engage: the chains
+// only learn the factor at the next re-engage fade, whose dry side must be
+// live input, not pre-bypass history (pre-fix the 1x bypass path never fed
+// the lines, so the first 40/60 dry samples replayed ancient audio and the
+// fade jumped by |wet-dry|).
+void checkBypassOsFlipNoClick ()
+{
+    AbaloneW5AudioProcessor proc; // stereo default
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged 1x
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    int phase0 = 488;
+    int phase1 = 488;
+    for (int b = 0; b < 20; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("osfactor") = 1.0f; // 2x mid-bypass.
+    fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+    fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+    proc.processBlock (buffer, midi);
+    *proc.getApvts().getRawParameterValue ("active") = 1.0f; // re-engage: fades meet.
+    float worst = 0.0f;
+    float prevLast = buffer.getReadPointer (0)[kBlock - 1];
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+        const float* ch0 = buffer.getReadPointer (0);
+        worst = juce::jmax (worst, std::fabs (ch0[0] - prevLast));
+        worst = juce::jmax (worst, maxStepJump (ch0, kBlock, b));
+        prevLast = ch0[kBlock - 1];
+    }
+    std::printf ("bypass OS-flip re-engage: worst jump %.5f (expect < 0.06)\n", worst);
+    CHECK (worst < 0.06f);
+}
+
+// (e4) No meter swell on toggle-off: with a steady sine the fade must be
+// monotonic wet -> dry. Equal-power weights sum coherent amplitudes
+// mid-fade (sqrt(1+R^2): +1.7 dB at Boost 1) and the peak meter visibly
+// jumps; linear weights cannot exceed the starting peak (2% tolerance for
+// state transients).
+void checkBypassToggleNoSwell ()
+{
+    AbaloneW5AudioProcessor proc;
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged, boost step 1 (+3dB).
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    int phase0 = 0;
+    int phase1 = 0;
+    for (int b = 0; b < 20; ++b)
+    {
+        fillSineCont (buffer, 0, 1000.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 1000.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    fillSineCont (buffer, 0, 1000.0, 0.5f, phase0);
+    fillSineCont (buffer, 1, 1000.0, 0.5f, phase1);
+    proc.processBlock (buffer, midi);
+    const float engagedPeak = peakOf (buffer.getReadPointer (0), kBlock);
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    for (int b = 0; b < 4; ++b)
+    {
+        fillSineCont (buffer, 0, 1000.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 1000.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+        const float p = peakOf (buffer.getReadPointer (0), kBlock);
+        if (p > engagedPeak * 1.02f)
+        {
+            std::printf ("toggle swell: block %d peak %.5f vs engaged %.5f\n", b, p, engagedPeak);
+            CHECK (false);
+        }
+    }
+    std::printf ("toggle-off swell: engaged %.5f, no block above x1.02\n", engagedPeak);
 }
 
 // (f) ACTIVE toggle must not click: settle engaged on a continuous 220Hz
@@ -568,6 +759,47 @@ void checkTrimRangeAndDefault ()
     }
 }
 
+// (h) No stale LED after toggle-off: loud while engaged, then bypassed
+// into silence. Frozen chains still hold the engaged-era peak, but the
+// SIGNAL tap must not count it (pre-fix the first read after the toggle
+// returned ~0.7 and flashed the LED once, even with no input at all).
+void checkLedNoStaleAfterBypass ()
+{
+    AbaloneW5AudioProcessor proc;
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged, boost step 1 (+3dB).
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 4; ++b)
+    {
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        proc.processBlock (buffer, midi);
+    }
+    CHECK (proc.getSignalPeak() > 0.5f); // engaged tap is live.
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    for (int b = 0; b < 2; ++b)
+    {
+        buffer.clear();                   // fresh silence every block: in-place buffers carry
+                                          // the previous block's output as the next input.
+        proc.processBlock (buffer, midi); // bypassed silence.
+    }
+    const float peak = proc.getSignalPeak();
+    std::printf ("led after bypass-into-silence: %.4f (expect 0)\n", peak);
+    CHECK (peak == 0.0f);
+    // Dark in bypass even with loud input (user ruling: the LED follows the
+    // effect, not the thru).
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        proc.processBlock (buffer, midi);
+    }
+    const float darkPeak = proc.getSignalPeak();
+    std::printf ("led bypassed-with-input: %.4f (expect 0)\n", darkPeak);
+    CHECK (darkPeak == 0.0f);
+}
+
 int main ()
 {
     checkMonoInStereoOut();
@@ -575,9 +807,13 @@ int main ()
     checkMonoInMonoOut();
     checkHostBypass();
     checkActiveOffPassthrough();
+    checkBypassLatencyAligned();
+    checkBypassOsFlipNoClick();
+    checkBypassToggleNoSwell();
     checkActiveToggleNoClick();
     checkBypassSync();
     checkTrimRangeAndDefault();
+    checkLedNoStaleAfterBypass();
 
     if (failures == 0)
     {

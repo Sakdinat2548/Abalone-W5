@@ -1,7 +1,8 @@
 """Re-digitize the U5 manual tone pictures with a CORRECTED log x-axis.
 
 Provenance (read before trusting): analysis/u5_tone_curves_from_claude.csv
-(v1) is Claude's eyeball digitization of docs/refs/Tone+images.png, and it
+(v1) is Claude's eyeball digitization of the (since-removed, licensed)
+manual chart pictures, and it
 bakes in a known axis distortion — the printed 20 kHz tick sits ~2x wider
 than true log scale, and v1 follows the drawn ticks (see Downloads/
 claudeOutputforU5/claudeoutput.txt: "I followed the tick marks as drawn",
@@ -27,6 +28,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 SRC = os.path.join(REPO, "docs", "refs", "Tone+images.png")
 from scipy import ndimage as ndi
+
+if not os.path.isfile (SRC):
+    # Source pictures removed from the repo (licensed); the v1/v2 CSVs above
+    # carry the data. Fail loud instead of a bare traceback.
+    raise SystemExit ("redigit_tone.py: licensed source pictures are no longer in docs/refs/")
 
 A = np.array(Image.open(SRC).convert("L")).astype(int)
 PANELS = [(29, 687, 55, 472), (783, 1440, 55, 472), (1545, 2202, 55, 472),

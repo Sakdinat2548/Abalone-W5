@@ -77,10 +77,13 @@ struct GainStage
         if (std::fabs (lp_) < 1.0e-15f)
             lp_ = 0.0f;
         // Smoothed stepped gain: one-pole follower (~16ms TC at fc = 10Hz),
-        // so 3dB step twists ramp over ~80ms instead of clicking. Snaps exact
-        // below 1e-6 so settled measurements see the textbook gain bit-exact.
+        // so 3dB step twists ramp over ~80ms instead of clicking. Snaps
+        // below 1e-3 linear (~0.0003dB at step 10): the 1e-6 snap never
+        // fired — the float step at gains ~32 is ~1.9e-6, so the follower
+        // stalled ~0.0003dB short forever. 1e-3 is still 100x under the
+        // tightest gate (±0.2dB) and settles bit-near, not bit-exact.
         curGainLin_ += smoothCoeff_ * (targetGainLin_ - curGainLin_);
-        if (std::fabs (targetGainLin_ - curGainLin_) < 1.0e-6f)
+        if (std::fabs (targetGainLin_ - curGainLin_) < 1.0e-3f)
             curGainLin_ = targetGainLin_;
         return (x - lp_) * curGainLin_;
     }

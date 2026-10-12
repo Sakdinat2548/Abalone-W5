@@ -94,7 +94,14 @@ const juce::String AbaloneW5AudioProcessor::getName () const { return JucePlugin
 bool AbaloneW5AudioProcessor::acceptsMidi () const { return false; }
 bool AbaloneW5AudioProcessor::producesMidi () const { return false; }
 bool AbaloneW5AudioProcessor::isMidiEffect () const { return false; }
-double AbaloneW5AudioProcessor::getTailLengthSeconds () const { return 0.0; }
+double AbaloneW5AudioProcessor::getTailLengthSeconds () const
+{
+    // Measured 1.0 s (not the reviewer's 0.3 s estimate, and not from the
+    // tone sections either): a hot stopped 55 Hz note rings the 5 Hz/2 Hz
+    // DC-blockers + low-heavy tones above -60 dBFS for 0.6 s realistic
+    // (0.96 s pathological full-scale-DC case), so 1.0 s covers both.
+    return 1.0;
+}
 
 int AbaloneW5AudioProcessor::getNumPrograms () { return 1; }
 int AbaloneW5AudioProcessor::getCurrentProgram () { return 0; }
@@ -128,6 +135,14 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
     // re-prepare; the switch path in processBlock covers factor changes).
     lastReportedLatency_ = chains[0].getLatencySamples();
     setLatencySamples (lastReportedLatency_);
+    // Dry-alignment history is meaningless across rates/prepares. The tap
+    // adopts the pushed factor directly (hosts compensate from block one).
+    for (auto& line : dryDelay_)
+        line.fill (0.0f);
+    dryPos_ = {0, 0};
+    dryLatency_ = chains[0].getLatencySamples();
+    dryBlending_ = false;
+    dryBlendLen_ = juce::jmax (1, static_cast<int> (0.005 * preparedSampleRate_));
 }
 
 void AbaloneW5AudioProcessor::releaseResources () {}
@@ -183,8 +198,10 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     // ACTIVE-to-THRU: TRUE bypass (relay-style). Zero DSP: the chains are not
     // fed at all and their states freeze. The buffer already holds the input
-    // (in-place processing), so leaving it untouched IS the passthrough —
-    // only unmapped extra channels are cleared, as in the engaged path.
+    // (in-place processing), so the passthrough is the input delayed by the
+    // reported latency (0 at 1x — untouched; 40/60 under OS, matching the
+    // engaged FIR path, so toggles never shift timing and PDC holds) — only
+    // unmapped extra channels are cleared, as in the engaged path.
     // Re-engage settle: filters resume from the frozen state, so a brief
     // transient is possible on re-engage (authentic relay behavior), settling
     // within milliseconds as the DC-blocker re-converges.
@@ -202,6 +219,36 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (bypassTarget >= 1.0f)
         {
             trackBypassPeak (buffer, monoDuplicate ? 1 : activeChannels, numSamples);
+            // Latency-aligned dry on the adopted tap (frozen while bypassed —
+            // chains are not re-pushed here, so the tap matches the last
+            // reported value by construction).
+            const int nCh = monoDuplicate ? 1 : activeChannels;
+            if (dryLatency_ > 0)
+            {
+                for (int ch = 0; ch < nCh; ++ch)
+                {
+                    float* data = buffer.getWritePointer (ch);
+                    for (int i = 0; i < numSamples; ++i)
+                    {
+                        const float x = data[i];
+                        data[i] = peekDry (ch, dryLatency_);
+                        pushDry (ch, x);
+                    }
+                }
+            }
+            else
+            {
+                // 1x: passthrough stays bit-exact, but the lines must still
+                // track the input — an OS flip landing mid-bypass only
+                // reaches the chains at the next re-engage fade, whose dry
+                // side would otherwise replay pre-bypass history.
+                for (int ch = 0; ch < nCh; ++ch)
+                {
+                    const float* data = buffer.getReadPointer (ch);
+                    for (int i = 0; i < numSamples; ++i)
+                        pushDry (ch, data[i]);
+                }
+            }
             if (monoDuplicate)
                 duplicateMonoToOutputs (buffer, numSamples);
             else
@@ -219,6 +266,19 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         // reverses smoothly: no restart jump, the trajectory just turns.
         pushChainParams (boostStep, tone, highcut, trimDb, osFactor, monoDuplicate ? 1 : activeChannels);
         const int nCh = monoDuplicate ? 1 : activeChannels;
+        // Dry-tap blend: the wet path's delay can change inside this same
+        // block (OS flip landing with the toggle). The dry side then blends
+        // tap(dryLatency_) -> tap(live) equal-power across the fade instead
+        // of stepping taps at the boundary (a 0->40 tap switch on live audio
+        // jumps ~0.4 on a 220 Hz sine). Arms once per fade; the taps stay
+        // live throughout, so the weights — not the taps — carry the motion.
+        const int fadeTarget = chains[0].getLatencySamples();
+        if (!dryBlending_ && fadeTarget != dryLatency_)
+        {
+            dryFrom_ = dryLatency_;
+            dryBlendPos_ = 0;
+            dryBlending_ = true;
+        }
         float* chPtr[2] = {nullptr, nullptr};
         for (int ch = 0; ch < nCh; ++ch)
             chPtr[ch] = buffer.getWritePointer (ch);
@@ -235,14 +295,53 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 bypassMix_ = juce::jmin (bypassTarget, bypassMix_ + fadeStep);
             else if (bypassMix_ > bypassTarget)
                 bypassMix_ = juce::jmax (bypassTarget, bypassMix_ - fadeStep);
-            const float dryW = std::sin (halfPi * bypassMix_);
-            const float wetW = std::cos (halfPi * bypassMix_);
+            // Linear (equal-gain) weights, NOT equal-power: the fade mixes dry
+            // with an AMPLIFIED wet (boost), and on coherent material (sine,
+            // bass) equal-power sums amplitudes mid-fade — out(m) peaks at
+            // sqrt(1+R^2), i.e. +1.7 dB for R = 1.46 at Boost 1. The peak
+            // meter visibly jumps although nothing clicks. Linear is
+            // monotonic from wet to dry for coherent signals, so no swell;
+            // its cost (-3 dB power dip on transient toggles) hides inside
+            // the 5 ms switch. Tone/OS blends stay equal-power (two live
+            // paths at matched loudness — the correct domain for it), as
+            // does the dry-tap blend below (same dry at two taps).
+            const float dryW = bypassMix_;
+            const float wetW = 1.0f - bypassMix_;
+            // Dry-blend clock: one tap-step per dry sample while armed.
+            float tapNewW = 0.0f;
+            float tapOldW = 1.0f;
+            if (dryBlending_)
+            {
+                ++dryBlendPos_;
+                float t = static_cast<float> (dryBlendPos_) / static_cast<float> (dryBlendLen_);
+                if (t > 1.0f)
+                    t = 1.0f;
+                tapNewW = std::sin (halfPi * t);
+                tapOldW = std::cos (halfPi * t);
+            }
             for (int ch = 0; ch < nCh; ++ch)
             {
                 const float dry = chPtr[ch][i];
+                const float tapNow = (dryLatency_ > 0) ? peekDry (ch, dryLatency_) : dry;
+                float dryAligned = tapNow;
+                if (dryBlending_)
+                {
+                    const float tapFrom = (dryFrom_ > 0) ? peekDry (ch, dryFrom_) : dry;
+                    const float tapTo = (fadeTarget > 0) ? peekDry (ch, fadeTarget) : dry;
+                    dryAligned = tapFrom * tapOldW + tapTo * tapNewW;
+                }
                 const float wet = chains[static_cast<size_t> (ch)].processSample (dry);
-                chPtr[ch][i] = dry * dryW + wet * wetW;
+                pushDry (ch, dry);
+                chPtr[ch][i] = dryAligned * dryW + wet * wetW;
             }
+        }
+        // Landed: adopt the live tap (the blend already sits at weight 1, so
+        // the adoption itself is a no-op numerically — the tap only ever
+        // switches hands where dry is silent or fully blended).
+        if (bypassMix_ == bypassTarget)
+        {
+            dryLatency_ = chains[0].getLatencySamples();
+            dryBlending_ = false;
         }
         if (monoDuplicate)
             duplicateMonoToOutputs (buffer, numSamples);
@@ -280,8 +379,13 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
         float* data = buffer.getWritePointer (0);
         for (int i = 0; i < numSamples; ++i)
-            data[i] = chain.processSample (data[i]);
+        {
+            const float x = data[i];
+            data[i] = chain.processSample (x);
+            pushDry (0, x); // keep the alignment history live for the next toggle.
+        }
 
+        dryLatency_ = chains[0].getLatencySamples(); // dry unread here: adopt free.
         duplicateMonoToOutputs (buffer, numSamples);
         return;
     }
@@ -292,8 +396,13 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
         float* data = buffer.getWritePointer (ch);
         for (int i = 0; i < numSamples; ++i)
-            data[i] = chain.processSample (data[i]);
+        {
+            const float x = data[i];
+            data[i] = chain.processSample (x);
+            pushDry (ch, x);
+        }
     }
+    dryLatency_ = chains[0].getLatencySamples(); // dry unread here: adopt free.
 
     for (int ch = activeChannels; ch < numChannels; ++ch)
         buffer.clear (ch, 0, numSamples);
@@ -338,7 +447,8 @@ void AbaloneW5AudioProcessor::trackBypassPeak (const juce::AudioBuffer<float>& b
 void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     // Host bypass: same TRUE passthrough as ACTIVE off — zero DSP, states
-    // frozen, buffer untouched. Only the input peak is tracked for the LED.
+    // frozen, input delayed by the reported latency (see processBlock).
+    // Only the input peak is tracked for the LED.
     // Mono-in exception: the extra channels hold no input data, so ch0 is
     // copied out (same dual-mono rule as the other paths) — still no DSP.
     const int numChannels = buffer.getNumChannels();
@@ -348,8 +458,39 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
     trackBypassPeak (buffer, monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size())),
                      numSamples);
 
+    const int nCh = monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size()));
+    if (dryLatency_ > 0)
+    {
+        for (int ch = 0; ch < nCh; ++ch)
+        {
+            float* data = buffer.getWritePointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float x = data[i];
+                data[i] = peekDry (ch, dryLatency_);
+                pushDry (ch, x);
+            }
+        }
+    }
+    else
+    {
+        // 1x: untouched passthrough, but the alignment history still tracks
+        // (same OS-flip-mid-bypass hole as processBlock above).
+        for (int ch = 0; ch < nCh; ++ch)
+        {
+            const float* data = buffer.getReadPointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                pushDry (ch, data[i]);
+        }
+    }
+
     if (monoDuplicate)
         duplicateMonoToOutputs (buffer, numSamples);
+    else
+        // Unmapped extra channels carry no input data (same rule as every
+        // other path): clear, never leak stale buffer content to the host.
+        for (int ch = nCh; ch < numChannels; ++ch)
+            buffer.clear (ch, 0, numSamples);
 }
 
 float AbaloneW5AudioProcessor::getSignalPeak ()
@@ -358,14 +499,23 @@ float AbaloneW5AudioProcessor::getSignalPeak ()
     // pre-trim chain peak. The legacy post-trim tracker is drained (not
     // used) so no stale maximum survives across reads.
     float peak = bypassPeak_.exchange (0.0f, std::memory_order_relaxed);
+    // Frozen chains' peaks are history, not signal: drain them as always
+    // (reset-on-read) but never COUNT them while bypassed — otherwise the
+    // LED flashes once on stale engaged-era level after every toggle off,
+    // even into silence.
+    const bool engaged =
+        apvts.getRawParameterValue ("active")->load() > 0.5f && apvts.getRawParameterValue ("bypass")->load() <= 0.5f;
     for (auto& chain : chains)
     {
         static_cast<void> (chain.getLastPeak());
         const float p = chain.getLastPreTrimPeak();
-        if (p > peak)
+        if (engaged && p > peak)
             peak = p;
     }
-    return peak;
+    // Dark in bypass by user ruling: the LED follows the effect, not the
+    // thru (the lights-off veil already dims the panel). Everything is
+    // still drained above, so re-engage never inherits a stale flash.
+    return engaged ? peak : 0.0f;
 }
 
 juce::AudioProcessorEditor* AbaloneW5AudioProcessor::createEditor ()
@@ -418,8 +568,44 @@ void AbaloneW5AudioProcessor::setStateInformation (const void* data, int sizeInB
 
 void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
 {
+    // An explicit bypass write always wins over a pending mirror (auval bulk
+    // sets replay every parameter independently — see checkBypassSync).
+    if (parameterID == "bypass")
+    {
+        mirrorPending_.store (false, std::memory_order_relaxed);
+        return;
+    }
+    if (parameterID != "active" || loadingState_)
+        return;
+    // Audio-thread arrivals defer (see header); message thread and headless
+    // (no MessageManager at all) stay direct, exactly as before — so the
+    // headless sync gates pin the direct path with no message loop involved
+    // (spinning one up in a DSP test TU risks the JUCE_DEBUG class-layout
+    // ODR mismatch ProcessorIOTest documents; the meat, mirrorActive, is
+    // what checkBypassSync gates).
+    auto* mm = juce::MessageManager::getInstanceWithoutCreating();
+    if (mm != nullptr && !mm->isThisTheMessageThread())
+    {
+        mirrorValue_.store (newValue, std::memory_order_relaxed);
+        mirrorPending_.store (true, std::memory_order_relaxed);
+        triggerAsyncUpdate();
+        return;
+    }
+    mirrorPending_.store (false, std::memory_order_relaxed);
+    mirrorActive (newValue);
+}
+
+void AbaloneW5AudioProcessor::handleAsyncUpdate ()
+{
+    if (!mirrorPending_.exchange (false, std::memory_order_relaxed))
+        return;
     if (loadingState_)
         return;
+    mirrorActive (mirrorValue_.load (std::memory_order_relaxed));
+}
+
+void AbaloneW5AudioProcessor::mirrorActive (float newValue)
+{
     // One-way mirror, ACTIVE -> bypass only (diverge-only write so the pair
     // can never chase itself). Gesture-bracketed: some hosts ignore
     // unbracketed performEdit on kIsBypass, so the DAW bypass button would
@@ -430,8 +616,6 @@ void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID,
     // (Active 0.112305 restored as 1.0). Host bypass still silences the DSP
     // (processBlock obeys either control); only the ACTIVE button display
     // no longer follows host-bypass presses.
-    if (parameterID != "active")
-        return;
     const bool on = newValue > 0.5f;
     if (bypassParam_ != nullptr)
         if ((bypassParam_->getValue() > 0.5f) == on) // bypass must read !active

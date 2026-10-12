@@ -64,6 +64,8 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
     float rimPx = 113.0f;
     float needleStartDeg = 225.0f;
     float needleSweepDeg = 270.0f;
+    float pivotOffXPx = 0.0f; // per-dial axle nudge, art px (+right/+down)
+    float pivotOffYPx = 0.0f;
     std::vector<float> detentDeg;
 
     float needleAngleFor (float sliderPos) const
@@ -101,8 +103,8 @@ struct PhotoDialLookAndFeel : public juce::LookAndFeel_V4
             const float pw = needleWPx * k;
             const float ph = needleHPx * k;
             const float rim = rimPx * k;
-            const float cx = fx + static_cast<float> (width) * 0.5f;
-            const float cy = fy + static_cast<float> (height) * 0.5f;
+            const float cx = fx + static_cast<float> (width) * 0.5f + pivotOffXPx * k;
+            const float cy = fy + static_cast<float> (height) * 0.5f + pivotOffYPx * k;
             const float angle = needleAngleFor (sliderPos) * juce::MathConstants<float>::pi / 180.0f;
             g.saveState();
             g.addTransform (juce::AffineTransform::rotation (angle, cx, cy));
@@ -179,6 +181,7 @@ public:
 
 private:
     void timerCallback () override;
+    void visibilityChanged () override;
 
     // OS factor label, painted in-code centered UNDER the OS mini-knob:
     // ONE live readout (current `osfactor` value only).
@@ -244,6 +247,18 @@ private:
     bool dimVisible = false;
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).
+
+    // Unbounded-drag knobs: the original absolute delta-to-value feel
+    // (detents exact), with the OS cursor unhooked from the screen edge
+    // for the drag duration so long sweeps never run out of room. The
+    // anchor is only revisited on release. Single-pointer by design (one
+    // shared anchor — a second concurrent drag degrades to edge-limited,
+    // never stuck); touch/pen drags are intentional no-ops (the main
+    // source isn't dragging, so enable is a strict no-op).
+    void startUnboundedDrag ();
+    void endUnboundedDrag ();
+    juce::Point<float> dragAnchor_;
+    bool dragging_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)
 };

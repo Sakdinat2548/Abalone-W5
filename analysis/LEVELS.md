@@ -1,10 +1,41 @@
 # Levels calibration + THD-vs-boost map (Task 29)
 
-## CANDIDATE 2026-10-09: hotter color drive (k=0.06, a=1.5e-3) — ADOPTED in v1.2
+## CURRENT: gated harmonic branch (DE fit, loss 1861) — UNCOMMITTED (branch dsp/color-h12, toward v1.3)
+
+y = tanh(kx)/tanh(k) + ax^2 + gate(env) * (c_o*(x/w_o)^3*e^{-(x/w_o)^2} + c_e*(x/w_e)^2*e^{-(x/w_e)^2}),
+k = 0.06, a = 1.5e-3 (frozen), c_o = 3.475e-2, w_o = 0.56, c_e = -5e-2, w_e = 0.82,
+gate(env) = (env/(env+10.526))^0.60, env = peak-hold + 0.1 ms attack + 100 ms release.
+Ladder (440 Hz, dB rel H1; render-validated B3/DI targets): H2 nailed +/-2
+everywhere; H3/H4/H5 within capture spread (worst +6.5); H6-H8 signal;
+H9+ below -65. THD @+10 dB = 0.47% (ceiling 0.5). Rejected first: static
+tanh/tanh^2 branch (H4 13-23 dB short, H2 +3.8 over), bias-through-tanh
+(all orders miss), signed bumps, windowed bumps (see fit notes in chat
+2026-10-11/12).
+
+| Boost | Input | Stage sees | Stage drive (peak) | THD @1 kHz |
+|-------|-------|-----------|---------------------|------------|
+| 1 (+3 dB) | −20 dBFS RMS | +7 dBu RMS | −13.99 dB | 0.0508% |
+| 1 (+3 dB) | −10 dBFS RMS | +17 dBu RMS | −3.99 dB | 0.1904% |
+| 1 (+3 dB) | 0 dBFS RMS | +27 dBu RMS | +6.01 dB | 0.3547% |
+| 5 (+15 dB) | −20 dBFS RMS | +19 dBu RMS | −1.99 dB | 0.1891% |
+| 5 (+15 dB) | −10 dBFS RMS | +29 dBu RMS | +8.01 dB | 0.3978% |
+| 5 (+15 dB) | 0 dBFS RMS | +39 dBu RMS | +18.01 dB | 1.9137% |
+| 10 (+30 dB) | −20 dBFS RMS | +34 dBu RMS | +13.01 dB | 0.7247% |
+| 10 (+30 dB) | −10 dBFS RMS | +44 dBu RMS | +23.01 dB | 5.2508% |
+| 10 (+30 dB) | 0 dBFS RMS | +54 dBu RMS | +33.01 dB | 24.1806% |
+
+Reads: nominal playing (−10 RMS, boost 5) 0.40%; the old operating point
+(+34 dBu) reads 0.72% in RMS terms. The +44/+54 dBu RMS corners leave
+"subtle" territory entirely (5.3%/24% — real grind/saturation, matching what
+the captures show dimed). Hot corners match the v1.2 map (gate relatively
+shut, tanh dominates); low/mid cells run hotter — the gated branch working
+as fitted. H2/H3 run near parity at nominal drive (captures agree); H3
+leads clearly only when hot.
+
+## RECORD (v1.2): hotter color drive (k=0.06, a=1.5e-3) — ADOPTED in v1.2
 
 Fit to four NAM captures' harmonic ladders (spike probe, `tone/v1.2` research).
-The map below (RMS-specified inputs) is the shipped behavior; the peak-grid
-3×3 map further down is the v1.1.x record, kept for history.
+RMS-specified inputs; kept for history.
 
 | Boost | Input | Stage sees | Stage drive (peak) | THD @1 kHz |
 |-------|-------|-----------|---------------------|------------|
@@ -18,12 +49,8 @@ The map below (RMS-specified inputs) is the shipped behavior; the peak-grid
 | 10 (+30 dB) | −10 dBFS RMS | +44 dBu RMS | +23.01 dB | 5.2508% |
 | 10 (+30 dB) | 0 dBFS RMS | +54 dBu RMS | +33.01 dB | 24.1691% |
 
-Reads: nominal playing (−10 RMS, boost 5) 0.27%; the old operating point
-(+34 dBu) reads 0.68% in RMS terms. The +44/+54 dBu RMS corners leave
-"subtle" territory entirely (5.3%/24% — real grind/saturation, matching what
-the captures show dimed). Adopting this supersedes the 0.1%-order THD story
-below (manual figure) in favor of capture matching; H2-dominance flips to H3
-above ~+5 dB stage drive (2.5× H2-led at 0 dB).
+Reads (v1.2): nominal playing (−10 RMS, boost 5) 0.27%; H2-dominance flips
+to H3 above ~+5 dB stage drive (2.5× H2-led at 0 dB).
 
 ## Calibration (fixed rule)
 
@@ -80,9 +107,9 @@ operating point) exceeds 5%, which is expected hard saturation, not a defect.
 
 ## Pinned calibration points (asserts in `tests/ColorStageTest.cpp`)
 
-- Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.0106%, pinned to [0.008%, 0.014%].
-- Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.1637%, pinned to [0.130%, 0.200%].
-- Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.3815%, pinned to [0.300%, 0.500%].
+- Quiet: boost 1 × −20 dBFS → `thdAt(1000, −17)` ≈ 0.028%, pinned to [0.020%, 0.040%].
+- Nominal: boost 5 × −10 dBFS → `thdAt(1000, +5)` ≈ 0.334%, pinned to [0.250%, 0.500%].
+- Hot: boost 10 × −20 dBFS → `thdAt(1000, +10)` ≈ 0.472%, pinned to [0.300%, 0.500%].
 
 ## Honesty note: relationship to the manual's distortion spec
 

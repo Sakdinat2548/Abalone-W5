@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Pre-release tree toward v1.2.0 (tone/v1.2 integration); drop nothing at tag time.
-project(AbaloneW5 VERSION 1.2.1)
+project(AbaloneW5 VERSION 1.3.0)
+
+# Display-only version suffix badge ("-dev", "-nightly"; empty = release).
+# project() VERSION stays numeric (it feeds the VST3 version struct — letters
+# would break hosts); the suffix composes display strings only, e.g.
+# -DABALONEW5_VERSION_SUFFIX=-dev. Nightly CI passes -nightly; releases pass
+# nothing.
+set(ABALONEW5_VERSION_SUFFIX "" CACHE STRING "Version suffix badge; empty = release")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,6 +62,11 @@ add_dsp_test(HighCutTest tests/HighCutTest.cpp)
 add_dsp_test(ColorStageTest tests/ColorStageTest.cpp)
 
 add_dsp_test(ChainTest tests/ChainTest.cpp)
+
+# Docs tool (not a test): real-DSP transfer dump behind docs/dynamics.png.
+# Plain executable, no ctest registration, no NDEBUG games.
+add_executable(DynDump analysis/dyn_dump.cpp)
+target_include_directories(DynDump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -129,6 +141,7 @@ target_compile_definitions(AbaloneW5
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
+        ABALONEW5_VERSION_SUFFIX="${ABALONEW5_VERSION_SUFFIX}"
 )
 
 target_link_libraries(AbaloneW5
@@ -153,6 +166,7 @@ add_executable(ProcessorIOTest tests/ProcessorIOTest.cpp src/PluginProcessor.cpp
 target_include_directories(ProcessorIOTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(ProcessorIOTest PRIVATE JucePlugin_Name="Abalone W5"
     JucePlugin_VersionString="${PROJECT_VERSION}"
+    ABALONEW5_VERSION_SUFFIX="${ABALONEW5_VERSION_SUFFIX}"
     # Same as the plugin target below: no web browser in the test binary, so
     # juce_gui_extra compiles without its gtk/webkit Linux system deps.
     JUCE_WEB_BROWSER=0

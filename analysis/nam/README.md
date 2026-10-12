@@ -23,7 +23,9 @@ Nothing here ships in the plugin; the gated evidence lives in `tests/`.
   `tilt_shipped.png` show shipped chain vs median target.
 - `tiltchain.cpp`, `c6_probe.cpp`: end-to-end chain sweeps (tilt verification,
   C6 prediction).
-  Result: LS 120 Hz +0.7 dB + HS 8 kHz −0.5 dB (residual 0.10 dB).
+  Result (superseded): LS 120 Hz +0.7 dB + HS 8 kHz −0.5 dB (residual 0.10 dB).
+  Shipped instead: LS 75 Hz +0.91 / HS 5441 Hz −0.34 / PK 180 Hz +0.11
+  (engaged-vs-bypass median fit; see src/dsp/ProcessorChain.h).
 - `measure_tone_gain.py`, `alias_probe.cpp` — broadband per-tone gains;
   folded-alias census.
 

@@ -13,6 +13,8 @@ analysis/ir_local/
 analysis/zoom_ref/
 # Belt-and-braces: no WAVs anywhere in the repo (IRs + captures are local-only)
 *.wav
+# Neural captures are licensed third-party binaries too (see ir_local/ rule)
+*.nam
 
 __pycache__/
 # Werner dissertation (large reference PDF, local-only)

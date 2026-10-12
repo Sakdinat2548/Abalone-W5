@@ -36,8 +36,9 @@
 // Anchors all PASS (T1-T4 <= 1.0, T5/T6 <= 2.0); eye low-end green on the
 // strict gates (T1-20Hz, T3/T4-20Hz+convex, T6-slope-vs-T5red delta 0.219
 // vs 1.0 — the Task-22 T6-slope deviation is SUPERSEDED).
-// Poles < 1 at 44.1k + 48k + 96k incl. float32-quantized radii (worst
-// 0.999904 on T4's micro-peak at 48k, stable and deterministic).
+// Poles < 1 at 44.1k + 48k + 96k (radii now double-held at runtime; the
+// recorded float32-quantized worst was 0.999904 on T4's micro-peak at 48k —
+// stable and deterministic either way).
 //
 // Method (optimizer on DIGITAL RBJ responses, joint 48+44.1 kHz quantized
 // objective — one number set out; Ruling 24's fit@48/verify@44.1 is met and
@@ -125,7 +126,9 @@
 //
 // Biquad form: Transposed Direct Form II, RBJ cookbook coefficients with
 // shelf alpha = sin(w0)/(2Q) (Q-parametrized shelf knee, same family as the
-// Python fit prototype, verified bit-consistent). setSampleRate recomputes
+// Python fit prototype, verified bit-consistent). Coefficients and states
+// are double (review 2026-10-12: float32 states cost -51 dB roundoff on
+// T4/T6). setSampleRate recomputes
 // every tone's coefficients, so 44.1k/48k/any-rate give identical dB shapes
 // (rate-invariance test: <=0.1dB at 40Hz-15kHz probes). magnitudeAt evaluates
 // the exact theoretical cascade transfer function in double precision.
@@ -149,22 +152,23 @@ struct ToneBank
         select();
     }
 
-    // Overall per-tone gain (dB): reproduces the approved hardware-fit
-    // curves exactly (T1/T4/T5 10 Hz-anchored to shipped staging,
-    // T6 1 kHz-anchored +2.81 dB per user approval). Level is staging,
-    // not oracle data — shapes carry the hardware truth.
+    // Per-tone staging gain (dB): pink-matched broadband in≈out.
     static float toneGainDb (int tone)
     {
         switch (tone)
         {
         case 1:
-            return -6.8239f;
+            return -3.9308f;
+        case 2:
+            return -4.0374f;
+        case 3:
+            return 4.0325f;
         case 4:
-            return -0.7323f;
+            return 0.4536f;
         case 5:
-            return 2.4954f;
+            return 1.8810f;
         case 6:
-            return 2.81f;
+            return 4.5376f;
         default:
             break;
         }
@@ -180,7 +184,7 @@ struct ToneBank
             tone = 6;
 
         tone_ = tone;
-        gainLin_ = static_cast<float> (std::pow (10.0, toneGainDb (tone_) / 20.0));
+        gainLin_ = std::pow (10.0, static_cast<double> (toneGainDb (tone_)) / 20.0);
         select();
     }
 
@@ -189,20 +193,25 @@ struct ToneBank
         if (tone_ == 0)
             return x;
 
-        float y = x;
+        // Double states/accumulators: float32 roundoff vs a double cascade
+        // measured -51 dB rel RMS on T4/T6 white noise (review 2026-10-12) —
+        // inside the Color stage's own 0.3% THD neighborhood, so the EQ
+        // burned audibility budget for nothing. Cost is trivial at <=6
+        // sections; the in/out contract stays float.
+        double y = static_cast<double> (x);
         for (int s = 0; s < numSections (tone_); ++s)
         {
             Coeffs& c = active_[s];
-            const float out = c.b0 * y + c.z1;
+            const double out = c.b0 * y + c.z1;
             c.z1 = c.b1 * y - c.a1 * out + c.z2;
             c.z2 = c.b2 * y - c.a2 * out;
-            if (std::fabs (c.z1) < 1.0e-15f)
-                c.z1 = 0.0f;
-            if (std::fabs (c.z2) < 1.0e-15f)
-                c.z2 = 0.0f;
+            if (std::fabs (c.z1) < 1.0e-15)
+                c.z1 = 0.0;
+            if (std::fabs (c.z2) < 1.0e-15)
+                c.z2 = 0.0;
             y = out;
         }
-        return y * gainLin_;
+        return static_cast<float> (y * gainLin_);
     }
 
     // Exact theoretical cascade response of the selected tone in dB.
@@ -257,13 +266,13 @@ private:
 
     struct Coeffs
     {
-        float b0 = 1.0f;
-        float b1 = 0.0f;
-        float b2 = 0.0f;
-        float a1 = 0.0f;
-        float a2 = 0.0f;
-        float z1 = 0.0f;
-        float z2 = 0.0f;
+        double b0 = 1.0;
+        double b1 = 0.0;
+        double b2 = 0.0;
+        double a1 = 0.0;
+        double a2 = 0.0;
+        double z1 = 0.0;
+        double z2 = 0.0;
     };
 
     static Params params (int tone, int stage)
@@ -272,51 +281,51 @@ private:
         switch (tone * 10 + stage)
         {
         case 10:
-            return {Type::HighPass, 3.8136, 0.46776, 0.0};
+            return {Type::HighPass, 5.827048, 0.61509, 0.0};
         case 11:
-            return {Type::Peak, 19.966, 0.27101, 6.0138};
+            return {Type::Peak, 17.809303, 0.510313, 2.386098};
         case 12:
-            return {Type::Peak, 919.3987, 0.16448, -9.7137};
+            return {Type::Peak, 576.308198, 0.238087, -8.7206};
         case 13:
-            return {Type::Peak, 1927.2658, 0.17827, 9.1515};
+            return {Type::Peak, 316.362377, 0.156875, 8.244914};
         case 14:
-            return {Type::HighShelf, 8986.3445, 0.48574, 8.1929};
+            return {Type::HighShelf, 4282.69202, 0.472141, 7.93173};
         case 15:
-            return {Type::Peak, 135.9733, 0.26901, 5.335};
+            return {Type::Peak, 35.227056, 0.495389, 2.057284};
         case 20:
-            return {Type::Peak, 644.5752, 0.31635, -9.5942};
+            return {Type::Peak, 729.990772, 0.399998, -7.0};
         case 21:
-            return {Type::Peak, 715.0513, 1.6408, -12.8167};
+            return {Type::Peak, 678.226926, 1.3, -11.5};
         case 22:
-            return {Type::LowShelf, 12.4907, 0.91201, -1.5117};
+            return {Type::LowShelf, 5.0, 1.2, 9.375711};
         case 23:
-            return {Type::Peak, 34.9406, 0.50216, 1.5057};
+            return {Type::Peak, 54.514871, 0.280132, 5.812911};
         case 24:
-            return {Type::Peak, 3159.9499, 0.61821, -0.7183};
+            return {Type::Peak, 1813.7874, 0.503095, -2.166755};
         case 25:
-            return {Type::HighShelf, 610.9243, 1.6477, 1.3745};
+            return {Type::HighShelf, 651.611076, 0.490301, 8.389202};
         case 30:
-            return {Type::Peak, 1139.8615, 0.15462, -3.7423};
+            return {Type::Peak, 849.884661, 0.155052, -10.732894};
         case 31:
-            return {Type::Peak, 18852.0009, 0.17095, 0.4067};
+            return {Type::Peak, 14243.1507, 0.15, -2.115138};
         case 32:
-            return {Type::LowShelf, 12.9996, 0.78994, -3.6748};
+            return {Type::LowShelf, 10.056113, 0.88107, -7.999959};
         case 33:
-            return {Type::Peak, 40.4319, 0.64122, 0.8181};
+            return {Type::Peak, 13.767599, 0.664759, -4.67115};
         case 34:
-            return {Type::Peak, 677.6882, 1.72978, -0.2364};
+            return {Type::Peak, 979.030698, 0.193848, 5.332838};
         case 40:
-            return {Type::LowShelf, 23.3315, 0.66438, -2.1291};
+            return {Type::LowShelf, 28.464636, 0.627733, -3.408831};
         case 41:
             return {Type::Peak, 16931.4281, 0.23498, -0.9418};
         case 42:
-            return {Type::HighShelf, 12.6487, 1.02216, 2.0772};
+            return {Type::HighShelf, 16.822681, 1.719369, 0.739329};
         case 43:
-            return {Type::Peak, 7500.0, 0.69283, -4.128};
+            return {Type::Peak, 7342.94425, 0.602455, -4.263846};
         case 44:
             return {Type::HighShelf, 20928.6602, 0.42978, 1.3207};
         case 45:
-            return {Type::Peak, 9.9251, 3.37706, -0.4468};
+            return {Type::Peak, 10.81717, 4.534375, -1.624585};
         case 50:
             return {Type::LowShelf, 10.7876, 0.53104, -5.696};
         case 51:
@@ -328,17 +337,17 @@ private:
         case 54:
             return {Type::Peak, 9.3407, 1.41276, -1.7296};
         case 60:
-            return {Type::LowShelf, 19.5861, 0.84932, -3.652};
+            return {Type::LowShelf, 14.857262, 0.58017, -5.663124};
         case 61:
-            return {Type::LowShelf, 51.7034, 0.42067, -19.1111};
+            return {Type::LowShelf, 55.137982, 0.426738, -21.94624};
         case 62:
-            return {Type::HighShelf, 292.1971, 0.94755, -0.1584};
+            return {Type::HighShelf, 138.753866, 0.477581, -1.631875};
         case 63:
-            return {Type::HighShelf, 9158.3184, 0.54857, -6.8765};
+            return {Type::HighShelf, 10751.5081, 0.477924, -8.041181};
         case 64:
-            return {Type::Peak, 18976.0169, 0.8665, -0.9109};
+            return {Type::Peak, 21998.938, 0.537264, -0.739306};
         case 65:
-            return {Type::Peak, 9.3951, 4.00708, -1.8879};
+            return {Type::Peak, 10.033716, 2.32244, -0.90871};
         default:
             break;
         }
@@ -411,13 +420,13 @@ private:
             break;
         }
 
-        c.b0 = static_cast<float> (b0 / a0);
-        c.b1 = static_cast<float> (b1 / a0);
-        c.b2 = static_cast<float> (b2 / a0);
-        c.a1 = static_cast<float> (a1 / a0);
-        c.a2 = static_cast<float> (a2 / a0);
-        c.z1 = 0.0f;
-        c.z2 = 0.0f;
+        c.b0 = b0 / a0;
+        c.b1 = b1 / a0;
+        c.b2 = b2 / a0;
+        c.a1 = a1 / a0;
+        c.a2 = a2 / a0;
+        c.z1 = 0.0;
+        c.z2 = 0.0;
     }
 
     // Atomically select the active coefficient set (no torn state).
@@ -427,8 +436,8 @@ private:
         for (int s = 0; s < n; ++s)
         {
             active_[s] = bank_[tone_ < 1 ? 1 : tone_][s];
-            active_[s].z1 = 0.0f;
-            active_[s].z2 = 0.0f;
+            active_[s].z1 = 0.0;
+            active_[s].z2 = 0.0;
         }
     }
 
@@ -456,7 +465,7 @@ private:
     }
 
     int tone_ = 0;
-    float gainLin_ = 1.0f;
+    double gainLin_ = 1.0;
     double sampleRate_ = 48000.0;
     Coeffs bank_[7][6];
     Coeffs active_[6];
