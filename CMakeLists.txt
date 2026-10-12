@@ -63,6 +63,11 @@ add_dsp_test(ColorStageTest tests/ColorStageTest.cpp)
 
 add_dsp_test(ChainTest tests/ChainTest.cpp)
 
+# Docs tool (not a test): real-DSP transfer dump behind docs/dynamics.png.
+# Plain executable, no ctest registration, no NDEBUG games.
+add_executable(DynDump analysis/dyn_dump.cpp)
+target_include_directories(DynDump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 include(FetchContent)
 FetchContent_Declare(
     JUCE
