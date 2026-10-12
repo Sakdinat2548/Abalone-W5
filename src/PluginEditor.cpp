@@ -112,7 +112,10 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
 // The anchor is only revisited on release.
 void AbaloneW5AudioProcessorEditor::startUnboundedDrag ()
 {
-    auto& source = juce::Desktop::getInstance().getMainMouseSource();
+    // By value: getMainMouseSource() returns a lightweight handle (rvalue),
+    // and GCC/Clang reject binding it to `auto&` (MSVC accepts as an
+    // extension — which is how this ever compiled locally).
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
     dragAnchor_ = source.getScreenPosition();
     dragging_ = true;
     source.enableUnboundedMouseMovement (true, false);
@@ -121,7 +124,7 @@ void AbaloneW5AudioProcessorEditor::startUnboundedDrag ()
 void AbaloneW5AudioProcessorEditor::endUnboundedDrag ()
 {
     dragging_ = false;
-    auto& source = juce::Desktop::getInstance().getMainMouseSource();
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
     source.enableUnboundedMouseMovement (false);
     source.setScreenPosition (dragAnchor_);
 }
