@@ -278,6 +278,33 @@ void checkHostBypass ()
     }
 
     {
+        // Unmapped extra channels (>2, unreachable via our mono/stereo
+        // layouts but callable headless): cleared, never leaked — same
+        // contract as every other path.
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+
+        juce::AudioBuffer<float> buffer (3, kBlock);
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 100.0, 0.4f);
+        fillDc (buffer, 2, 0.9f); // garbage: no input data lives here.
+
+        static float snapshot0[kBlock];
+        static float snapshot1[kBlock];
+        std::memcpy (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0));
+        std::memcpy (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1));
+
+        juce::MidiBuffer midi;
+        proc.processBlockBypassed (buffer, midi);
+
+        CHECK (std::memcmp (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0)) == 0);
+        CHECK (std::memcmp (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1)) == 0);
+        CHECK (peakOf (buffer.getReadPointer (2), kBlock) == 0.0f);
+        std::puts ("bypass extra channel: cleared");
+    }
+
+    {
         AbaloneW5AudioProcessor proc;
         CHECK (setLayout (proc, juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo()));
         proc.prepareToPlay (kSampleRate, kBlock);

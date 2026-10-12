@@ -476,6 +476,11 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
 
     if (monoDuplicate)
         duplicateMonoToOutputs (buffer, numSamples);
+    else
+        // Unmapped extra channels carry no input data (same rule as every
+        // other path): clear, never leak stale buffer content to the host.
+        for (int ch = nCh; ch < numChannels; ++ch)
+            buffer.clear (ch, 0, numSamples);
 }
 
 float AbaloneW5AudioProcessor::getSignalPeak ()
