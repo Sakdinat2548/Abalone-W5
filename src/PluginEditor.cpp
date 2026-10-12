@@ -106,6 +106,24 @@ void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce:
 
 } // namespace
 
+// Unbounded-drag knobs: absolute mapping (the original feel — position maps
+// straight to value, detents exact), with the OS cursor unhooked from the
+// screen edge for the drag duration so long sweeps never run out of room.
+// The anchor is only revisited on release.
+void AbaloneW5AudioProcessorEditor::startUnboundedDrag ()
+{
+    auto& source = juce::Desktop::getInstance().getMainMouseSource();
+    dragAnchor_ = source.getScreenPosition();
+    source.enableUnboundedMouseMovement (true, false);
+}
+
+void AbaloneW5AudioProcessorEditor::endUnboundedDrag ()
+{
+    auto& source = juce::Desktop::getInstance().getMainMouseSource();
+    source.enableUnboundedMouseMovement (false);
+    source.setScreenPosition (dragAnchor_);
+}
+
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)
     // Bold system sans at plate-caption presence: baked captions are bold
     // sans ~7px on screen; UI readouts render one step larger for legibility
@@ -182,6 +200,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     boostSlider.valueFromTextFunction = [] (const juce::String& t)
     { return static_cast<double> (juce::jlimit (0, 9, t.getIntValue() - 1)); };
     boostSlider.setLookAndFeel (&boostDialLookAndFeel);
+    boostSlider.onDragStart = [this] { startUnboundedDrag(); };
+    boostSlider.onDragEnd = [this] { endUnboundedDrag(); };
     addAndMakeVisible (boostSlider);
 
     // Manual tone knob, 1-6 only, NOT attached (see header note). Turning it
@@ -195,11 +215,13 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     {
         if (auto* param = processor.getApvts().getParameter ("tone"))
             param->beginChangeGesture();
+        startUnboundedDrag();
     };
     toneSlider.onDragEnd = [this]
     {
         if (auto* param = processor.getApvts().getParameter ("tone"))
             param->endChangeGesture();
+        endUnboundedDrag();
     };
     toneSlider.onValueChange = [this]
     {
@@ -220,7 +242,9 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     {
         if (trimReadout.isBeingEdited())
             trimReadout.hideEditor (true);
+        startUnboundedDrag();
     };
+    outputSlider.onDragEnd = [this] { endUnboundedDrag(); };
     addAndMakeVisible (outputSlider);
 
     // OS factor mini-knob in the trim art family (tone body + trim
@@ -231,6 +255,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     osSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     osSlider.setRange (0.0, 2.0, 1.0);
     osSlider.setLookAndFeel (&trimDialLookAndFeel);
+    osSlider.onDragStart = [this] { startUnboundedDrag(); };
+    osSlider.onDragEnd = [this] { endUnboundedDrag(); };
     addAndMakeVisible (osSlider);
 
     // In-code dB readout below the trim knob, following the output param
@@ -384,6 +410,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
 AbaloneW5AudioProcessorEditor::~AbaloneW5AudioProcessorEditor ()
 {
     stopTimer();
+    // A hide/close mid-drag never delivers mouseUp: leave nothing enabled.
+    juce::Desktop::getInstance().getMainMouseSource().enableUnboundedMouseMovement (false);
     boostSlider.setLookAndFeel (nullptr);
     toneSlider.setLookAndFeel (nullptr);
     outputSlider.setLookAndFeel (nullptr);

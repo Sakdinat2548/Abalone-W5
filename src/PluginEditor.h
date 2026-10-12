@@ -247,5 +247,13 @@ private:
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).
 
+    // Unbounded-drag knobs: absolute drag mapping (the original feel —
+    // position maps straight to value, detents exact), with the OS cursor
+    // unhooked from the screen edge for the drag duration so long sweeps
+    // never run out of room. The anchor is only revisited on release.
+    void startUnboundedDrag ();
+    void endUnboundedDrag ();
+    juce::Point<float> dragAnchor_;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)
 };
