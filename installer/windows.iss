@@ -39,9 +39,10 @@ LicenseFile=..\LICENSE
 WizardStyle=modern
 UninstallDisplayName=Abalone W5 {#AppVersion}
 ; A running DAW locks the .vst3: offer to close it instead of failing on
-; the locked file. Never auto-restart anything (default) — a DAW may hold
-; unsaved work.
+; the locked file. RestartApplications=no is explicit (Inno 6 defaults it
+; to yes): a closed DAW must NEVER auto-restart — it may hold unsaved work.
 CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "..\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\*"; DestDir: "{commoncf}\VST3\Abalone-W5.vst3"; Flags: recursesubdirs ignoreversion

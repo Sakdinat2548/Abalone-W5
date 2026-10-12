@@ -241,16 +241,18 @@ jobs:
           # default branch's HEAD.
           target_commitish: ${{ needs.guard.outputs.sha }}
           files: Abalone-W5-nightly-${{ matrix.tag }}.zip
+          fail_on_unmatched_files: true
 
       # Windows installer AFTER the zip upload: installer teething must
-      # never cost the night its zips (a red leg blocks the tag job).
-      # Also proves installer/windows.iss still compiles, every night.
+      # never cost the night its zips — but a failed installer still reds
+      # the leg, so the tag waits for a green night (a red leg must never
+      # move the tag). Also proves installer/windows.iss still compiles.
       - name: Build Windows installer (Inno Setup)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y }
-          $m = Select-String -Path CMakeLists.txt -Pattern '^project\(AbaloneW5 VERSION ([0-9.]+)'
+          $m = Select-String -CaseSensitive -Path CMakeLists.txt -Pattern '^project\(AbaloneW5 VERSION ([0-9.]+)'
           if (-not $m) { throw "CMakeLists.txt project() line not found" }
           $projVer = $m.Matches[0].Groups[1].Value
           iscc /O"." /DAppVersion="$projVer-nightly" /DOutFile="Abalone-W5-nightly-windows-setup" installer/windows.iss

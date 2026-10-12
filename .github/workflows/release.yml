@@ -22,6 +22,8 @@
 # redist is needed. The tag/CMake guard lives on the Windows leg only (the
 # installer label is the one place the version string matters): a mismatched
 # tag ships zips without an installer — check the red leg before announcing.
+# The v* trigger stays broad on purpose (narrow globs risk silently matching
+# nothing): the guard above is what rejects malformed tags, loudly.
 # No AAX either (Avid SDK + PACE signing required, and Pro Tools refuses
 # unsigned builds — ruled out 2026-10-08, VST3+AU covers the hosts).
 name: Release
@@ -213,7 +215,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y }
-          $m = Select-String -Path CMakeLists.txt -Pattern '^project\(AbaloneW5 VERSION ([0-9.]+)'
+          $m = Select-String -CaseSensitive -Path CMakeLists.txt -Pattern '^project\(AbaloneW5 VERSION ([0-9.]+)'
           if (-not $m) { throw "CMakeLists.txt project() line not found" }
           $projVer = $m.Matches[0].Groups[1].Value
           $tagVer = $env:TAG_NAME -replace '^v', ''
@@ -259,6 +261,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
+          fail_on_unmatched_files: true
 
       - name: Upload Windows installer
         if: runner.os == 'Windows'
