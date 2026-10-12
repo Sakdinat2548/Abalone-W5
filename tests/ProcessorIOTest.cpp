@@ -506,6 +506,46 @@ void checkBypassOsFlipNoClick ()
     CHECK (worst < 0.06f);
 }
 
+// (e4) No meter swell on toggle-off: with a steady sine the fade must be
+// monotonic wet -> dry. Equal-power weights sum coherent amplitudes
+// mid-fade (sqrt(1+R^2): +1.7 dB at Boost 1) and the peak meter visibly
+// jumps; linear weights cannot exceed the starting peak (2% tolerance for
+// state transients).
+void checkBypassToggleNoSwell ()
+{
+    AbaloneW5AudioProcessor proc;
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged, boost step 1 (+3dB).
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    int phase0 = 0;
+    int phase1 = 0;
+    for (int b = 0; b < 20; ++b)
+    {
+        fillSineCont (buffer, 0, 1000.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 1000.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    fillSineCont (buffer, 0, 1000.0, 0.5f, phase0);
+    fillSineCont (buffer, 1, 1000.0, 0.5f, phase1);
+    proc.processBlock (buffer, midi);
+    const float engagedPeak = peakOf (buffer.getReadPointer (0), kBlock);
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    for (int b = 0; b < 4; ++b)
+    {
+        fillSineCont (buffer, 0, 1000.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 1000.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+        const float p = peakOf (buffer.getReadPointer (0), kBlock);
+        if (p > engagedPeak * 1.02f)
+        {
+            std::printf ("toggle swell: block %d peak %.5f vs engaged %.5f\n", b, p, engagedPeak);
+            CHECK (false);
+        }
+    }
+    std::printf ("toggle-off swell: engaged %.5f, no block above x1.02\n", engagedPeak);
+}
+
 // (f) ACTIVE toggle must not click: settle engaged on a continuous 220Hz
 // sine, flip off mid-stream and bound every sample-to-sample jump (block
 // boundary included), then flip back on and bound again. A 5ms equal-power
@@ -728,6 +768,7 @@ int main ()
     checkActiveOffPassthrough();
     checkBypassLatencyAligned();
     checkBypassOsFlipNoClick();
+    checkBypassToggleNoSwell();
     checkActiveToggleNoClick();
     checkBypassSync();
     checkTrimRangeAndDefault();
