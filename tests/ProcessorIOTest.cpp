@@ -719,6 +719,47 @@ void checkTrimRangeAndDefault ()
     }
 }
 
+// (h) No stale LED after toggle-off: loud while engaged, then bypassed
+// into silence. Frozen chains still hold the engaged-era peak, but the
+// SIGNAL tap must not count it (pre-fix the first read after the toggle
+// returned ~0.7 and flashed the LED once, even with no input at all).
+void checkLedNoStaleAfterBypass ()
+{
+    AbaloneW5AudioProcessor proc;
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged, boost step 1 (+3dB).
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 4; ++b)
+    {
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        proc.processBlock (buffer, midi);
+    }
+    CHECK (proc.getSignalPeak() > 0.5f); // engaged tap is live.
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    for (int b = 0; b < 2; ++b)
+    {
+        buffer.clear();                   // fresh silence every block: in-place buffers carry
+                                          // the previous block's output as the next input.
+        proc.processBlock (buffer, midi); // bypassed silence.
+    }
+    const float peak = proc.getSignalPeak();
+    std::printf ("led after bypass-into-silence: %.4f (expect 0)\n", peak);
+    CHECK (peak == 0.0f);
+    // Dark in bypass even with loud input (user ruling: the LED follows the
+    // effect, not the thru).
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        proc.processBlock (buffer, midi);
+    }
+    const float darkPeak = proc.getSignalPeak();
+    std::printf ("led bypassed-with-input: %.4f (expect 0)\n", darkPeak);
+    CHECK (darkPeak == 0.0f);
+}
+
 int main ()
 {
     checkMonoInStereoOut();
@@ -731,6 +772,7 @@ int main ()
     checkActiveToggleNoClick();
     checkBypassSync();
     checkTrimRangeAndDefault();
+    checkLedNoStaleAfterBypass();
 
     if (failures == 0)
     {

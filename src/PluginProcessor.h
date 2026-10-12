@@ -64,8 +64,9 @@ public:
     // Max LED peak since the last call (resets on read). Normal operation:
     // the pre-trim (post-HighCut, pre-trim-gain) chain peak — the hardware
     // has no trim so its LED can't see one. Bypassed (ACTIVE off or host
-    // bypass): the input peak, since passthrough has no output stage to
-    // read. The editor LED timer polls this on the message thread; the
+    // bypass): dark by user ruling — the LED follows the effect, not the
+    // thru (the lights-off veil already dims the panel). The editor LED
+    // timer polls this on the message thread; the
     // atomics are lock-free.
     float getSignalPeak ();
 
