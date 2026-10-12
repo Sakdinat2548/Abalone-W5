@@ -29,6 +29,9 @@ AppVersion={#AppVersion}
 AppPublisher=Sakdinat2548
 AppPublisherURL=https://github.com/Sakdinat2548/Abalone-W5
 DefaultDirName={commoncf}\VST3
+; The Ready page hides the destination unless told otherwise — average
+; joes should see where it goes right before Install.
+AlwaysShowDirOnReadyPage=yes
 ; The destination is a SHARED scan folder that always exists on DAW
 ; machines — never warn about that (the warning reads as an error to
 ; average joes, and merging in is the entire point).
