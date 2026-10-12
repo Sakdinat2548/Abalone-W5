@@ -35,8 +35,10 @@
 //   Total THD = sqrt(0.237^2 + 0.297^2) = 0.38%: H2/H3 = 0.80x (H3-led at this
 //   drive; H2 dominates 2.5x at 0dB — Class-A character where it lives,
 //   saturation takes over when driven, matching captures).
-//   At 0dB (A = 1): H2 = 0.075%, H3 = 0.030% -> 0.081%. Verified numerically
-//   (double-precision oracle) before baking the constants.
+//   At 0dB (A = 1): core H2 = 0.075%, H3 = 0.030% -> 0.081% (double-precision
+//   oracle, baked constants). Full stage measures 0.20%: the gated even bump
+//   dominates H2 above ~-36 dB by fit, so the core number no longer describes
+//   the stage at 0 dB — both numbers are kept, each labeled.
 //
 // Level convention: levelDb in thdAt is peak dB relative to peak amplitude 1.0,
 // i.e. amp = 10^(levelDb/20). +10dB -> 3.1623 peak (post-Boost operating level).
@@ -56,7 +58,7 @@
 //   is DC-coupled anyway; downstream Trim/HighCut pass it unchanged.
 // - Harmonics decay fast past H8 (Gaussian tails); the gated branch adds
 //   H3-H8 at mid drive only. Aliasing is measured, not assumed:
-//   checkAliasCleanAt (1/3/5/8 kHz) requires non-harmonic content above
+//   checkAliasCleanAt (5/7/11 kHz) requires non-harmonic content above
 //   0.9*Nyquist < -80 dB rel H1 at 1x. If a future fit breaks it, the stage
 //   rides the existing 2x/4x OS path (exact 0/40/60 latency untouched).
 //
@@ -97,8 +99,9 @@ struct ColorStage
     // operating point (gated in ColorStageTest). Input clamps at +-3 (the
     // fraction folds back past ~|6|: 0.997 at 6, 0.34 at 60 — saturation
     // must saturate, never fold); the clamp value computes normally, so
-    // hot inputs clip instead of un-clipping. Chain peaks reach |z| ~2.6
-    // at 0 dBFS/Boost 10 through mid-forward tones, inside the clamp.
+    // hot inputs clip instead of un-clipping. Chain peaks touch the clamp
+    // on T1/T2 (|z| 2.98-3.12 with current staging) — that IS the intended
+    // saturation, effect negligible by measurement, never a fold.
     static float fastTanh (float x)
     {
         if (x > 3.0f)
@@ -113,6 +116,10 @@ struct ColorStage
         t = 1.0f + x2 / t;
         return x / t;
     }
+
+    // Test tap for the chain's re-prepare timing gate (see
+    // ProcessorChain::colorEnvReleaseCoeff).
+    float envReleaseCoeff () const { return kEnvRel_; }
 
     float processSample (float x)
     {
@@ -151,7 +158,14 @@ struct ColorStage
         const float ue = x / kEvenW_;
         const float branch =
             gate * (kOddC_ * uo * uo * uo * std::exp (-uo * uo) + kEvenC_ * ue * ue * std::exp (-ue * ue));
-        return fastTanh (kDrive_ * x) / norm_ + kEven_ * x * x + branch;
+        // Quadratic cap (review 2026-10-12, option b): xe clamps at +-31.6
+        // (0 dBFS through Boost 10 — the documented max, fully pinned by
+        // tests). Above it the term holds 1.5 instead of growing without
+        // bound (3.75 at x = 50, i.e. H2 ~= -19 dB hot). The kink sits where
+        // tanh already compresses and fires on overs only; the main path is
+        // deliberately NOT clamped (smooth tanh saturation beats hard clip).
+        const float xe = (x > 31.6f) ? 31.6f : (x < -31.6f) ? -31.6f : x;
+        return fastTanh (kDrive_ * x) / norm_ + kEven_ * xe * xe + branch;
     }
 
     // Measurement helper (not part of the audio path): drives the stage with a
