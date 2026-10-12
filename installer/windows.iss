@@ -7,11 +7,12 @@
 ;
 ; Unsigned (free-plugin standard: SmartScreen warns on first run). Static
 ; MSVC runtime (/MT, see AGENTS.md) so no VC redist is bundled or needed.
-; VST3 lives at {commoncf}\VST3 by spec — no directory page, average-joe-proof.
-; The uninstaller lives under Program Files (NOT loose in the shared VST3
-; folder — that pattern collides across vendors' unins000.* and drags
-; shared-scan-folder weirdness into every VST3). DAWs only scan *.vst3
-; dirs, so both locations are inert to them.
+; VST3 lives at {commoncf}\VST3 by spec (Steinberg: "must comply") — that is
+; the default below. The folder page stays visible anyway (industry
+; standard: Terminal, HISE, KVR templates all show it): Reaper/FL users
+; with custom scan folders can point elsewhere, everyone else clicks Next.
+; The uninstaller always lives under Program Files regardless of the VST3
+; choice (UninstallFilesDir), never loose in the shared scan folder.
 ; Signed one day: add SignTool=signtool below and pass
 ; /Ssigntool="signtool.exe sign ..." to iscc in CI.
 #ifndef AppVersion
@@ -27,8 +28,8 @@ AppName=Abalone W5
 AppVersion={#AppVersion}
 AppPublisher=Sakdinat2548
 AppPublisherURL=https://github.com/Sakdinat2548/Abalone-W5
-DefaultDirName={autopf}\Abalone W5
-DisableDirPage=yes
+DefaultDirName={commoncf}\VST3
+UninstallFilesDir={autopf}\Abalone W5
 OutputBaseFilename={#OutFile}
 Compression=lzma2/max
 SolidCompression=yes
@@ -36,6 +37,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 LicenseFile=..\LICENSE
+InfoBeforeFile=install-notes.txt
 WizardStyle=modern
 UninstallDisplayName=Abalone W5 {#AppVersion}
 ; A running DAW locks the .vst3: offer to close it instead of failing on
@@ -45,7 +47,7 @@ CloseApplications=yes
 RestartApplications=no
 
 [Files]
-Source: "..\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\*"; DestDir: "{commoncf}\VST3\Abalone-W5.vst3"; Flags: recursesubdirs ignoreversion
+Source: "..\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\*"; DestDir: "{app}\Abalone-W5.vst3"; Flags: recursesubdirs ignoreversion
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{commoncf}\VST3\Abalone-W5.vst3"
+Type: filesandordirs; Name: "{app}\Abalone-W5.vst3"

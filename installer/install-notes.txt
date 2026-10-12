@@ -1,0 +1,15 @@
+Abalone W5 — where it installs
+
+The VST3 plugin defaults to the one place every DAW scans:
+
+  C:\Program Files\Common Files\VST3\Abalone-W5.vst3
+
+Leave it unless your DAW scans a custom folder (Reaper, FL Studio) —
+then point the folder page there and rescan plugins in the DAW.
+
+The uninstaller entry lives in Add/Remove Programs (its files sit
+under C:\Program Files\Abalone W5, away from the shared scan folder).
+
+Close your DAW before installing or uninstalling — a running host may
+hold the old plugin file open, and the installer will ask you to close
+it and try again.
