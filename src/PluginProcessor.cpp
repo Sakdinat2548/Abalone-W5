@@ -489,14 +489,23 @@ float AbaloneW5AudioProcessor::getSignalPeak ()
     // pre-trim chain peak. The legacy post-trim tracker is drained (not
     // used) so no stale maximum survives across reads.
     float peak = bypassPeak_.exchange (0.0f, std::memory_order_relaxed);
+    // Frozen chains' peaks are history, not signal: drain them as always
+    // (reset-on-read) but never COUNT them while bypassed — otherwise the
+    // LED flashes once on stale engaged-era level after every toggle off,
+    // even into silence.
+    const bool engaged =
+        apvts.getRawParameterValue ("active")->load() > 0.5f && apvts.getRawParameterValue ("bypass")->load() <= 0.5f;
     for (auto& chain : chains)
     {
         static_cast<void> (chain.getLastPeak());
         const float p = chain.getLastPreTrimPeak();
-        if (p > peak)
+        if (engaged && p > peak)
             peak = p;
     }
-    return peak;
+    // Dark in bypass by user ruling: the LED follows the effect, not the
+    // thru (the lights-off veil already dims the panel). Everything is
+    // still drained above, so re-engage never inherits a stale flash.
+    return engaged ? peak : 0.0f;
 }
 
 juce::AudioProcessorEditor* AbaloneW5AudioProcessor::createEditor ()
