@@ -295,8 +295,18 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 bypassMix_ = juce::jmin (bypassTarget, bypassMix_ + fadeStep);
             else if (bypassMix_ > bypassTarget)
                 bypassMix_ = juce::jmax (bypassTarget, bypassMix_ - fadeStep);
-            const float dryW = std::sin (halfPi * bypassMix_);
-            const float wetW = std::cos (halfPi * bypassMix_);
+            // Linear (equal-gain) weights, NOT equal-power: the fade mixes dry
+            // with an AMPLIFIED wet (boost), and on coherent material (sine,
+            // bass) equal-power sums amplitudes mid-fade — out(m) peaks at
+            // sqrt(1+R^2), i.e. +1.7 dB for R = 1.46 at Boost 1. The peak
+            // meter visibly jumps although nothing clicks. Linear is
+            // monotonic from wet to dry for coherent signals, so no swell;
+            // its cost (-3 dB power dip on transient toggles) hides inside
+            // the 5 ms switch. Tone/OS blends stay equal-power (two live
+            // paths at matched loudness — the correct domain for it), as
+            // does the dry-tap blend below (same dry at two taps).
+            const float dryW = bypassMix_;
+            const float wetW = 1.0f - bypassMix_;
             // Dry-blend clock: one tap-step per dry sample while armed.
             float tapNewW = 0.0f;
             float tapOldW = 1.0f;
