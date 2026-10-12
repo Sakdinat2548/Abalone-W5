@@ -529,6 +529,22 @@ void checkNanRecovery ()
     std::puts ("NaN/Inf in: silence out, finite forever after");
 }
 
+void checkClampedQuadratic ()
+{
+    // Option (b), review 2026-10-12: the x^2 term clamps its argument at
+    // +-31.6 (0 dBFS through Boost 10). x = +-50 stays finite and bounded:
+    // the quadratic holds 1.5 instead of 3.75 (pre-fix total ~20.5).
+    ColorStage stage;
+    stage.setEnabled (true);
+    for (int n = 0; n < 48000; ++n)
+        stage.processSample (15.0f); // saturate the gate open first.
+    const float yHot = stage.processSample (50.0f);
+    const float yCold = stage.processSample (-50.0f);
+    std::printf ("capped quad: y(+50) %.4f y(-50) %.4f (expect |.| < 19)\n", yHot, yCold);
+    assert (std::isfinite (yHot) && std::isfinite (yCold));
+    assert (std::fabs (yHot) < 19.0f && std::fabs (yCold) < 19.0f);
+}
+
 } // namespace
 
 int main ()
@@ -544,6 +560,7 @@ int main ()
     checkCalibratedLevelMap();
     checkFastTanhAccuracy();
     checkFastTanhSaturates();
+    checkClampedQuadratic();
     checkHigherHarmonicEnvelope();
     checkH2H3Invariant();
     checkSmallSignalGain();

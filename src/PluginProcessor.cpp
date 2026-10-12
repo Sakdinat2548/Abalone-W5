@@ -135,10 +135,14 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
     // re-prepare; the switch path in processBlock covers factor changes).
     lastReportedLatency_ = chains[0].getLatencySamples();
     setLatencySamples (lastReportedLatency_);
-    // Dry-alignment history is meaningless across rates/prepares.
+    // Dry-alignment history is meaningless across rates/prepares. The tap
+    // adopts the pushed factor directly (hosts compensate from block one).
     for (auto& line : dryDelay_)
         line.fill (0.0f);
     dryPos_ = {0, 0};
+    dryLatency_ = chains[0].getLatencySamples();
+    dryBlending_ = false;
+    dryBlendLen_ = juce::jmax (1, static_cast<int> (0.005 * preparedSampleRate_));
 }
 
 void AbaloneW5AudioProcessor::releaseResources () {}
@@ -215,12 +219,11 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (bypassTarget >= 1.0f)
         {
             trackBypassPeak (buffer, monoDuplicate ? 1 : activeChannels, numSamples);
-            // Latency-aligned dry: same FIR group delay as the engaged path
-            // (frozen while bypassed — chains are not re-pushed here, so the
-            // delay matches the last reported value by construction).
+            // Latency-aligned dry on the adopted tap (frozen while bypassed —
+            // chains are not re-pushed here, so the tap matches the last
+            // reported value by construction).
             const int nCh = monoDuplicate ? 1 : activeChannels;
-            const int dryLatency = chains[0].getLatencySamples();
-            if (dryLatency > 0)
+            if (dryLatency_ > 0)
             {
                 for (int ch = 0; ch < nCh; ++ch)
                 {
@@ -228,9 +231,22 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     for (int i = 0; i < numSamples; ++i)
                     {
                         const float x = data[i];
-                        data[i] = peekDry (ch, dryLatency);
+                        data[i] = peekDry (ch, dryLatency_);
                         pushDry (ch, x);
                     }
+                }
+            }
+            else
+            {
+                // 1x: passthrough stays bit-exact, but the lines must still
+                // track the input — an OS flip landing mid-bypass only
+                // reaches the chains at the next re-engage fade, whose dry
+                // side would otherwise replay pre-bypass history.
+                for (int ch = 0; ch < nCh; ++ch)
+                {
+                    const float* data = buffer.getReadPointer (ch);
+                    for (int i = 0; i < numSamples; ++i)
+                        pushDry (ch, data[i]);
                 }
             }
             if (monoDuplicate)
@@ -250,9 +266,19 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         // reverses smoothly: no restart jump, the trajectory just turns.
         pushChainParams (boostStep, tone, highcut, trimDb, osFactor, monoDuplicate ? 1 : activeChannels);
         const int nCh = monoDuplicate ? 1 : activeChannels;
-        // Aligned dry for the fade: the wet path carries the FIR delay, so
-        // the dry side waits the same samples (else the fade combs).
-        const int fadeLatency = chains[0].getLatencySamples();
+        // Dry-tap blend: the wet path's delay can change inside this same
+        // block (OS flip landing with the toggle). The dry side then blends
+        // tap(dryLatency_) -> tap(live) equal-power across the fade instead
+        // of stepping taps at the boundary (a 0->40 tap switch on live audio
+        // jumps ~0.4 on a 220 Hz sine). Arms once per fade; the taps stay
+        // live throughout, so the weights — not the taps — carry the motion.
+        const int fadeTarget = chains[0].getLatencySamples();
+        if (!dryBlending_ && fadeTarget != dryLatency_)
+        {
+            dryFrom_ = dryLatency_;
+            dryBlendPos_ = 0;
+            dryBlending_ = true;
+        }
         float* chPtr[2] = {nullptr, nullptr};
         for (int ch = 0; ch < nCh; ++ch)
             chPtr[ch] = buffer.getWritePointer (ch);
@@ -271,14 +297,41 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 bypassMix_ = juce::jmax (bypassTarget, bypassMix_ - fadeStep);
             const float dryW = std::sin (halfPi * bypassMix_);
             const float wetW = std::cos (halfPi * bypassMix_);
+            // Dry-blend clock: one tap-step per dry sample while armed.
+            float tapNewW = 0.0f;
+            float tapOldW = 1.0f;
+            if (dryBlending_)
+            {
+                ++dryBlendPos_;
+                float t = static_cast<float> (dryBlendPos_) / static_cast<float> (dryBlendLen_);
+                if (t > 1.0f)
+                    t = 1.0f;
+                tapNewW = std::sin (halfPi * t);
+                tapOldW = std::cos (halfPi * t);
+            }
             for (int ch = 0; ch < nCh; ++ch)
             {
                 const float dry = chPtr[ch][i];
-                const float dryAligned = (fadeLatency > 0) ? peekDry (ch, fadeLatency) : dry;
+                const float tapNow = (dryLatency_ > 0) ? peekDry (ch, dryLatency_) : dry;
+                float dryAligned = tapNow;
+                if (dryBlending_)
+                {
+                    const float tapFrom = (dryFrom_ > 0) ? peekDry (ch, dryFrom_) : dry;
+                    const float tapTo = (fadeTarget > 0) ? peekDry (ch, fadeTarget) : dry;
+                    dryAligned = tapFrom * tapOldW + tapTo * tapNewW;
+                }
                 const float wet = chains[static_cast<size_t> (ch)].processSample (dry);
                 pushDry (ch, dry);
                 chPtr[ch][i] = dryAligned * dryW + wet * wetW;
             }
+        }
+        // Landed: adopt the live tap (the blend already sits at weight 1, so
+        // the adoption itself is a no-op numerically — the tap only ever
+        // switches hands where dry is silent or fully blended).
+        if (bypassMix_ == bypassTarget)
+        {
+            dryLatency_ = chains[0].getLatencySamples();
+            dryBlending_ = false;
         }
         if (monoDuplicate)
             duplicateMonoToOutputs (buffer, numSamples);
@@ -322,6 +375,7 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             pushDry (0, x); // keep the alignment history live for the next toggle.
         }
 
+        dryLatency_ = chains[0].getLatencySamples(); // dry unread here: adopt free.
         duplicateMonoToOutputs (buffer, numSamples);
         return;
     }
@@ -338,6 +392,7 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             pushDry (ch, x);
         }
     }
+    dryLatency_ = chains[0].getLatencySamples(); // dry unread here: adopt free.
 
     for (int ch = activeChannels; ch < numChannels; ++ch)
         buffer.clear (ch, 0, numSamples);
@@ -394,8 +449,7 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
                      numSamples);
 
     const int nCh = monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size()));
-    const int dryLatency = chains[0].getLatencySamples();
-    if (dryLatency > 0)
+    if (dryLatency_ > 0)
     {
         for (int ch = 0; ch < nCh; ++ch)
         {
@@ -403,9 +457,20 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
             for (int i = 0; i < numSamples; ++i)
             {
                 const float x = data[i];
-                data[i] = peekDry (ch, dryLatency);
+                data[i] = peekDry (ch, dryLatency_);
                 pushDry (ch, x);
             }
+        }
+    }
+    else
+    {
+        // 1x: untouched passthrough, but the alignment history still tracks
+        // (same OS-flip-mid-bypass hole as processBlock above).
+        for (int ch = 0; ch < nCh; ++ch)
+        {
+            const float* data = buffer.getReadPointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                pushDry (ch, data[i]);
         }
     }
 

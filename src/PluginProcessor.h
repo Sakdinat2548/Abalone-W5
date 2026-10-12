@@ -116,13 +116,25 @@ private:
     // Dry-path alignment delay: the engaged path delays by the hot FIR group
     // delay (0/40/60 at 1x/2x/4x, reported to the host), so the dry path
     // carries the same delay — otherwise toggling ACTIVE shifts timing and
-    // breaks PDC, and the crossfade combs. Per-channel circular lines sized
-    // to the max (4x) latency; at 1x the latency is 0 and the lines are
-    // bypassed entirely (bit-exact fast path preserved). Fed in every path
-    // (engaged included) so the history is always live on toggle.
+    // PDC holds only by luck, and the crossfade combs. Per-channel circular
+    // lines sized to the max (4x) latency; at 1x the tap is 0 and the lines
+    // pass through untouched (bit-exact fast path preserved). Fed in every
+    // path (engaged included) so the history is always live on toggle.
+    // Tap switches ride the bypass fade: when the wet path's delay changes
+    // mid-fade (OS flip landing in the same block as the toggle), the dry
+    // side blends tap(dryLatency_) -> tap(live) equal-power over the fade —
+    // taps are live histories and the weights move continuously, so even
+    // mid-fade retoggles stay smooth. dryLatency_ only ever adopts a new tap
+    // where dry is silent (engaged steady path, or fade landing), never
+    // mid-fade.
     static constexpr int kMaxDryLatency = 60;
     std::array<std::array<float, 60>, 2> dryDelay_ = {};
     std::array<int, 2> dryPos_ = {0, 0};
+    int dryLatency_ = 0;
+    int dryFrom_ = 0;
+    int dryBlendPos_ = 0;
+    int dryBlendLen_ = 240; // 5 ms @48k; recomputed per rate in prepareToPlay.
+    bool dryBlending_ = false;
 
     float peekDry (int ch, int latency) const
     {

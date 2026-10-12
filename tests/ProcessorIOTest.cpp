@@ -431,6 +431,54 @@ void checkBypassLatencyAligned ()
     }
 }
 
+// (e3) OS flip landing mid-bypass must not click on re-engage: the chains
+// only learn the factor at the next re-engage fade, whose dry side must be
+// live input, not pre-bypass history (pre-fix the 1x bypass path never fed
+// the lines, so the first 40/60 dry samples replayed ancient audio and the
+// fade jumped by |wet-dry|).
+void checkBypassOsFlipNoClick ()
+{
+    AbaloneW5AudioProcessor proc; // stereo default
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged 1x
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    int phase0 = 488;
+    int phase1 = 488;
+    for (int b = 0; b < 20; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("osfactor") = 1.0f; // 2x mid-bypass.
+    fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+    fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+    proc.processBlock (buffer, midi);
+    *proc.getApvts().getRawParameterValue ("active") = 1.0f; // re-engage: fades meet.
+    float worst = 0.0f;
+    float prevLast = buffer.getReadPointer (0)[kBlock - 1];
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+        const float* ch0 = buffer.getReadPointer (0);
+        worst = juce::jmax (worst, std::fabs (ch0[0] - prevLast));
+        worst = juce::jmax (worst, maxStepJump (ch0, kBlock, b));
+        prevLast = ch0[kBlock - 1];
+    }
+    std::printf ("bypass OS-flip re-engage: worst jump %.5f (expect < 0.06)\n", worst);
+    CHECK (worst < 0.06f);
+}
+
 // (f) ACTIVE toggle must not click: settle engaged on a continuous 220Hz
 // sine, flip off mid-stream and bound every sample-to-sample jump (block
 // boundary included), then flip back on and bound again. A 5ms equal-power
@@ -652,6 +700,7 @@ int main ()
     checkHostBypass();
     checkActiveOffPassthrough();
     checkBypassLatencyAligned();
+    checkBypassOsFlipNoClick();
     checkActiveToggleNoClick();
     checkBypassSync();
     checkTrimRangeAndDefault();
