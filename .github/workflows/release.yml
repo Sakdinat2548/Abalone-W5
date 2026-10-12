@@ -16,7 +16,14 @@
 # Release notes are edited by hand on the GitHub release page (no body_path:
 # automation kept overwriting manual edits).
 # Standing caveat: only Windows is host-tested by the author.
-# macOS ships VST3 + auval-gated AU; no code signing, no installer.
+# macOS ships VST3 + auval-gated AU; no code signing. Windows ships an
+# unsigned Inno Setup installer (installer/windows.iss) alongside the zip —
+# SmartScreen warns, the free-plugin standard; static /MT runtime so no VC
+# redist is needed. The tag/CMake guard lives on the Windows leg only (the
+# installer label is the one place the version string matters): a mismatched
+# tag ships zips without an installer — check the red leg before announcing.
+# The v* trigger stays broad on purpose (narrow globs risk silently matching
+# nothing): the guard above is what rejects malformed tags, loudly.
 # No AAX either (Avid SDK + PACE signing required, and Pro Tools refuses
 # unsigned builds — ruled out 2026-10-08, VST3+AU covers the hosts).
 name: Release
@@ -28,6 +35,9 @@ on:
 
 jobs:
   release:
+    # Hung leg must never burn the 360-minute default: 60 is 6x the slowest
+    # observed leg.
+    timeout-minutes: 60
     strategy:
       matrix:
         include:
@@ -145,7 +155,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          curl -sSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          curl -fsSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
           New-Item -ItemType Directory -Force -Path pv | Out-Null
           Expand-Archive $env:TEMP/pv.zip -DestinationPath pv/ -Force
           ./pv/pluginval.exe --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
@@ -155,7 +165,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then ASSET=pluginval_Linux.zip; PVBIN=pv/pluginval; else ASSET=pluginval_macOS.zip; PVBIN=pv/pluginval.app/Contents/MacOS/pluginval; fi
-          curl -sSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
+          curl -fsSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
           rm -rf pv && mkdir pv && unzip -q -o /tmp/pv.zip -d pv
           chmod +x "$PVBIN"
           if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
@@ -193,6 +203,28 @@ jobs:
           Compress-Archive -LiteralPath stage/"Abalone-W5.vst3", stage/LICENSE, stage/README.md `
             -DestinationPath $env:ZIP_NAME
 
+      # Windows installer (Inno Setup, unsigned — SmartScreen warns, the
+      # free-plugin standard; static /MT runtime so no VC redist needed).
+      # Tag-vs-CMake guard: a mismatched tag would mislabel the installer.
+      # The tag arrives via env (never interpolated into script source —
+      # tag names can carry hostile characters) and must look like vX.Y.Z.
+      - name: Build Windows installer (Inno Setup)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y }
+          $m = Select-String -CaseSensitive -Path CMakeLists.txt -Pattern '^project\(AbaloneW5 VERSION ([0-9.]+)'
+          if (-not $m) { throw "CMakeLists.txt project() line not found" }
+          $projVer = $m.Matches[0].Groups[1].Value
+          $tagVer = $env:TAG_NAME -replace '^v', ''
+          if ($tagVer -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid release tag: $($env:TAG_NAME)" }
+          if ($tagVer -ne $projVer) { throw "tag $tagVer != CMake $projVer" }
+          iscc /O"." /DAppVersion="$tagVer" /DOutFile="Abalone-W5-$env:TAG_NAME-windows-setup" installer/windows.iss
+          $installer = "Abalone-W5-$env:TAG_NAME-windows-setup.exe"
+          if (-not (Test-Path -LiteralPath $installer)) { throw "Installer output missing: $installer" }
+
       # macOS ships VST3 + the auval-gated AU component (same bundle
       # auval just validated); Linux stays VST3-only (AU is Apple-only).
       - name: Package VST3+AU zip (macOS)
@@ -226,6 +258,14 @@ jobs:
           (cd stage && zip -r "../$ZIP_NAME" "Abalone-W5.vst3" LICENSE README.md)
 
       - name: Upload release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: Abalone-W5-${{ github.ref_name }}-${{ matrix.tag }}.zip
+          fail_on_unmatched_files: true
+
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Abalone-W5-${{ github.ref_name }}-windows-setup.exe
+          fail_on_unmatched_files: true

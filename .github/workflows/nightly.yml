@@ -2,8 +2,10 @@
 #
 # Cron workflows only run on the DEFAULT branch, so this file lives on main
 # but checks out + builds `dev`. Rolling tag: each matrix leg appends its
-# zip to the `nightly` prerelease via softprops/action-gh-release (same
-# uploader as release.yml), and a final job force-moves the `nightly` tag
+# artifacts to the `nightly` prerelease via softprops/action-gh-release
+# (same uploader as release.yml) — zips everywhere, plus the unsigned
+# Windows Setup exe (also proves installer/windows.iss still compiles) —
+# and a final job force-moves the `nightly` tag
 # to the built dev SHA only when ALL legs succeed — a failed leg must never
 # move the tag, or the skip-if-unchanged guard would see dev == nightly next
 # night and skip, leaving that OS's zip missing until the next dev push.
@@ -17,6 +19,12 @@ on:
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
+
+# Cron + manual dispatch colliding would double-build and double-move the tag
+# (same SHA, harmless but wasteful): serialize, never cancel a shipping run.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
 
 jobs:
   guard:
@@ -37,6 +45,9 @@ jobs:
   nightly:
     needs: guard
     if: needs.guard.outputs.changed == 'true'
+    # Hung pluginval/auval must never burn the 360-minute default: 60 is 6x
+    # the slowest observed leg.
+    timeout-minutes: 60
     strategy:
       matrix:
         include:
@@ -145,7 +156,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          curl -sSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          curl -fsSL -o $env:TEMP/pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
           New-Item -ItemType Directory -Force -Path pv | Out-Null
           Expand-Archive $env:TEMP/pv.zip -DestinationPath pv/ -Force
           ./pv/pluginval.exe --validate build/AbaloneW5_artefacts/Release/VST3/Abalone-W5.vst3 --strictness-level 10
@@ -155,7 +166,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then ASSET=pluginval_Linux.zip; PVBIN=pv/pluginval; else ASSET=pluginval_macOS.zip; PVBIN=pv/pluginval.app/Contents/MacOS/pluginval; fi
-          curl -sSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
+          curl -fsSL -o /tmp/pv.zip "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/$ASSET"
           rm -rf pv && mkdir pv && unzip -q -o /tmp/pv.zip -d pv
           chmod +x "$PVBIN"
           if [ "$RUNNER_OS" = "Linux" ]; then RUN="xvfb-run -a"; else RUN=""; fi
@@ -220,7 +231,7 @@ jobs:
           (cd stage && zip -r "../$ZIP_NAME" "Abalone-W5.vst3" LICENSE README.md)
 
       - name: Upload nightly prerelease
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           prerelease: true
@@ -230,6 +241,36 @@ jobs:
           # default branch's HEAD.
           target_commitish: ${{ needs.guard.outputs.sha }}
           files: Abalone-W5-nightly-${{ matrix.tag }}.zip
+          fail_on_unmatched_files: true
+
+      # Windows installer AFTER the zip upload: installer teething must
+      # never cost the night its zips — but a failed installer still reds
+      # the leg, so the tag waits for a green night (a red leg must never
+      # move the tag). Also proves installer/windows.iss still compiles.
+      - name: Build Windows installer (Inno Setup)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y }
+          $m = Select-String -CaseSensitive -Path CMakeLists.txt -Pattern '^project\(AbaloneW5 VERSION ([0-9.]+)'
+          if (-not $m) { throw "CMakeLists.txt project() line not found" }
+          $projVer = $m.Matches[0].Groups[1].Value
+          iscc /O"." /DAppVersion="$projVer-nightly" /DOutFile="Abalone-W5-nightly-windows-setup" installer/windows.iss
+          if (-not (Test-Path -LiteralPath "Abalone-W5-nightly-windows-setup.exe"))
+          {
+              throw "Installer output missing: Abalone-W5-nightly-windows-setup.exe"
+          }
+
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: nightly
+          prerelease: true
+          name: Nightly (${{ needs.guard.outputs.sha }})
+          target_commitish: ${{ needs.guard.outputs.sha }}
+          files: Abalone-W5-nightly-windows-setup.exe
+          fail_on_unmatched_files: true
 
   # Moved-tag gate: runs once, after every leg, and only on full success.
   # Partial releases (a failed OS leg) never advance the tag, so the guard
@@ -253,7 +294,7 @@ jobs:
           git push -f origin nightly
 
       - name: Rename nightly prerelease to built SHA
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
           prerelease: true
