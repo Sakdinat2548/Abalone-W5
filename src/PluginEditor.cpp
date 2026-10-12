@@ -114,14 +114,25 @@ void AbaloneW5AudioProcessorEditor::startUnboundedDrag ()
 {
     auto& source = juce::Desktop::getInstance().getMainMouseSource();
     dragAnchor_ = source.getScreenPosition();
+    dragging_ = true;
     source.enableUnboundedMouseMovement (true, false);
 }
 
 void AbaloneW5AudioProcessorEditor::endUnboundedDrag ()
 {
+    dragging_ = false;
     auto& source = juce::Desktop::getInstance().getMainMouseSource();
     source.enableUnboundedMouseMovement (false);
     source.setScreenPosition (dragAnchor_);
+}
+
+void AbaloneW5AudioProcessorEditor::visibilityChanged ()
+{
+    // Hide-without-destroy mid-drag delivers no mouseUp: close the drag
+    // here or the cursor stays hidden until the next click. (Destroy path
+    // is covered by the destructor.)
+    if (!isVisible() && dragging_)
+        endUnboundedDrag();
 }
 
 AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProcessor& p)

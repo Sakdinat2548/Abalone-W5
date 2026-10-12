@@ -181,6 +181,7 @@ public:
 
 private:
     void timerCallback () override;
+    void visibilityChanged () override;
 
     // OS factor label, painted in-code centered UNDER the OS mini-knob:
     // ONE live readout (current `osfactor` value only).
@@ -247,13 +248,17 @@ private:
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).
 
-    // Unbounded-drag knobs: absolute drag mapping (the original feel —
-    // position maps straight to value, detents exact), with the OS cursor
-    // unhooked from the screen edge for the drag duration so long sweeps
-    // never run out of room. The anchor is only revisited on release.
+    // Unbounded-drag knobs: the original absolute delta-to-value feel
+    // (detents exact), with the OS cursor unhooked from the screen edge
+    // for the drag duration so long sweeps never run out of room. The
+    // anchor is only revisited on release. Single-pointer by design (one
+    // shared anchor — a second concurrent drag degrades to edge-limited,
+    // never stuck); touch/pen drags are intentional no-ops (the main
+    // source isn't dragging, so enable is a strict no-op).
     void startUnboundedDrag ();
     void endUnboundedDrag ();
     juce::Point<float> dragAnchor_;
+    bool dragging_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbaloneW5AudioProcessorEditor)
 };
