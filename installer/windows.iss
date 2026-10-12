@@ -43,6 +43,9 @@ PrivilegesRequired=admin
 LicenseFile=..\LICENSE
 InfoBeforeFile=install-notes.txt
 WizardStyle=modern
+WizardSmallImageFile=wizard-small.bmp
+SetupIconFile=app.ico
+UninstallDisplayIcon={autopf}\Abalone W5\app.ico
 UninstallDisplayName=Abalone W5 {#AppVersion}
 ; A running DAW locks the .vst3: offer to close it instead of failing on
 ; the locked file. RestartApplications=no is explicit (Inno 6 defaults it
@@ -52,6 +55,8 @@ RestartApplications=no
 
 [Files]
 Source: "..\build\AbaloneW5_artefacts\Release\VST3\Abalone-W5.vst3\*"; DestDir: "{app}\Abalone-W5.vst3"; Flags: recursesubdirs ignoreversion
+; Icon backing: the Add/Remove Programs entry points at this copy.
+Source: "app.ico"; DestDir: "{autopf}\Abalone W5"; Flags: ignoreversion
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\Abalone-W5.vst3"
