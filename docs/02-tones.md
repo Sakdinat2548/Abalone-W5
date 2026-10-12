@@ -14,7 +14,7 @@ there are no rate-specific tables to drift apart.
 
 Three sources, strict priority. When they disagree, higher wins:
 
-1. **Sweep IRs** — licensed Tone3000 captures living gitignored in
+1. **Sweep IRs** — licensed hardware captures living gitignored in
    `analysis/ir_local/`. Take `FFT(TONEn)/FFT(TONE0)` in dB, normalize at
    1 kHz; dividing by TONE0 cancels whatever gain the capture rig added.
    This is the binding oracle since the v1.3 refit.

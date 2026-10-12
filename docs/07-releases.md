@@ -8,15 +8,16 @@
 - **`dev`** is the workbench: integration, directly pushable, protected
   from deletion and force-pushes. Nightlies build from here.
 
-Anything bigger than a typo gets a short branch off `dev`, a PR back,
-and deletion after merge.
+Anything bigger than a typo rides a short branch: DSP work merges direct
+to `dev` by word; main-bound changes (workflows, installer) go by PR to
+`main`, then sync back. Branches die after merge.
 
 ## Nightly
 
 The workflow file lives on `main` (cron only runs there) but builds
 `dev`'s HEAD: 02:00 UTC, all three OSes, full gates, then the rolling
 `nightly` tag force-moves to whatever just passed and a prerelease
-publishes (`Abalone-W5-nightly-*.zip`, UI stamped `vX-nightly`). Quiet
+publishes (`Abalone-W5-nightly-*.zip` plus the Windows Setup exe, UI stamped `vX-nightly`). Quiet
 night? The guard compares SHAs and goes back to sleep. You can also fire
 it by hand from Actions any time. Prereleases never take the Latest slot,
 so the sidebar always shows the newest stable.
@@ -28,8 +29,9 @@ so the sidebar always shows the newest stable.
 3. Tag `vX.Y.Z` on main, builds fire, notes get handwritten.
 
 Zips carry their version (`Abalone-W5-v1.2.1-windows.zip`, …): Windows
-gets VST3, macOS VST3+AU, Linux VST3. No installer — the Standalone is a
-dev-testing tool and never ships. The version lives in exactly one place
+gets VST3, macOS VST3+AU, Linux VST3 — plus an unsigned Windows Setup exe
+(Inno Setup, folder page defaulting to the spec VST3 path). The Standalone
+is a dev-testing tool and never ships. The version lives in exactly one place
 (`project()` in CMakeLists, numeric because hosts demand numbers);
 `-dev`/`-nightly` are display-only badges from
 `ABALONEW5_VERSION_SUFFIX`.

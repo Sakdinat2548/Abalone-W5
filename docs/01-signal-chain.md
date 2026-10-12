@@ -39,8 +39,8 @@ gain so hopping between them doesn't jump loudness on normal sources.
 The only stage allowed to misbehave:
 
 ```
-y = tanh(kx)/tanh(k) + a·x² + gate(env)·(odd bump + even bump)
-k = 0.06, a = 1.5e-3 (+ fitted bump constants, see chapter 03)
+y = tanh(kx)/tanh(k) + a·xe² + gate(env)·(odd bump + even bump)
+k = 0.06, a = 1.5e-3, |xe| ≤ 31.6 (+ fitted bump constants, see chapter 03)
 ```
 
 Tanh flattens peaks (that's the compression — no threshold knob, the

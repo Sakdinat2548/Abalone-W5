@@ -9,7 +9,7 @@ Seven suites, all of them NDEBUG-independent (Release builds delete bare
 | Tones | shapes ±1 dB in ruled zones (40 Hz–15 kHz); pink anchors; rate agreement recorded, not idealized (T1/T3 0.11, T6 0.15, T4 0.3) |
 | Boost | +3 dB/step, never clips |
 | HighCut | −3 dB at 4 kHz, stopband, passband |
-| Color | ladder H2–H8 (tolerances follow capture spread) + H9–H12 below −60; THD ceilings + level map; CCIF IMD; hot/DC/gain bounds; alias (−80 dB at 1 kHz, −60 at 3/5/8 kHz) |
+| Color | ladder H2–H8 (tolerances follow capture spread) + H9–H12 below −60; THD ceilings + level map; CCIF IMD; hot/DC/gain bounds; alias (−80 dB at 1 kHz, −60 at 5/7/11 kHz) |
 | Chain | end-to-end sanity, exact latency, mono rule, peak tracker |
 | IO | sync/recall/trim, bypass behavior |
 

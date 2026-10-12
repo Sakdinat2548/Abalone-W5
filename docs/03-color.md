@@ -4,8 +4,9 @@ The only stage allowed to misbehave. Everything you hear as "drive"
 happens in these few lines of `src/dsp/ColorStage.h`:
 
 ```
-y = tanh(kx)/tanh(k) + a·x² + gate(env)·(odd bump + even bump)
-k = 0.06, a = 1.5e-3
+y = tanh(kx)/tanh(k) + a·xe² + gate(env)·(odd bump + even bump)
+k = 0.06, a = 1.5e-3, |xe| ≤ 31.6 (caps the hot corner — hot behavior
+belongs to the core, see below)
 odd  = c_o·(x/w_o)³·e^{-(x/w_o)²},  c_o = 3.475e-2, w_o = 0.56
 even = c_e·(x/w_e)²·e^{-(x/w_e)²},  c_e = -5e-2,     w_e = 0.82
 gate = (env/(env+10.526))^0.60, env = peak-hold + 0.1 ms attack + 100 ms release
@@ -50,21 +51,23 @@ all died the same death: any branch strong enough to paint H4 at one
 drive level pollutes H2 at another. (There's a real theorem behind it —
 Abel-integral coupling of harmonics to the fundamental — but the five
 corpses prove it well enough.) One saturating gate scaling every order
-together breaks the coupling: shut when quiet, open mid-drive, easing
-shut when hot. The gate needs one envelope state, which is precisely the
-thing static curves can't have. Fit notes live in chat history and the
-(abandoned-documents) plan under `.superpowers/`.
+together breaks the coupling: shut when quiet, open mid-drive. Hot behavior
+belongs to the core — the gate itself saturates open; the branch just loses
+to tanh by ratio up there (see the header). The gate needs one envelope state, which is precisely the
+thing static curves can't have. Fit notes live in
+`.superpowers/plans/2026-10-11-saturating-color-core.md` (plus chat history).
 
 ## Pick compression by boost step (docs/dynamics.png)
 
-No threshold knob — Boost picks where you sit on the fixed curve
-(measured with a 100 Hz probe, unity staging):
+No threshold knob — Boost picks where you sit on the fixed curve (live 1 kHz
+sweep, tone bypass, unity staging per curve — `docs/dynamics.png` plots
+the same data):
 
 | Input peak | B1 | B3 | B6 | B10 |
 |---|---|---|---|---|
-| −12 dBFS | — | — | — | −0.5 dB shaved |
-| −6 dBFS | — | — | −0.1 dB | −1.9 dB |
-| 0 dBFS | — | — | −0.5 dB | −5.2 dB |
+| −12 dBFS | — | — | — | −0.6 dB shaved |
+| −6 dBFS | — | — | −0.1 dB | −2.0 dB |
+| 0 dBFS | — | — | −0.6 dB | −5.5 dB |
 
 Boost 1–3 rides the diagonal (pure level); 6 peels off on peaks; 10 dives
 early and limits with flavor.
@@ -75,7 +78,7 @@ early and limits with flavor.
 Worst folded content measured −67 dB (an ultrasonic H5 fold), so 1x runs
 clean at zero latency and the knob is there for purists. The old
 "no-oversampling-needed" comment died the day the tail arrived — aliasing
-gets measured per design now (1 kHz to −80 dB, 3/5/8 kHz to −60 dB).
+gets measured per design now (1 kHz to −80 dB, 5/7/11 kHz to −60 dB).
 
 ## Where it's pinned down
 
