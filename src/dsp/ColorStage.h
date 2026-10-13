@@ -72,12 +72,18 @@ struct ColorStage
 
     void setEnabled (bool enabled)
     {
-        enabled_ = enabled;
-        reset();
+        // Reset only on transitions (HighCut idiom): a per-block caller
+        // passing the same value must never collapse the gate envelope.
+        if (enabled != enabled_)
+        {
+            enabled_ = enabled;
+            reset();
+        }
     }
 
-    // Output silence on the next block. Also clears the envelope (stale
-    // level history is meaningless across resets).
+    // Clears the gate envelope (stale drive memory is meaningless across
+    // enable/reset). Not silence: the next output still follows the next
+    // input — only the level history restarts.
     void reset () { env_ = 0.0f; }
 
     // Envelope time constants from rate (tau ~= 100 ms release, 0.1 ms
@@ -154,6 +160,10 @@ struct ColorStage
                 env_ = 0.0f;
         }
         const float gate = std::pow (env_ / (env_ + kGateN0_), kGateQ_);
+        // Branch overflow note: uo*uo overflows float past |x| ~= 1e19
+        // (uo^3 -> Inf, Inf * exp(-Inf) = NaN). In-product inputs never get
+        // there — the chain entry clamps at +-1e6 — so the branch stays
+        // unclamped and exact; direct drivers past ~1e19 are on their own.
         const float uo = x / kOddW_;
         const float ue = x / kEvenW_;
         const float branch =
@@ -171,7 +181,10 @@ struct ColorStage
     // Measurement helper (not part of the audio path): drives the stage with a
     // sine of `freqHz` at peak amplitude 10^(levelDb/20) and returns the THD
     // ratio sqrt(sum(H2..H12)^2)/H1 via coherent correlation (1s @48kHz, so
-    // 100Hz/1kHz/5kHz complete integer cycles). Respects the enabled flag:
+    // 100Hz/1kHz/5kHz complete integer cycles). Harmonics above Nyquist are
+    // aliasing, not distortion (the alias gates own them), so the sum caps
+    // at H12 and 24 kHz — identical below 2 kHz, honest everywhere else.
+    // Respects the enabled flag:
     // enable the stage before measuring (a disabled stage reads THD ~= 0).
     float thdAt (float freqHz, float levelDb)
     {
@@ -181,10 +194,11 @@ struct ColorStage
         constexpr double fs = 48000.0;
         constexpr int total = 48000; // 1s window.
         constexpr int maxHarm = 12;
+        const int topHarm = (freqHz >= 2000.0f) ? static_cast<int> (24000.0 / freqHz) : maxHarm;
         const double amp = std::pow (10.0, static_cast<double> (levelDb) / 20.0);
 
         double magSq[maxHarm + 1] = {};
-        for (int h = 1; h <= maxHarm; ++h)
+        for (int h = 1; h <= topHarm; ++h)
         {
             double re = 0.0;
             double im = 0.0;
@@ -206,7 +220,7 @@ struct ColorStage
             return 0.0f;
 
         double rest = 0.0;
-        for (int h = 2; h <= maxHarm; ++h)
+        for (int h = 2; h <= topHarm; ++h)
             rest += magSq[h];
         return static_cast<float> (std::sqrt (rest / magSq[1]));
     }
