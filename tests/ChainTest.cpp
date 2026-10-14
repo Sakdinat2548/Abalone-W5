@@ -916,8 +916,11 @@ void checkNonFiniteRecovery ()
     // entry sanitize turns it into silence before any stage state can latch
     // it, so the very next finite samples process normally (pre-fix the
     // GainStage lp_ latched NaN and output RMS sat at 0.000 for seconds).
+    // Huge-finite (±1e30) clamps to +-1e6 instead (saturated blip, still
+    // finite — pre-fix the x31.6 boost overflowed to Inf and latched the
+    // same way).
     for (float bad : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
-                      -std::numeric_limits<float>::infinity()})
+                      -std::numeric_limits<float>::infinity(), 1.0e30f, -1.0e30f})
     {
         ProcessorChain chain;
         chain.setSampleRate (48000.0);
@@ -925,7 +928,10 @@ void checkNonFiniteRecovery ()
         chain.setTone (3);
         chain.setHighcut (false);
         chain.setTrimDb (0.0f);
-        assert (chain.processSample (bad) == 0.0f);
+        const float first = chain.processSample (bad);
+        assert (std::isfinite (first));
+        if (!std::isfinite (bad))
+            assert (first == 0.0f); // non-finite in, silence out.
         double sumSq = 0.0;
         int count = 0;
         for (int n = 0; n < 48000; ++n)
@@ -941,14 +947,49 @@ void checkNonFiniteRecovery ()
             }
         }
         const float rms = static_cast<float> (std::sqrt (sumSq / count));
-        std::printf ("non-finite in: recovered RMS %.4f (expect > 0.1)\n", rms);
+        std::printf ("bad sample in (NaN/Inf/huge-finite): recovered RMS %.4f (expect > 0.1)\n", rms);
         assert (rms > 0.1f);
     }
 }
 
+void checkEnabledIdempotent ()
+{
+    // setEnabled(true) twice must not collapse the gate (pre-fix it reset
+    // unconditionally, so any per-block caller pinned the envelope shut).
+    // Twin stages settle identically, one takes the redundant call, then
+    // short-window H3 is compared: identical states read bit-identical
+    // (pre-fix the re-enabled twin read ~40 dB cold).
+    auto settle = [] (ColorStage& stage)
+    {
+        stage.setEnabled (true);
+        for (int n = 0; n < 48000; ++n)
+            stage.processSample (3.1623f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * n / 48000.0)));
+    };
+    auto shortH3Db = [] (ColorStage& stage, int start)
+    {
+        double re = 0.0, im = 0.0;
+        for (int n = 0; n < 4800; ++n)
+        {
+            const float x = 3.1623f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * (start + n) / 48000.0));
+            const double y = static_cast<double> (stage.processSample (x));
+            const double a = 2.0 * kPi * 3000.0 * (start + n) / 48000.0;
+            re += y * std::cos (a);
+            im += y * std::sin (a);
+        }
+        return 20.0f * static_cast<float> (std::log10 (2.0 * std::hypot (re, im) / 4800.0));
+    };
+    ColorStage a, b;
+    settle (a);
+    settle (b);
+    b.setEnabled (true); // redundant no-op call: must not disturb.
+    const float h3a = shortH3Db (a, 48000);
+    const float h3b = shortH3Db (b, 48000);
+    std::printf ("enabled-idempotent H3: %.2f vs %.2f dB (expect < 1.0 apart)\n", h3a, h3b);
+    assert (std::fabs (h3a - h3b) < 1.0f);
+}
+
 void checkColorTimingAcrossReprepare ()
 {
-    // Re-prepare with OS engaged must keep hot-rate envelope timing:
     // setSampleRate retunes the color stage at sampleRate * osTarget_
     // (setOsFactor early-returns on an unchanged target, so nothing else
     // re-arms it — pre-fix the release silently quartered, 100 ms to 25 ms
@@ -1121,6 +1162,7 @@ int main ()
     checkHotSineDc();
     checkNonFiniteRecovery();
     checkColorTimingAcrossReprepare();
+    checkEnabledIdempotent();
     checkOsRetargetDefers();
     checkToneRetargetDefers();
     std::puts ("ChainTest: all checks passed");

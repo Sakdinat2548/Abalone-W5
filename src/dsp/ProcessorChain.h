@@ -240,8 +240,16 @@ struct ProcessorChain
         // point where all channels route through beats a guard in every
         // stage, and no state reset is needed: states never learn garbage,
         // so output recovers on the very next finite sample.
+        // Huge-finite clamp (+/-120 dBFS): magnitudes past 1e6 can never be
+        // real signal (documented max is 31.6); without it the x31.6 boost
+        // overflows to Inf and latches every downstream state the same way.
+        // 1e6 keeps all hot behavior bit-identical (saturation lives <= 50).
         if (!std::isfinite (x))
             x = 0.0f;
+        else if (x > 1.0e6f)
+            x = 1.0e6f;
+        else if (x < -1.0e6f)
+            x = -1.0e6f;
         const float boosted = gain_.processSample (x);
 
         float shaped;

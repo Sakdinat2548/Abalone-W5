@@ -54,8 +54,8 @@ corpses prove it well enough.) One saturating gate scaling every order
 together breaks the coupling: shut when quiet, open mid-drive. Hot behavior
 belongs to the core — the gate itself saturates open; the branch just loses
 to tanh by ratio up there (see the header). The gate needs one envelope state, which is precisely the
-thing static curves can't have. Fit notes live in
-`.superpowers/plans/2026-10-11-saturating-color-core.md` (plus chat history).
+thing static curves can't have. Fit notes live in the session plan
+(machine-local, not in the repo) plus chat history.
 
 ## Pick compression by boost step (docs/dynamics.png)
 
