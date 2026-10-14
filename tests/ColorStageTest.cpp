@@ -529,6 +529,95 @@ void checkNanRecovery ()
     std::puts ("NaN/Inf in: silence out, finite forever after");
 }
 
+void checkExtremeMagnitudeFinite ()
+{
+    // Bugfix 2026-10-14: processSample(FLT_MAX) returned NaN (uo^3 -> Inf,
+    // Inf * exp(-Inf) = NaN). The guard now holds silence past |x| = 1e6
+    // (the chain entry clamps there anyway); 1e6 itself stays live signal.
+    ColorStage stage;
+    stage.setEnabled (true);
+    const float mx = std::numeric_limits<float>::max();
+    assert (stage.processSample (mx) == 0.0f);
+    assert (stage.processSample (-mx) == 0.0f);
+    assert (stage.processSample (1.0e7f) == 0.0f);
+    assert (stage.processSample (-1.0e7f) == 0.0f);
+    const float yLive = stage.processSample (1.0e6f);
+    assert (std::isfinite (yLive));
+    std::puts ("extreme magnitudes: silence past 1e6, live at 1e6, all finite");
+}
+
+void checkThdAtIgnoresPriorState ()
+{
+    // Bugfix 2026-10-14: thdAt() never reset() the gate, so a hot envelope
+    // leaked into the measurement. A hot-soaked stage must read exactly what
+    // a fresh one reads (reset + warm-up discard inside thdAt).
+    ColorStage fresh;
+    fresh.setEnabled (true);
+    const float a = fresh.thdAt (1000.0f, -10.0f);
+    ColorStage hot;
+    hot.setEnabled (true);
+    for (int n = 0; n < 48000; ++n)
+        hot.processSample (15.0f); // soak the gate fully open.
+    const float b = hot.thdAt (1000.0f, -10.0f);
+    std::printf ("thdAt cold-started: fresh %0.5f%% hot-soaked %0.5f%% (expect identical)\n", 100.0 * a, 100.0 * b);
+    assert (a == b);
+}
+
+void checkThdAtIgnoresSampleRate ()
+{
+    // Bugfix 2026-10-14: thdAt() synth runs at fixed 48k but used the
+    // instance hot-rate (2x/4x) envelope coeffs. thdAt retunes to 48k
+    // internally now, so the instance rate must not move the reading.
+    ColorStage at44;
+    at44.setEnabled (true);
+    at44.setSampleRate (44100.0);
+    ColorStage at48;
+    at48.setEnabled (true);
+    at48.setSampleRate (48000.0);
+    const float ta = at44.thdAt (1000.0f, 10.0f);
+    const float tb = at48.thdAt (1000.0f, 10.0f);
+    std::printf ("thdAt rate-independent: 44.1k-tuned %0.5f%% 48k-tuned %0.5f%% (expect identical)\n", 100.0 * ta,
+                 100.0 * tb);
+    assert (ta == tb);
+    // And the instance coeffs are restored afterwards (still 44.1k-tuned).
+    assert (at44.envReleaseCoeff() != at48.envReleaseCoeff());
+}
+
+void checkSetSampleRateRejectsNonFinite ()
+{
+    // Bugfix 2026-10-14: setSampleRate(Inf) zeroed both envelope coeffs
+    // (1 - exp(-tiny) = 0), freezing the gate shut. Non-finite and
+    // non-positive rates now fall back to 48k.
+    ColorStage ref; // 48k defaults.
+    ColorStage stage;
+    stage.setEnabled (true);
+    stage.setSampleRate (std::numeric_limits<double>::infinity());
+    std::printf ("setSampleRate(Inf): rel coeff %0.3e (48k default %0.3e)\n", stage.envReleaseCoeff(),
+                 ref.envReleaseCoeff());
+    assert (stage.envReleaseCoeff() == ref.envReleaseCoeff());
+    stage.setSampleRate (std::numeric_limits<double>::quiet_NaN());
+    assert (stage.envReleaseCoeff() == ref.envReleaseCoeff());
+    stage.setSampleRate (0.0);
+    assert (stage.envReleaseCoeff() == ref.envReleaseCoeff());
+    stage.setSampleRate (-44100.0);
+    assert (stage.envReleaseCoeff() == ref.envReleaseCoeff());
+    std::puts ("setSampleRate: Inf/NaN/0/negative all fall back to 48k");
+}
+
+void checkTinyInputSnapsEnvelope ()
+{
+    // Attack-path denormal snap: subnormal-level DC must stay finite through
+    // the attack update, and the stage must come back fully live after.
+    ColorStage stage;
+    stage.setEnabled (true);
+    for (int n = 0; n < 1024; ++n)
+        assert (std::isfinite (stage.processSample (1.0e-30f)));
+    stage.reset();
+    const float y = stage.processSample (0.5f);
+    assert (std::isfinite (y) && y != 0.0f);
+    std::puts ("tiny-input attack path: finite throughout, live after");
+}
+
 void checkClampedQuadratic ()
 {
     // Option (b), review 2026-10-12: the x^2 term clamps its argument at
@@ -568,6 +657,11 @@ int main ()
     checkNoDcBlowup();
     checkAliasHighNotes();
     checkNanRecovery();
+    checkExtremeMagnitudeFinite();
+    checkThdAtIgnoresPriorState();
+    checkThdAtIgnoresSampleRate();
+    checkSetSampleRateRejectsNonFinite();
+    checkTinyInputSnapsEnvelope();
     std::puts ("ColorStageTest: all checks passed");
     return 0;
 }

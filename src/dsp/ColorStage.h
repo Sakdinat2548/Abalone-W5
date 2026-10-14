@@ -91,7 +91,7 @@ struct ColorStage
     // (the chain retunes on OS factor change, so hot-rate timing matches).
     void setSampleRate (double sampleRate)
     {
-        if (!(sampleRate > 0.0))
+        if (!(sampleRate > 0.0 && std::isfinite (sampleRate)))
             sampleRate = 48000.0;
 
         constexpr double kTauRel = 0.1;    // seconds.
@@ -145,14 +145,21 @@ struct ColorStage
         // Attack smoothing (0.1 ms) exists so sharp transients cannot step
         // the gate audibly (zipper); instant-vs-0.5 ms attack differs
         // <= -65 dBFS peak on slap material.
-        // Non-finite input (NaN/Inf from a sick host): hold silence, touch
-        // nothing, latch nothing. The old stateless stage recovered alone;
-        // the envelope must not learn garbage.
+        // Non-finite or absurd-magnitude input (NaN/Inf from a sick host, or
+        // anything past |x| = 1e6): hold silence, touch nothing, latch
+        // nothing. The old stateless stage recovered alone; the envelope must
+        // not learn garbage. 1e6 matches the chain-entry clamp, and past it
+        // the branch would fold uo^3 -> Inf times exp(-Inf) into NaN —
+        // silence beats NaN.
         const float ax = std::fabs (x);
-        if (!(ax <= 3.402823466e+38f))
+        if (!(ax <= 1.0e6f))
             return 0.0f;
         if (ax > env_)
+        {
             env_ += kEnvAtk_ * (ax - env_);
+            if (env_ < 1.0e-15f)
+                env_ = 0.0f;
+        }
         else
         {
             env_ += kEnvRel_ * (ax - env_);
@@ -160,10 +167,10 @@ struct ColorStage
                 env_ = 0.0f;
         }
         const float gate = std::pow (env_ / (env_ + kGateN0_), kGateQ_);
-        // Branch overflow note: uo*uo overflows float past |x| ~= 1e19
-        // (uo^3 -> Inf, Inf * exp(-Inf) = NaN). In-product inputs never get
-        // there — the chain entry clamps at +-1e6 — so the branch stays
-        // unclamped and exact; direct drivers past ~1e19 are on their own.
+        // Branch overflow note: uo*uo would overflow float past |x| ~= 1e19
+        // (uo^3 -> Inf, Inf * exp(-Inf) = NaN), but the guard above holds
+        // silence past 1e6, so the branch stays unclamped and exact on every
+        // input it ever sees.
         const float uo = x / kOddW_;
         const float ue = x / kEvenW_;
         const float branch =
@@ -174,6 +181,8 @@ struct ColorStage
         // bound (3.75 at x = 50, i.e. H2 ~= -19 dB hot). The kink sits where
         // tanh already compresses and fires on overs only; the main path is
         // deliberately NOT clamped (smooth tanh saturation beats hard clip).
+        // Deliberate tradeoff (kept): the slope kink at +-31.6 on overs only
+        // is cheaper than unbounded quadratic growth above the documented max.
         const float xe = (x > 31.6f) ? 31.6f : (x < -31.6f) ? -31.6f : x;
         return fastTanh (kDrive_ * x) / norm_ + kEven_ * xe * xe + branch;
     }
@@ -197,6 +206,22 @@ struct ColorStage
         const int topHarm = (freqHz >= 2000.0f) ? static_cast<int> (24000.0 / freqHz) : maxHarm;
         const double amp = std::pow (10.0, static_cast<double> (levelDb) / 20.0);
 
+        // Measurement hygiene (2026-10-14): the synth below runs at fixed
+        // 48k, so retune the envelope there and restore after — a hot-rate
+        // (2x/4x) instance would otherwise time its gate wrong. reset() plus
+        // a 0.1 s warm-up discard keeps prior drive history and the cold-start
+        // transient out of the DFT window.
+        const float savedRel = kEnvRel_;
+        const float savedAtk = kEnvAtk_;
+        setSampleRate (48000.0);
+        reset();
+        for (int n = 0; n < 4800; ++n)
+        {
+            const float x = static_cast<float> (
+                amp * std::sin (2.0 * kPi_ * static_cast<double> (freqHz) * static_cast<double> (n) / fs));
+            processSample (x);
+        }
+
         double magSq[maxHarm + 1] = {};
         for (int h = 1; h <= topHarm; ++h)
         {
@@ -215,6 +240,8 @@ struct ColorStage
             const double mag = 2.0 * std::hypot (re, im) / static_cast<double> (total);
             magSq[h] = mag * mag;
         }
+        kEnvRel_ = savedRel;
+        kEnvAtk_ = savedAtk;
 
         if (!(magSq[1] > 0.0))
             return 0.0f;
