@@ -17,7 +17,8 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    # 02:00 ICT (Thailand, UTC+7, no DST) — cron runs on UTC.
+    - cron: "0 19 * * *"
   workflow_dispatch:
 
 # Cron + manual dispatch colliding would double-build and double-move the tag
