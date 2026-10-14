@@ -128,8 +128,8 @@ private:
     // cover live toggles, which is the click being fixed).
     float bypassMix_ = 0.0f;
     bool firstAudioBlock_ = true;
-    // Latch: true while the host drives processBlockBypassed (see Task 4 .cpp
-    // use). Default false = normal processBlock path.
+    // Latch set by processBlockBypassed, consumed by processBlock.
+    // Default false = normal processBlock path.
     bool wasBypassedCall_ = false;
 
     // Dry-path alignment delay: the engaged path delays by the hot FIR group
