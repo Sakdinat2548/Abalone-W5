@@ -1011,6 +1011,18 @@ void checkColorTimingAcrossReprepare ()
         // ~1e-7) — but a host-rate timing slip differs 4x (~1.5e-4), so the
         // gate still discriminates the real bug.
         assert (std::fabs (armed - expected) < 1.0e-6f);
+        // Per-leg pin (no-cross-slew structure): every factor instance keeps
+        // its own hot-rate taus regardless of the live factor — retuning any
+        // leg to host rate (or to the live target's rate) fails here, which
+        // the live-factor tap above alone cannot catch.
+        for (int leg : {1, 2, 4})
+        {
+            const float legCoeff = chain.colorLegForTest (leg).envReleaseCoeff();
+            const float legExpected = 1.0f - static_cast<float> (std::exp (-1.0 / (0.1 * 48000.0 * leg)));
+            std::printf ("  leg %dx: coeff %.3e, formula %.3e\n", leg, legCoeff, legExpected);
+            std::fflush (stdout);
+            assert (std::fabs (legCoeff - legExpected) < 1.0e-6f);
+        }
     }
 }
 
