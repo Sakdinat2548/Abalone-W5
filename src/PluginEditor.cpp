@@ -117,12 +117,18 @@ void AbaloneW5AudioProcessorEditor::startUnboundedDrag ()
     // extension — which is how this ever compiled locally).
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     dragAnchor_ = source.getScreenPosition();
-    dragging_ = true;
     source.enableUnboundedMouseMovement (true, false);
+    // Touch/pen drags reach here with the main mouse source idle, where the
+    // enable above is a strict no-op (JUCE gates it on isDragging): arm only
+    // when the mode actually engaged, or a later endUnboundedDrag would yank
+    // the cursor for a drag that never unhooked it.
+    dragging_ = source.isUnboundedMouseMovementEnabled();
 }
 
 void AbaloneW5AudioProcessorEditor::endUnboundedDrag ()
 {
+    if (!dragging_)
+        return;
     dragging_ = false;
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     source.enableUnboundedMouseMovement (false);
@@ -241,7 +247,18 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     {
         const int value = static_cast<int> (toneSlider.getValue());
         if (auto* param = processor.getApvts().getParameter ("tone"))
+        {
+            // Drag ticks ride the outer onDragStart/onDragEnd bracket: nested
+            // begin/end pairs are host-dependent (not refcounted), so bracket
+            // here only for wheel/keys/accessibility writes, which never
+            // enter the drag bracket. Same live-drag signal as timerCallback.
+            const bool inDrag = toneSlider.isMouseButtonDown();
+            if (!inDrag)
+                param->beginChangeGesture();
             param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (value)));
+            if (!inDrag)
+                param->endChangeGesture();
+        }
     };
     addAndMakeVisible (toneSlider);
 
@@ -365,6 +382,7 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     addAndMakeVisible (dimOverlay);
 
     auto& apvts = processor.getApvts();
+    osParam_ = apvts.getRawParameterValue ("osfactor");
     boostAttachment =
         std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, "boost", boostSlider);
     outputAttachment =
@@ -394,7 +412,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
     // fonts are rebuilt at the window scale there too.
     setResizable (true, true);
     setResizeLimits (kEditorWidth, kEditorHeight, kEditorMaxWidth, kEditorMaxHeight);
-    getConstrainer()->setFixedAspectRatio (static_cast<double> (kEditorWidth) / static_cast<double> (kEditorHeight));
+    if (auto* c = getConstrainer())
+        c->setFixedAspectRatio (static_cast<double> (kEditorWidth) / static_cast<double> (kEditorHeight));
 
     // Masthead SVG (BinaryData drawable, parsed once here on the message
     // thread); the engraved in-code fallback in paint() covers a parse
@@ -480,7 +499,9 @@ void AbaloneW5AudioProcessorEditor::paint (juce::Graphics& g)
 // caption family the way the trim readout does.
 void AbaloneW5AudioProcessorEditor::drawOsLabels (juce::Graphics& g, juce::Rectangle<int> knob, float scale) const
 {
-    const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
+    if (osParam_ == nullptr)
+        return;
+    const int osIndex = static_cast<int> (std::round (osParam_->load()));
     const char* text = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
     g.setFont (juce::Font (juce::FontOptions (9.5f * scale).withStyle ("Bold")));
     g.setColour (juce::Colour (0xff1b1b1c));
@@ -604,7 +625,9 @@ void AbaloneW5AudioProcessorEditor::timerCallback ()
     // load all arrive via the param): repaint only on change, like TRIM.
     // Reads the same raw Choice index the DSP path reads (same clamp), so
     // the label can never disagree with the audio factor.
-    const int osIndex = static_cast<int> (std::round (processor.getApvts().getRawParameterValue ("osfactor")->load()));
+    if (osParam_ == nullptr)
+        return;
+    const int osIndex = static_cast<int> (std::round (osParam_->load()));
     const juce::String osText = (osIndex <= 0) ? "1x" : (osIndex == 1) ? "2x" : "4x";
     if (osText != lastOsText)
     {
