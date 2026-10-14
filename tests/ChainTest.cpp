@@ -1137,6 +1137,299 @@ void checkToneRetargetDefers ()
     assert (worst < 1.1f * singleWorst);
 }
 
+// (r) Restart-leak: after hot drive, reset() — and a same-rate
+// setSampleRate (what hosts do on transport restart) — must leave no audible
+// state: silence in gives silence out (bit-exact 0). Pre-fix, postLp_,
+// GainStage lp_, HighCut state_ and the color envelope were never flushed,
+// so mV-scale DC and ring leaked into the "silence".
+void checkResetClearsState ()
+{
+    for (int mode = 0; mode < 2; ++mode) // 0 = reset(), 1 = same-rate setSampleRate.
+    {
+        ProcessorChain chain;
+        chain.setSampleRate (48000.0);
+        chain.setBoostStep (10);
+        chain.setTone (3);
+        chain.setHighcut (true);
+        chain.setTrimDb (0.0f);
+        for (int n = 0; n < 48000; ++n)
+            chain.processSample (0.5f *
+                                 static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (n) / 48000.0)));
+        if (mode == 0)
+            chain.reset();
+        else
+            chain.setSampleRate (48000.0);
+        float worst = 0.0f;
+        for (int n = 0; n < 1024; ++n)
+        {
+            const float y = chain.processSample (0.0f);
+            assert (std::isfinite (y));
+            const float m = std::fabs (y);
+            if (m > worst)
+                worst = m;
+        }
+        std::printf ("reset-leak %s: worst silence out %e (expect 0)\n", mode == 0 ? "reset()" : "re-prepare", worst);
+        std::fflush (stdout);
+        assert (worst == 0.0f);
+    }
+}
+
+// (s) Trim guard: NaN/Inf/huge trim never latches NaN (falls back to the
+// -3dB default) and out-of-range dB clamps to [-32,+6].
+void checkTrimGuard ()
+{
+    {
+        const float badTrims[5] = {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+                                   -std::numeric_limits<float>::infinity(), 1.0e30f, -1.0e30f};
+        // Non-finite falls back to the -3dB default; huge-finite clamps to
+        // the [+6,-32]dB range ends.
+        const float expectTrims[5] = {-3.0f, -3.0f, -3.0f, 6.0f, -32.0f};
+        for (int i = 0; i < 5; ++i)
+        {
+            ProcessorChain chain;
+            chain.setSampleRate (48000.0);
+            chain.setBoostStep (1);
+            chain.setTone (0);
+            chain.setHighcut (false);
+            chain.setTrimDb (badTrims[i]);
+            ProcessorChain ref;
+            ref.setSampleRate (48000.0);
+            ref.setBoostStep (1);
+            ref.setTone (0);
+            ref.setHighcut (false);
+            ref.setTrimDb (expectTrims[i]);
+            double sumSq = 0.0;
+            double refSq = 0.0;
+            int count = 0;
+            for (int n = 0; n < 48000; ++n)
+            {
+                const float x =
+                    0.5f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / 48000.0));
+                const float y = chain.processSample (x);
+                const float r = ref.processSample (x);
+                assert (std::isfinite (y));
+                assert (std::isfinite (r));
+                if (n >= 24000)
+                {
+                    sumSq += static_cast<double> (y) * y;
+                    refSq += static_cast<double> (r) * r;
+                    ++count;
+                }
+            }
+            const float outRms = static_cast<float> (std::sqrt (sumSq / count));
+            const float refRms = static_cast<float> (std::sqrt (refSq / count));
+            const float diffDb = 20.0f * std::log10 (outRms / refRms);
+            std::printf ("trim bad %d: RMS %.4f vs clamp-target %.4f (%+0.3fdB, expect 0 +/- 0.5)\n", i, outRms, refRms,
+                         diffDb);
+            std::fflush (stdout);
+            assert (std::fabs (diffDb) < 0.5f);
+        }
+    }
+    {
+        // Non-finite trim lands on the -3dB default (steady-state, 1s+1s).
+        ProcessorChain nanTrim;
+        nanTrim.setSampleRate (48000.0);
+        nanTrim.setBoostStep (1);
+        nanTrim.setTone (0);
+        nanTrim.setHighcut (false);
+        nanTrim.setTrimDb (std::numeric_limits<float>::quiet_NaN());
+        const float nanDb = steadyGainDb (nanTrim, 48000.0, 1000.0, 0.1f);
+
+        ProcessorChain refTrim;
+        refTrim.setSampleRate (48000.0);
+        refTrim.setBoostStep (1);
+        refTrim.setTone (0);
+        refTrim.setHighcut (false);
+        refTrim.setTrimDb (-3.0f);
+        const float refDb = steadyGainDb (refTrim, 48000.0, 1000.0, 0.1f);
+
+        std::printf ("trim NaN-vs--3dB: %+0.3fdB (expect 0 +/- 0.3)\n", nanDb - refDb);
+        std::fflush (stdout);
+        assert (std::fabs (nanDb - refDb) < 0.3f);
+    }
+    {
+        // Out-of-range dB clamps to the APVTS range ends.
+        ProcessorChain hot;
+        hot.setSampleRate (48000.0);
+        hot.setBoostStep (1);
+        hot.setTone (0);
+        hot.setHighcut (false);
+        hot.setTrimDb (100.0f);
+        const float hotDb = steadyGainDb (hot, 48000.0, 1000.0, 0.1f);
+
+        ProcessorChain atTop;
+        atTop.setSampleRate (48000.0);
+        atTop.setBoostStep (1);
+        atTop.setTone (0);
+        atTop.setHighcut (false);
+        atTop.setTrimDb (6.0f);
+        const float topDb = steadyGainDb (atTop, 48000.0, 1000.0, 0.1f);
+
+        std::printf ("trim +100-vs-+6dB: %+0.3fdB (expect 0 +/- 0.3)\n", hotDb - topDb);
+        std::fflush (stdout);
+        assert (std::fabs (hotDb - topDb) < 0.3f);
+
+        ProcessorChain cold;
+        cold.setSampleRate (48000.0);
+        cold.setBoostStep (1);
+        cold.setTone (0);
+        cold.setHighcut (false);
+        cold.setTrimDb (-100.0f);
+        const float coldDb = steadyGainDb (cold, 48000.0, 1000.0, 0.1f);
+
+        ProcessorChain atBottom;
+        atBottom.setSampleRate (48000.0);
+        atBottom.setBoostStep (1);
+        atBottom.setTone (0);
+        atBottom.setHighcut (false);
+        atBottom.setTrimDb (-32.0f);
+        const float bottomDb = steadyGainDb (atBottom, 48000.0, 1000.0, 0.1f);
+
+        std::printf ("trim -100-vs--32dB: %+0.3fdB (expect 0 +/- 0.3)\n", coldDb - bottomDb);
+        std::fflush (stdout);
+        assert (std::fabs (coldDb - bottomDb) < 0.3f);
+    }
+}
+
+// (t) Trim-step no-click: the largest trim jump (0 -> -32dB) must slew like
+// the 80ms boost follower, not multiply instantly (tone-switch idiom:
+// no sample-to-sample jump above 0.3x local RMS in the 50ms window).
+void checkTrimStepNoClick ()
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    chain.setBoostStep (1);
+    chain.setTone (3);
+    chain.setHighcut (false);
+    chain.setTrimDb (0.0f);
+
+    const int settle = 48000;
+    for (int i = 0; i < settle; ++i)
+        chain.processSample (0.5f *
+                             static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (i) / 48000.0)));
+
+    float prev = chain.processSample (
+        0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (settle) / 48000.0)));
+
+    chain.setTrimDb (-32.0f);
+
+    const int window = 2400; // 50ms @48k.
+    static float buf[2400];
+    float maxJump = 0.0f;
+    for (int i = 0; i < window; ++i)
+    {
+        const float x =
+            0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (settle + 1 + i) / 48000.0));
+        buf[i] = chain.processSample (x);
+        const float jump = std::fabs (buf[i] - prev);
+        if (jump > maxJump)
+            maxJump = jump;
+        prev = buf[i];
+    }
+
+    const float localRms = rms (buf, 0, window);
+    std::printf ("trim-step 0->-32dB: maxJump %0.5f, localRMS %0.4f, limit %0.4f\n", maxJump, localRms,
+                 0.3f * localRms);
+    std::fflush (stdout);
+    assert (maxJump < 0.3f * localRms);
+}
+
+// (u) OS blend legs no cross-slew, two halves. (1) Structural: each factor
+// leg owns its ColorStage instance (separate envelopes by construction), so
+// the fade-out leg keeps its own rate's taus and update cadence for the
+// whole blend — the old shared instance churned one envelope 3-6x/sample at
+// the retuned target taus. A behavioral output gate cannot isolate this:
+// any blend legitimately mixes the undelayed 1x leg with the delayed 2x/4x
+// leg, so the mix transient (and every downstream state integrating it)
+// swamps the envelope effect ~1000x — measured: a round-trip excursion
+// rejoins to 1.3e-3 both before and after the fix, i.e. that diff is the
+// by-design downstream transient, not the bug. The distinct-instances pin
+// plus the existing no-click/equivalence gates is the honest coverage.
+// (2) Convergence: after the excursion lands and re-settles, the chain
+// rejoins the undisturbed trajectory (guards the refactor's steady state).
+void checkOsLegsAreIndependent ()
+{
+    ProcessorChain chain;
+    chain.setSampleRate (48000.0);
+    const ColorStage& leg1 = chain.colorLegForTest (1);
+    const ColorStage& leg2 = chain.colorLegForTest (2);
+    const ColorStage& leg4 = chain.colorLegForTest (4);
+    const ColorStage& legOther = chain.colorLegForTest (99);
+    std::printf ("os legs: %p %p %p (other-factor %p, expect 1x)\n", static_cast<const void*> (&leg1),
+                 static_cast<const void*> (&leg2), static_cast<const void*> (&leg4),
+                 static_cast<const void*> (&legOther));
+    std::fflush (stdout);
+    assert (&leg1 != &leg2);
+    assert (&leg1 != &leg4);
+    assert (&leg2 != &leg4);
+    assert (&legOther == &leg1);
+}
+
+void checkOsExcursionSettlesClean ()
+{
+    auto sine = [] (int n)
+    { return 0.5f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / 48000.0)); };
+    ProcessorChain pure;
+    pure.setSampleRate (48000.0);
+    pure.setBoostStep (3); // +9dB: the color gate is open, the branch is live.
+    pure.setTone (0);
+    pure.setHighcut (false);
+    pure.setTrimDb (0.0f);
+    ProcessorChain trip;
+    trip.setSampleRate (48000.0);
+    trip.setBoostStep (3); // +9dB: the color gate is open, the branch is live.
+    trip.setTone (0);
+    trip.setHighcut (false);
+    trip.setTrimDb (0.0f);
+    const int settle = 96000;
+    for (int n = 0; n < settle; ++n)
+    {
+        pure.processSample (sine (n));
+        trip.processSample (sine (n));
+    }
+    int n = settle;
+    trip.setOsFactor (2);
+    for (int k = 0; k < 48; ++k)
+    {
+        pure.processSample (sine (n));
+        trip.processSample (sine (n));
+        ++n;
+    }
+    trip.setOsFactor (1); // mid-blend: parks pending, still armed 2x.
+    assert (trip.getOsFactor() == 2);
+    // Finish the excursion: rest of blend 1 (240-48) + full blend 2 (240),
+    // then re-settle 2s so the by-design blend/downstream transient dies.
+    // Threshold note: < 5e-4, not exact — cross-history trajectory pairs in
+    // this chain carry a pre-existing sub-1e-3 wandering floor (DC-blocker
+    // settling + float noise; measured bit-identical before/after this
+    // fix), while every real gate in the suite lives at 0.05dB+ (60x above).
+    for (int k = 0; k < 432; ++k)
+    {
+        pure.processSample (sine (n));
+        trip.processSample (sine (n));
+        ++n;
+    }
+    assert (trip.getOsFactor() == 1);
+    assert (trip.getLatencySamples() == 0);
+    for (int k = 0; k < 96000; ++k)
+    {
+        pure.processSample (sine (n));
+        trip.processSample (sine (n));
+        ++n;
+    }
+    float worst = 0.0f;
+    for (int k = 0; k < 64; ++k)
+    {
+        const float d = std::fabs (pure.processSample (sine (n)) - trip.processSample (sine (n)));
+        if (d > worst)
+            worst = d;
+        ++n;
+    }
+    std::printf ("os excursion rejoin after re-settle: worst diff %e (expect < 5e-4)\n", worst);
+    std::fflush (stdout);
+    assert (worst < 5.0e-4f);
+}
+
 } // namespace
 
 int main ()
@@ -1165,6 +1458,11 @@ int main ()
     checkEnabledIdempotent();
     checkOsRetargetDefers();
     checkToneRetargetDefers();
+    checkResetClearsState();
+    checkTrimGuard();
+    checkTrimStepNoClick();
+    checkOsLegsAreIndependent();
+    checkOsExcursionSettlesClean();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }

@@ -31,8 +31,16 @@
 // Single-threaded by contract: the audio thread owns the chain; the editor
 // only reads the atomic peak (reset-on-read).
 //
-// No heap in the audio path: fixed members only. Trim is a plain float
-// multiply. Peak is max |post-trim| since the last getLastPeak() call.
+// Threading contract (audio-thread-only): the processor calls every setter
+// from processBlock/prepareToPlay on the audio thread. setSampleRate() and
+// reset() additionally require audio stopped (the host guarantees prepare is
+// never concurrent with process); never call any method concurrently with
+// processSample(). reset() itself allocates nothing, but like prepare it is
+// a stopped-audio call: it rebuilds the Gain/HighCut stages.
+//
+// No heap in the audio path: fixed members only. Trim is a slewed gain (a
+// one-pole follower toward the setTrimDb target, GainStage idiom). Peak is
+// max |post-trim| since the last getLastPeak() call.
 //
 // 1x/2x/4x oversampling around the ColorStage ONLY (OS mini-knob,
 // `osfactor` Choice 1x/2x/4x, default 1x). The tanh is the sole nonlinear
@@ -99,12 +107,13 @@ struct ProcessorChain
 
         sampleRate_ = sampleRate;
         gain_.setSampleRate (sampleRate);
-        // Hot-rate retune, not host-rate: re-prepare with OS engaged must
-        // NOT fall back to host timing (setOsFactor early-returns on an
-        // unchanged target, so this line is the only retune that fires —
-        // without the factor it silently quarters the release, 100 ms to
-        // 25 ms at 4x; hosts re-prepare on every transport start).
-        color_.setSampleRate (sampleRate * static_cast<double> (osTarget_));
+        // Hot-rate retune per factor instance (see armOsFactor): every
+        // instance keeps its own rate's taus, so nothing retunes on factor
+        // switches and re-prepare cannot strand the wrong timing (hosts
+        // re-prepare on every transport start).
+        color1x_.setSampleRate (sampleRate);
+        color2x_.setSampleRate (sampleRate * 2.0);
+        color4x_.setSampleRate (sampleRate * 4.0);
         banks_[0].setSampleRate (sampleRate);
         banks_[1].setSampleRate (sampleRate);
         highcut_.setSampleRate (sampleRate);
@@ -117,33 +126,81 @@ struct ProcessorChain
         // returns before processSample's tail, so bypass stays bit-exact):
         // LS 75Hz +0.91dB Q0.54 + HS 5441Hz -0.34dB Q0.62 + peak 180Hz
         // +0.11dB Q1.97, Q-parametrized RBJ (same cookbook as
-        // ToneBank::cook; the ChainTest voicing oracle pins it). States flushed
-        // like the OS lines: history is meaningless across rates.
+        // ToneBank::cook; the ChainTest voicing oracle pins it).
         cookVoiceShelf (false, 75.0, 0.54, 0.91, sampleRate_, voiceB_[0], voiceA_[0]);
         cookVoiceShelf (true, 5441.0, 0.62, -0.34, sampleRate_, voiceB_[1], voiceA_[1]);
         cookVoicePeak (180.0, 1.97, 0.11, sampleRate_, voiceB_[2], voiceA_[2]);
-        voiceZ_[0][0] = voiceZ_[0][1] = voiceZ_[1][0] = voiceZ_[1][1] = voiceZ_[2][0] = voiceZ_[2][1] = 0.0f;
+        // Trim follower retune (GainStage 10Hz idiom: ~16ms TC, ~80ms to
+        // settle; rate changes keep the current gain, only the coeff retunes).
+        constexpr double trimFc = 10.0;
+        constexpr double trimTwoPi = 6.28318530717958647692;
+        trimCoeff_ = static_cast<float> (1.0 - std::exp (-trimTwoPi * trimFc / sampleRate_));
         xfadeLen_ = static_cast<int> (std::lround (0.01 * sampleRate));
         if (xfadeLen_ < 1)
             xfadeLen_ = 1;
-        if (xfadePos_ > xfadeLen_)
-            xfadePos_ = xfadeLen_;
-        // Rate change flushes the hot delay lines (content is signal
-        // history, meaningless across rates); taps are rate-independent.
+        // Rate change flushes all state history (content is signal history,
+        // meaningless across rates); taps/coeffs above are rate-retuned and
+        // every setting (boost/tone/highcut/color/trim-target/OS-target) is
+        // preserved by reset().
+        osLen_ = static_cast<int> (std::lround (0.005 * sampleRate));
+        if (osLen_ < 1)
+            osLen_ = 1;
+        reset();
+    }
+
+    void setBoostStep (int step) { gain_.setStep (step); }
+
+    // Full state clear (transport restart / prepare): every stage state to
+    // zero, entry blends cancelled, all settings preserved (boost step, tone
+    // target, highcut/color enables, trim target, OS target). Called at the
+    // end of setSampleRate; prepareToPlay/transport paths should call it
+    // AFTER pushing params (boost/tone/highcut/trim/osfactor) so the chain
+    // starts settled (trim/gain followers snap to target, no fade-in).
+    // Audio-stopped call (see threading contract above), never concurrent
+    // with processSample.
+    void reset ()
+    {
+        // GainStage exposes no state reset: rebuild from fresh, restore rate
+        // + step, then slew-settle the gain follower to target with zeros
+        // (lp_ stays exactly 0 throughout — zeros never disturb it).
+        const int step = static_cast<int> (std::lround (gain_.getDb() / 3.0f));
+        gain_ = GainStage();
+        gain_.setSampleRate (sampleRate_);
+        gain_.setStep (step);
+        const int settle = static_cast<int> (0.5 * sampleRate_) + 16;
+        for (int i = 0; i < settle; ++i)
+            gain_.processSample (0.0f);
+        // ToneBank states clear on select: re-select the target on both banks
+        // (also parks the fade state — reset means no audible past).
+        hardSelectTone (targetTone_);
+        // Per-factor color envelopes (the only ColorStage state).
+        color1x_.reset();
+        color2x_.reset();
+        color4x_.reset();
+        // HighCut exposes no state reset: rebuild + restore rate + enable.
+        highcut_ = HighCut();
+        highcut_.setSampleRate (sampleRate_);
+        highcut_.setEnabled (highcutOn_);
+        // Chain-owned states.
+        postLp_ = 0.0f;
+        for (int s = 0; s < 3; ++s)
+            voiceZ_[s][0] = voiceZ_[s][1] = 0.0f;
         osUpD_.fill (0.0f);
         osDnD_.fill (0.0f);
         os4Up1D_.fill (0.0f);
         os4Up2D_.fill (0.0f);
         os4Dn2D_.fill (0.0f);
         os4Dn1D_.fill (0.0f);
-        osLen_ = static_cast<int> (std::lround (0.005 * sampleRate));
-        if (osLen_ < 1)
-            osLen_ = 1;
-        if (osPos_ > osLen_)
-            osPos_ = osLen_;
+        // Start settled (GainStage ctor idiom): no fade-in after reset.
+        trimLin_ = trimTargetLin_;
+        // Cancel entry blends at their targets (no audible past to blend).
+        osBlending_ = false;
+        osActive_ = osTarget_;
+        osPos_ = 0;
+        hasOsPending_ = false;
+        peak_.store (0.0f, std::memory_order_relaxed);
+        prePeak_.store (0.0f, std::memory_order_relaxed);
     }
-
-    void setBoostStep (int step) { gain_.setStep (step); }
 
     // Tone 0-6, 0 = bypass. Out-of-range values clamp. Arms the 10ms
     // equal-power xfade; a no-op when the tone is already targeted.
@@ -177,9 +234,18 @@ struct ProcessorChain
 
     int getToneTarget () const { return targetTone_; }
 
-    void setHighcut (bool enabled) { highcut_.setEnabled (enabled); }
+    void setHighcut (bool enabled)
+    {
+        highcutOn_ = enabled; // tracked: reset() rebuilds HighCut (no state reset API).
+        highcut_.setEnabled (enabled);
+    }
 
-    void setColorEnabled (bool enabled) { color_.setEnabled (enabled); }
+    void setColorEnabled (bool enabled)
+    {
+        color1x_.setEnabled (enabled);
+        color2x_.setEnabled (enabled);
+        color4x_.setEnabled (enabled);
+    }
 
     // Oversample factor for the ColorStage path (1, 2, or 4; anything else
     // clamps to the nearest). Arms the 5ms equal-power xfade from the
@@ -212,10 +278,23 @@ struct ProcessorChain
 
     int getOsFactor () const { return osTarget_; }
 
-    // Test tap: the color envelope release coefficient (pins hot-rate timing
-    // across re-prepare — the re-prepare regression had no observable gate
-    // without it).
-    float colorEnvReleaseCoeff () const { return color_.envReleaseCoeff(); }
+    // Test tap: the ColorStage instance behind a factor leg (pins the
+    // no-cross-slew structure — each leg owns its envelope; the gate below
+    // asserts pairwise-distinct instances).
+    const ColorStage& colorLegForTest (int factor) const
+    {
+        return (factor == 4) ? color4x_ : (factor == 2) ? color2x_ : color1x_;
+    }
+
+    // Test tap: the color envelope release coefficient at the live factor
+    // (pins hot-rate timing across re-prepare — the re-prepare regression
+    // had no observable gate without it).
+    float colorEnvReleaseCoeff () const
+    {
+        return (osTarget_ == 4)   ? color4x_.envReleaseCoeff()
+               : (osTarget_ == 2) ? color2x_.envReleaseCoeff()
+                                  : color1x_.envReleaseCoeff();
+    }
 
     // Task-18 compat shim: false->1x, true->2x.
     void setOversampled (bool oversampled) { setOsFactor (oversampled ? 2 : 1); }
@@ -230,7 +309,21 @@ struct ProcessorChain
         return (osTarget_ == 4) ? kOsLatency4xSamples : (osTarget_ == 2) ? kOsLatencySamples : 0;
     }
 
-    void setTrimDb (float trimDb) { trimLin_ = std::pow (10.0f, trimDb / 20.0f); }
+    void setTrimDb (float trimDb)
+    {
+        // Guard: pow(10, trimDb/20) turns NaN/Inf/1e30 into NaN/Inf, which
+        // latches every downstream state. Clamp to the APVTS range
+        // [-32,+6]dB; non-finite falls back to the -3dB default. Target only:
+        // the per-sample gain slews toward it (see processSample), so knob
+        // twists ramp instead of zipping.
+        if (!std::isfinite (trimDb))
+            trimDb = -3.0f;
+        if (trimDb < -32.0f)
+            trimDb = -32.0f;
+        else if (trimDb > 6.0f)
+            trimDb = 6.0f;
+        trimTargetLin_ = std::pow (10.0f, trimDb / 20.0f);
+    }
 
     float processSample (float x)
     {
@@ -293,6 +386,12 @@ struct ProcessorChain
             postLp_ = 0.0f;
         const float deblocked = colored - postLp_;
         const float cut = highcut_.processSample (deblocked);
+        // Slewed trim (GainStage idiom, fc = 10Hz): preset/knob jumps ramp
+        // over ~80ms instead of multiplying instantly (zipper). Snaps below
+        // 1e-6 linear, so post-settle gain is exact even at the -32dB floor.
+        trimLin_ += trimCoeff_ * (trimTargetLin_ - trimLin_);
+        if (std::fabs (trimTargetLin_ - trimLin_) < 1.0e-6f)
+            trimLin_ = trimTargetLin_;
         const float out = cut * trimLin_;
         // Fixed hardware voicing (see setSampleRate): three TDF-II sections
         // (LS + HS + low-mid peak). Denormal snap mirrors ToneBank (states
@@ -338,6 +437,9 @@ private:
     // Color section with the hot-factor path. Steady state runs exactly one
     // path (1x direct = the historical code path); during the 5ms entry
     // blend both run and mix equal-power, old at weight cos, new at sin.
+    // Each leg runs its own factor instance (never one shared stage), so the
+    // fade-out leg keeps its own rate's taus and update cadence for the whole
+    // blend — no cross-slew between legs.
     float colorWithOsBlend (float shaped)
     {
         if (!osBlending_)
@@ -385,7 +487,7 @@ private:
     {
         return (factor == 4)   ? processOversampled4x (x)
                : (factor == 2) ? processOversampled (x)
-                               : color_.processSample (x);
+                               : color1x_.processSample (x);
     }
 
     // One host-rate sample through the 2x color path: zero-stuff up (x2 to
@@ -401,9 +503,9 @@ private:
         const float y0 = 2.0f * firDot (osFir_, osUpD_);
         firPush (osUpD_, 0.0f);
         const float y1 = 2.0f * firDot (osFir_, osUpD_);
-        firPush (osDnD_, color_.processSample (y0));
+        firPush (osDnD_, color2x_.processSample (y0));
         const float out = firDot (osFir_, osDnD_);
-        firPush (osDnD_, color_.processSample (y1));
+        firPush (osDnD_, color2x_.processSample (y1));
         return out;
     }
 
@@ -430,12 +532,12 @@ private:
         firPush (os4Up2D_, 0.0f);
         const float w11 = 2.0f * firDot (osFir_, os4Up2D_);
 
-        firPush (os4Dn2D_, color_.processSample (w00));
+        firPush (os4Dn2D_, color4x_.processSample (w00));
         const float v0 = firDot (osFir_, os4Dn2D_);
-        firPush (os4Dn2D_, color_.processSample (w01));
-        firPush (os4Dn2D_, color_.processSample (w10));
+        firPush (os4Dn2D_, color4x_.processSample (w01));
+        firPush (os4Dn2D_, color4x_.processSample (w10));
         const float v1 = firDot (osFir_, os4Dn2D_);
-        firPush (os4Dn2D_, color_.processSample (w11));
+        firPush (os4Dn2D_, color4x_.processSample (w11));
 
         firPush (os4Dn1D_, v0);
         const float out = firDot (osFir_, os4Dn1D_);
@@ -507,15 +609,27 @@ private:
         osTarget_ = target;
         osPos_ = 0;
         osBlending_ = true;
-        // The color stage runs at the hot rate under OS: retune its envelope
-        // taus so seconds stay seconds (else 2x/4x halves/quarters them).
-        color_.setSampleRate (sampleRate_ * static_cast<double> (target));
+        // No color retune here: each factor owns a permanently hot-tuned
+        // instance (see setSampleRate), so both blend legs run correct taus
+        // for the whole blend. The old shared-instance retune stranded the
+        // fade-out leg on the target rate and churned one envelope 3-6x per
+        // sample mid-blend.
     }
 
     double sampleRate_ = 48000.0;
     GainStage gain_;
     ToneBank banks_[2];
-    ColorStage color_;
+    // Per-factor color instances (no-cross-slew fix): each factor's path —
+    // including its blend leg — runs its own envelope at its own hot-rate
+    // taus, so the 1x leg does 1 update/sample at 1x timing while the 2x leg
+    // does 2 at 2x timing, never churning shared state. Instances off the
+    // live path sit out (their envelopes go stale, not wrong); the 5ms entry
+    // blend covers the entry transient either way, same as the FIR lines.
+    // Only the existing ColorStage interface is used (ctor/reset/
+    // processSample/setSampleRate/setEnabled) — no new API.
+    ColorStage color1x_;
+    ColorStage color2x_;
+    ColorStage color4x_;
     float postHpCoeff_ = 0.0f;
     float postLp_ = 0.0f;
     // Fixed hardware voicing: RBJ sections (b = b0..b2 normalized, a = a1..a2)
@@ -585,7 +699,10 @@ private:
         a[1] = static_cast<float> (a2 / a0);
     }
     HighCut highcut_;
+    bool highcutOn_ = false; // tracked: HighCut has no state reset or getter.
     float trimLin_ = 1.0f;
+    float trimTargetLin_ = 1.0f; // setTrimDb target; trimLin_ slews toward it.
+    float trimCoeff_ = 0.0f;     // one-pole follower coeff, retuned per rate.
     mutable std::atomic<float> peak_{0.0f};
     mutable std::atomic<float> prePeak_{0.0f};
 
