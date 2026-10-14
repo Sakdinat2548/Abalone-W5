@@ -129,6 +129,10 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
     {
         chain.setSampleRate (sampleRate);
         chain.setOsFactor (osFactor);
+        // Settle AFTER the push (see ProcessorChain::reset contract):
+        // same-rate transport restarts must not leak prior-take tail, and a
+        // factor change at prepare must not leave an OS entry blend behind.
+        chain.reset();
     }
     // Re-report after every rate change (the 1x/2x/4x latency is
     // rate-independent, but the host still needs a fresh value on
@@ -163,11 +167,15 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // Host-bypass latch (see processBlockBypassed): a normal block always
+    // clears it; the LED consumes it to stay dark across manual host bypass.
+    wasBypassedCall_ = false;
+
     // Params are copied once per block; the per-sample path takes no locks.
     // `toneIn ? tone : 0` is the hardware-true TONE button: the knob only
     // ever holds 1-6, the button decides whether it reaches the chain.
-    const int boostStep = static_cast<int> (apvts.getRawParameterValue ("boost")->load()) + 1;
-    const int toneParam = static_cast<int> (apvts.getRawParameterValue ("tone")->load());
+    const int boostStep = static_cast<int> (std::round (apvts.getRawParameterValue ("boost")->load())) + 1;
+    const int toneParam = static_cast<int> (std::round (apvts.getRawParameterValue ("tone")->load()));
     const bool toneIn = apvts.getRawParameterValue ("toneIn")->load() > 0.5f;
     const int tone = toneIn ? toneParam : 0;
     const bool highcut = apvts.getRawParameterValue ("highcut")->load() > 0.5f;
@@ -223,7 +231,44 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             // chains are not re-pushed here, so the tap matches the last
             // reported value by construction).
             const int nCh = monoDuplicate ? 1 : activeChannels;
-            if (dryLatency_ > 0)
+            if (dryBlending_)
+            {
+                // Landed bypassed mid-blend (fast retoggle + OS flip): the dry
+                // side finishes its tap migration here. Freezing mid-flight
+                // would step at the fade/steady boundary and comb the dry
+                // path; advancing the same equal-power weights stays
+                // continuous, and the adoption at completion sits at weight 1
+                // so it is a no-op numerically. A re-engage before completion
+                // resumes the blend from its position.
+                constexpr float halfPi = 1.57079632679489661923f;
+                float* chPtr[2] = {nullptr, nullptr};
+                for (int ch = 0; ch < nCh; ++ch)
+                    chPtr[ch] = buffer.getWritePointer (ch);
+                const int liveTap = chains[0].getLatencySamples();
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    ++dryBlendPos_;
+                    float t = static_cast<float> (dryBlendPos_) / static_cast<float> (dryBlendLen_);
+                    if (t > 1.0f)
+                        t = 1.0f;
+                    const float tapNewW = std::sin (halfPi * t);
+                    const float tapOldW = std::cos (halfPi * t);
+                    for (int ch = 0; ch < nCh; ++ch)
+                    {
+                        const float x = chPtr[ch][i];
+                        const float tapFrom = (dryFrom_ > 0) ? peekDry (ch, dryFrom_) : x;
+                        const float tapTo = (liveTap > 0) ? peekDry (ch, liveTap) : x;
+                        chPtr[ch][i] = tapFrom * tapOldW + tapTo * tapNewW;
+                        pushDry (ch, x);
+                    }
+                }
+                if (dryBlendPos_ >= dryBlendLen_)
+                {
+                    dryLatency_ = liveTap;
+                    dryBlending_ = false;
+                }
+            }
+            else if (dryLatency_ > 0)
             {
                 for (int ch = 0; ch < nCh; ++ch)
                 {
@@ -335,13 +380,21 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 chPtr[ch][i] = dryAligned * dryW + wet * wetW;
             }
         }
-        // Landed: adopt the live tap (the blend already sits at weight 1, so
-        // the adoption itself is a no-op numerically — the tap only ever
-        // switches hands where dry is silent or fully blended).
+        // Landed: adopt the live tap only where it is inaudible — blend
+        // complete (or never armed), or landing engaged (dry weight 0, dry
+        // silent). Landing bypassed mid-blend must NOT adopt: the dry side is
+        // fully audible there and the tap would step (e.g. 0 -> 40 on an OS
+        // flip landing inside a fast bypassed->engaged->bypassed retoggle).
+        // The blend stays armed and the bypassed path below finishes it in
+        // the background (adoption at weight 1 is a no-op); a re-engage
+        // before that simply resumes it.
         if (bypassMix_ == bypassTarget)
         {
-            dryLatency_ = chains[0].getLatencySamples();
-            dryBlending_ = false;
+            if (!dryBlending_ || dryBlendPos_ >= dryBlendLen_ || bypassTarget <= 0.0f)
+            {
+                dryLatency_ = chains[0].getLatencySamples();
+                dryBlending_ = false;
+            }
         }
         if (monoDuplicate)
             duplicateMonoToOutputs (buffer, numSamples);
@@ -449,17 +502,57 @@ void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& bu
     // Host bypass: same TRUE passthrough as ACTIVE off — zero DSP, states
     // frozen, input delayed by the reported latency (see processBlock).
     // Only the input peak is tracked for the LED.
+    // Latches wasBypassedCall_ (cleared by the next processBlock) so the LED
+    // knows this path ran: params alone still read engaged under a manual
+    // host bypass. Syncs bypassMix_ to 1: the return to processBlock then
+    // rides the 5ms fade instead of jumping from a stale engaged position.
     // Mono-in exception: the extra channels hold no input data, so ch0 is
     // copied out (same dual-mono rule as the other paths) — still no DSP.
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
     const bool monoDuplicate = getMainBusNumInputChannels() == 1 && numChannels >= 2;
 
+    wasBypassedCall_ = true;
+    bypassMix_ = 1.0f;
+
     trackBypassPeak (buffer, monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size())),
                      numSamples);
 
     const int nCh = monoDuplicate ? 1 : juce::jmin (numChannels, static_cast<int> (chains.size()));
-    if (dryLatency_ > 0)
+    if (dryBlending_)
+    {
+        // Same in-flight tap migration as the ACTIVE-off steady path: finish
+        // it here (continuous weights, no-op adoption at weight 1) rather
+        // than freezing mid-flight.
+        constexpr float halfPi = 1.57079632679489661923f;
+        float* chPtr[2] = {nullptr, nullptr};
+        for (int ch = 0; ch < nCh; ++ch)
+            chPtr[ch] = buffer.getWritePointer (ch);
+        const int liveTap = chains[0].getLatencySamples();
+        for (int i = 0; i < numSamples; ++i)
+        {
+            ++dryBlendPos_;
+            float t = static_cast<float> (dryBlendPos_) / static_cast<float> (dryBlendLen_);
+            if (t > 1.0f)
+                t = 1.0f;
+            const float tapNewW = std::sin (halfPi * t);
+            const float tapOldW = std::cos (halfPi * t);
+            for (int ch = 0; ch < nCh; ++ch)
+            {
+                const float x = chPtr[ch][i];
+                const float tapFrom = (dryFrom_ > 0) ? peekDry (ch, dryFrom_) : x;
+                const float tapTo = (liveTap > 0) ? peekDry (ch, liveTap) : x;
+                chPtr[ch][i] = tapFrom * tapOldW + tapTo * tapNewW;
+                pushDry (ch, x);
+            }
+        }
+        if (dryBlendPos_ >= dryBlendLen_)
+        {
+            dryLatency_ = liveTap;
+            dryBlending_ = false;
+        }
+    }
+    else if (dryLatency_ > 0)
     {
         for (int ch = 0; ch < nCh; ++ch)
         {
@@ -503,8 +596,8 @@ float AbaloneW5AudioProcessor::getSignalPeak ()
     // (reset-on-read) but never COUNT them while bypassed — otherwise the
     // LED flashes once on stale engaged-era level after every toggle off,
     // even into silence.
-    const bool engaged =
-        apvts.getRawParameterValue ("active")->load() > 0.5f && apvts.getRawParameterValue ("bypass")->load() <= 0.5f;
+    const bool engaged = apvts.getRawParameterValue ("active")->load() > 0.5f &&
+                         apvts.getRawParameterValue ("bypass")->load() <= 0.5f && !wasBypassedCall_;
     for (auto& chain : chains)
     {
         static_cast<void> (chain.getLastPeak());
@@ -560,8 +653,12 @@ void AbaloneW5AudioProcessor::setStateInformation (const void* data, int sizeInB
             }
         if (!hasBypassChild)
         {
+            // Gesture-bracketed like mirrorActive: some hosts ignore
+            // unbracketed performEdit on kIsBypass.
             const bool active = apvts.getRawParameterValue ("active")->load() > 0.5f;
+            bypassParam_->beginChangeGesture();
             bypassParam_->setValueNotifyingHost (active ? 0.0f : 1.0f);
+            bypassParam_->endChangeGesture();
         }
     }
 }
