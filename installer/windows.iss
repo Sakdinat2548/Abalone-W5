@@ -16,7 +16,7 @@
 ; Signed one day: add SignTool=signtool below and pass
 ; /Ssigntool="signtool.exe sign ..." to iscc in CI.
 #ifndef AppVersion
-#define AppVersion "1.3.0"
+#define AppVersion "1.3.1"
 #endif
 #ifndef OutFile
 #define OutFile "Abalone-W5-" + AppVersion + "-windows-setup"
