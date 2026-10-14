@@ -800,6 +800,318 @@ void checkLedNoStaleAfterBypass ()
     CHECK (darkPeak == 0.0f);
 }
 
+// (i) Double-toggle tap adoption: bypassed -> engaged -> bypassed faster than
+// the 5ms dry-blend, with an OS flip landing mid-bypass, must not click. The
+// dry tap may only be adopted where dry is silent (blend complete, or landing
+// engaged); adopting mid-blend onto the audible bypassed path steps the tap
+// (0 -> 40 here) and jumps by |x[t]-x[t-40]| (~0.5 on this sine pre-fix).
+void checkDoubleToggleTapAdoption ()
+{
+    constexpr int kSmall = 64; // < 5ms @48k (240): excursions span blocks.
+    AbaloneW5AudioProcessor proc;
+    proc.prepareToPlay (kSampleRate, kSmall);
+    setFlatParams (proc); // engaged 1x.
+    juce::AudioBuffer<float> buffer (2, kSmall);
+    juce::MidiBuffer midi;
+    int phase0 = 0;
+    int phase1 = 0;
+    for (int b = 0; b < 40; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f; // bypass.
+    for (int b = 0; b < 5; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("osfactor") = 1.0f; // 2x mid-bypass.
+    for (int b = 0; b < 2; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("active") = 1.0f; // brief excursion.
+    fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+    fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+    proc.processBlock (buffer, midi);
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f; // back off.
+    float worst = 0.0f;
+    float prevLast = buffer.getReadPointer (0)[kSmall - 1];
+    for (int b = 0; b < 5; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+        const float* ch0 = buffer.getReadPointer (0);
+        worst = juce::jmax (worst, std::fabs (ch0[0] - prevLast));
+        worst = juce::jmax (worst, maxStepJump (ch0, kSmall, b));
+        prevLast = ch0[kSmall - 1];
+    }
+    std::printf ("double-toggle tap adoption: worst jump %.5f (expect < 0.06)\n", worst);
+    CHECK (worst < 0.06f);
+}
+
+// (j) Host-bypassed entry point: latches the bypassed call (LED dark despite
+// engaged params), syncs the fade position (return rides the 5ms fade, and
+// switching ACTIVE off afterwards is bit-exact instead of a wet fade).
+void checkBypassedCallLatch ()
+{
+    // (a) LED: loud engaged, then one host-bypassed block -> dark.
+    {
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 4; ++b)
+        {
+            fillSine (buffer, 0, 1000.0, 0.5f);
+            fillSine (buffer, 1, 1000.0, 0.5f);
+            proc.processBlock (buffer, midi);
+        }
+        CHECK (proc.getSignalPeak() > 0.5f);
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        proc.processBlockBypassed (buffer, midi);
+        const float peak = proc.getSignalPeak();
+        std::printf ("led after host-bypassed block: %.4f (expect 0)\n", peak);
+        CHECK (peak == 0.0f);
+    }
+    // (b) Return to processBlock fades in from dry (first samples ~input),
+    // not instant wet.
+    {
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        juce::MidiBuffer midi;
+        int phase0 = 0;
+        int phase1 = 0;
+        for (int b = 0; b < 20; ++b)
+        {
+            fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+            fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+            proc.processBlock (buffer, midi);
+        }
+        for (int b = 0; b < 2; ++b)
+        {
+            fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+            fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+            proc.processBlockBypassed (buffer, midi);
+        }
+        static float input0[kBlock];
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        std::memcpy (input0, buffer.getReadPointer (0), sizeof (input0));
+        proc.processBlock (buffer, midi);
+        const float err = maxAbsDiff (buffer.getReadPointer (0), input0, 16);
+        std::printf ("bypassed-return first 16 samples: max|out-in| = %.5f (expect < 0.05, fade from dry)\n", err);
+        CHECK (err < 0.05f);
+    }
+    // (c) ACTIVE-off right after a host-bypassed block is bit-exact (fade
+    // position synced), not a wet fade from a stale mix.
+    {
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 4; ++b)
+        {
+            fillSine (buffer, 0, 1000.0, 0.5f);
+            fillSine (buffer, 1, 100.0, 0.4f);
+            proc.processBlock (buffer, midi);
+        }
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 100.0, 0.4f);
+        proc.processBlockBypassed (buffer, midi);
+        *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+        static float snapshot0[kBlock];
+        static float snapshot1[kBlock];
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 100.0, 0.4f);
+        std::memcpy (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0));
+        std::memcpy (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1));
+        proc.processBlock (buffer, midi);
+        CHECK (std::memcmp (snapshot0, buffer.getReadPointer (0), sizeof (snapshot0)) == 0);
+        CHECK (std::memcmp (snapshot1, buffer.getReadPointer (1), sizeof (snapshot1)) == 0);
+        std::puts ("active-off after host-bypassed block: bit-exact passthrough");
+    }
+}
+
+// (k) Choice-param float mapping rounds: a 2.999999f representation must
+// select the same tone/boost step as the exact index, matching the osfactor
+// idiom (truncation picks the neighbor).
+void checkParamMappingRounds ()
+{
+    // Tone: 2.999999f vs 3.0f both mean Tone 3.
+    {
+        AbaloneW5AudioProcessor procA, procB;
+        procA.prepareToPlay (kSampleRate, kBlock);
+        procB.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (procA);
+        setFlatParams (procB);
+        *procA.getApvts().getRawParameterValue ("tone") = 3.0f;
+        *procB.getApvts().getRawParameterValue ("tone") = 2.999999f;
+        juce::AudioBuffer<float> bufferA (2, kBlock);
+        juce::AudioBuffer<float> bufferB (2, kBlock);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 40; ++b)
+        {
+            fillSine (bufferA, 0, 1000.0, 0.5f);
+            fillSine (bufferA, 1, 1000.0, 0.5f);
+            fillSine (bufferB, 0, 1000.0, 0.5f);
+            fillSine (bufferB, 1, 1000.0, 0.5f);
+            procA.processBlock (bufferA, midi);
+            procB.processBlock (bufferB, midi);
+        }
+        const float err = maxAbsDiff (bufferA.getReadPointer (0), bufferB.getReadPointer (0), kBlock);
+        std::printf ("tone 2.999999-vs-3 mapping: max|B-A| = %.9f (expect < %.0e)\n", err, static_cast<double> (kTol));
+        CHECK (err < kTol);
+    }
+    // Boost: 0.999999f vs 1.0f both mean step 2 (+6dB).
+    {
+        AbaloneW5AudioProcessor procA, procB;
+        procA.prepareToPlay (kSampleRate, kBlock);
+        procB.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (procA);
+        setFlatParams (procB);
+        *procA.getApvts().getRawParameterValue ("boost") = 1.0f;
+        *procB.getApvts().getRawParameterValue ("boost") = 0.999999f;
+        juce::AudioBuffer<float> bufferA (2, kBlock);
+        juce::AudioBuffer<float> bufferB (2, kBlock);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 100; ++b) // gain follower (~80ms TC) fully settles.
+        {
+            fillSine (bufferA, 0, 1000.0, 0.5f);
+            fillSine (bufferA, 1, 1000.0, 0.5f);
+            fillSine (bufferB, 0, 1000.0, 0.5f);
+            fillSine (bufferB, 1, 1000.0, 0.5f);
+            procA.processBlock (bufferA, midi);
+            procB.processBlock (bufferB, midi);
+        }
+        const float err = maxAbsDiff (bufferA.getReadPointer (0), bufferB.getReadPointer (0), kBlock);
+        std::printf ("boost 0.999999-vs-1 mapping: max|B-A| = %.9f (expect < %.0e)\n", err, static_cast<double> (kTol));
+        CHECK (err < kTol);
+    }
+}
+
+// (l) Pre-bypass-era state restore converges `bypass` inside a host gesture
+// (some hosts ignore unbracketed performEdit on kIsBypass, so the DAW button
+// would never follow ACTIVE without the bracket).
+struct GestureProbe : juce::AudioProcessorParameter::Listener
+{
+    int begins = 0;
+    int ends = 0;
+    void parameterValueChanged (int, float) override {}
+    void parameterGestureChanged (int, bool gestureIsStarting) override
+    {
+        if (gestureIsStarting)
+            ++begins;
+        else
+            ++ends;
+    }
+};
+
+void checkStateRestoreGestures ()
+{
+    AbaloneW5AudioProcessor proc;
+    proc.getApvts().getParameter ("active")->setValueNotifyingHost (0.0f);
+    juce::MemoryBlock block;
+    proc.getStateInformation (block);
+    std::unique_ptr<juce::XmlElement> xml (
+        juce::AudioProcessor::getXmlFromBinary (block.getData(), static_cast<int> (block.getSize())));
+    CHECK (xml != nullptr);
+    bool dropped = false;
+    for (auto* child = xml->getFirstChildElement(); child != nullptr;)
+    {
+        auto* next = child->getNextElement();
+        if (child->getStringAttribute ("id") == "bypass")
+        {
+            xml->removeChildElement (child, true);
+            dropped = true;
+        }
+        child = next;
+    }
+    CHECK (dropped);
+    juce::MemoryBlock stripped;
+    juce::AudioProcessor::copyXmlToBinary (*xml, stripped);
+    AbaloneW5AudioProcessor proc2;
+    GestureProbe probe;
+    proc2.getApvts().getParameter ("bypass")->addListener (&probe);
+    proc2.setStateInformation (stripped.getData(), static_cast<int> (stripped.getSize()));
+    proc2.getApvts().getParameter ("bypass")->removeListener (&probe);
+    std::printf ("state-restore converge gestures: begin %d end %d (expect 1/1)\n", probe.begins, probe.ends);
+    CHECK (probe.begins == 1);
+    CHECK (probe.ends == 1);
+    CHECK (proc2.getApvts().getParameter ("bypass")->getValue() == 1.0f);
+}
+
+// (m) Re-prepare starts settled: a pending factor change at prepare must not
+// leave an OS entry blend behind (prior-take tail in the first blocks), and
+// a same-rate transport restart leaks no state at all.
+void checkPrepareStartsSettled ()
+{
+    // Restored-oversampled-session shape: fresh chains at 1x, param says 2x.
+    {
+        AbaloneW5AudioProcessor proc;
+        setFlatParams (proc);
+        *proc.getApvts().getRawParameterValue ("osfactor") = 1.0f; // 2x.
+        proc.prepareToPlay (kSampleRate, kBlock);
+
+        ProcessorChain ref;
+        ref.setSampleRate (kSampleRate);
+        ref.setOsFactor (2);
+        ref.reset();
+        ref.setBoostStep (1);
+        ref.setTone (0);
+        ref.setHighcut (false);
+        ref.setTrimDb (0.0f);
+        ref.setOsFactor (2);
+
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        fillSine (buffer, 0, 220.0, 0.5f);
+        fillSine (buffer, 1, 220.0, 0.5f);
+        static float input0[kBlock];
+        std::memcpy (input0, buffer.getReadPointer (0), sizeof (input0));
+
+        juce::MidiBuffer midi;
+        proc.processBlock (buffer, midi);
+        static float expected[kBlock];
+        for (int i = 0; i < kBlock; ++i)
+            expected[i] = ref.processSample (input0[i]);
+        const float err = maxAbsDiff (buffer.getReadPointer (0), expected, kBlock);
+        std::printf ("prepare pending-2x first block: max|proc-ref| = %.9f (expect < %.0e)\n", err,
+                     static_cast<double> (kTol));
+        CHECK (err < kTol);
+    }
+    // Same-rate transport restart: hot take, re-prepare, silence -> zeros.
+    {
+        AbaloneW5AudioProcessor proc;
+        proc.prepareToPlay (kSampleRate, kBlock);
+        setFlatParams (proc);
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 20; ++b)
+        {
+            fillSine (buffer, 0, 55.0, 0.9f);
+            fillSine (buffer, 1, 55.0, 0.9f);
+            proc.processBlock (buffer, midi);
+        }
+        proc.prepareToPlay (kSampleRate, kBlock); // transport restart.
+        buffer.clear();
+        proc.processBlock (buffer, midi);
+        const float peak = peakOf (buffer.getReadPointer (0), kBlock);
+        std::printf ("same-rate restart silence: peak %.9f (expect 0)\n", peak);
+        CHECK (peak == 0.0f);
+    }
+}
+
 int main ()
 {
     checkMonoInStereoOut();
@@ -814,6 +1126,11 @@ int main ()
     checkBypassSync();
     checkTrimRangeAndDefault();
     checkLedNoStaleAfterBypass();
+    checkDoubleToggleTapAdoption();
+    checkBypassedCallLatch();
+    checkParamMappingRounds();
+    checkStateRestoreGestures();
+    checkPrepareStartsSettled();
 
     if (failures == 0)
     {
