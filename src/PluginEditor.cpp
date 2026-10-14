@@ -248,9 +248,16 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         const int value = static_cast<int> (toneSlider.getValue());
         if (auto* param = processor.getApvts().getParameter ("tone"))
         {
-            param->beginChangeGesture();
+            // Drag ticks ride the outer onDragStart/onDragEnd bracket: nested
+            // begin/end pairs are host-dependent (not refcounted), so bracket
+            // here only for wheel/keys/accessibility writes, which never
+            // enter the drag bracket. Same live-drag signal as timerCallback.
+            const bool inDrag = toneSlider.isMouseButtonDown();
+            if (!inDrag)
+                param->beginChangeGesture();
             param->setValueNotifyingHost (param->convertTo0to1 (static_cast<float> (value)));
-            param->endChangeGesture();
+            if (!inDrag)
+                param->endChangeGesture();
         }
     };
     addAndMakeVisible (toneSlider);
