@@ -31,7 +31,8 @@ public:
     // tracked so the SIGNAL LED follows the input while bypassed.
     // Mono-in exception: with a single main-bus input and >= 2 buffer
     // channels, ch0 is copied to the extra channels (same dual-mono rule as
-    // processBlock) since they hold no input data.
+    // processBlock) since they hold no input data. Channel layout is read
+    // from the main-bus layout, never buffer sniffing.
     // JUCE 8.0.15 has no AudioProcessor::isBypassed(); the host calls this
     // INSTEAD of processBlock, which is the equivalent hook.
     void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -127,6 +128,9 @@ private:
     // cover live toggles, which is the click being fixed).
     float bypassMix_ = 0.0f;
     bool firstAudioBlock_ = true;
+    // Latch set by processBlockBypassed, consumed by processBlock.
+    // Default false = normal processBlock path.
+    bool wasBypassedCall_ = false;
 
     // Dry-path alignment delay: the engaged path delays by the hot FIR group
     // delay (0/40/60 at 1x/2x/4x, reported to the host), so the dry path
