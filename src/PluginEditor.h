@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <vector>
@@ -247,6 +248,9 @@ private:
     bool dimVisible = false;
     juce::String lastTrimText;
     juce::String lastOsText; // cached OS factor readout (repaint only on change).
+    // Cached `osfactor` raw param, assigned once in the ctor (never reseated,
+    // never owned — APVTS outlives the editor); default nullptr until then.
+    std::atomic<float>* osParam_ = nullptr;
 
     // Unbounded-drag knobs: the original absolute delta-to-value feel
     // (detents exact), with the OS cursor unhooked from the screen edge
@@ -255,6 +259,10 @@ private:
     // shared anchor — a second concurrent drag degrades to edge-limited,
     // never stuck); touch/pen drags are intentional no-ops (the main
     // source isn't dragging, so enable is a strict no-op).
+    // Lifecycle: set only in startUnboundedDrag, cleared only in
+    // endUnboundedDrag; visibilityChanged closes a mid-drag hide (no
+    // mouseUp is delivered), and the destructor disables unbounded
+    // movement outright.
     void startUnboundedDrag ();
     void endUnboundedDrag ();
     juce::Point<float> dragAnchor_;
