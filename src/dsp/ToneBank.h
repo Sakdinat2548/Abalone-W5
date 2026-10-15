@@ -152,27 +152,28 @@ struct ToneBank
         select();
     }
 
-    // Per-tone staging gain (dB): pink-matched broadband in≈out.
-    static float toneGainDb (int tone)
+    // Per-tone staging gain (dB): pink-matched broadband in≈out. Double:
+    // it feeds the all-double gain path (gainLin_, cook(), magnitudeAt()).
+    static double toneGainDb (int tone)
     {
         switch (tone)
         {
         case 1:
-            return -3.9308f;
+            return -3.9308;
         case 2:
-            return -4.0374f;
+            return -4.0374;
         case 3:
-            return 4.0325f;
+            return 4.0325;
         case 4:
-            return 0.4536f;
+            return 0.4536;
         case 5:
-            return 1.8810f;
+            return 1.8810;
         case 6:
-            return 4.5376f;
+            return 4.5376;
         default:
             break;
         }
-        return 0.0f;
+        return 0.0;
     }
 
     // tone 0-6, 0 = bypass (identity). Out-of-range values clamp.
@@ -184,7 +185,7 @@ struct ToneBank
             tone = 6;
 
         tone_ = tone;
-        gainLin_ = std::pow (10.0, static_cast<double> (toneGainDb (tone_)) / 20.0);
+        gainLin_ = std::pow (10.0, toneGainDb (tone_) / 20.0);
         select();
     }
 
@@ -243,7 +244,7 @@ struct ToneBank
             imag = real * hI + imag * hR;
             real = nR;
         }
-        return static_cast<float> (20.0 * std::log10 (std::sqrt (real * real + imag * imag))) + toneGainDb (tone_);
+        return static_cast<float> (20.0 * std::log10 (std::sqrt (real * real + imag * imag)) + toneGainDb (tone_));
     }
 
 private:

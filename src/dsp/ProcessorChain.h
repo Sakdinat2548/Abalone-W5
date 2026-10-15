@@ -198,8 +198,8 @@ struct ProcessorChain
         osActive_ = osTarget_;
         osPos_ = 0;
         hasOsPending_ = false;
-        peak_.store (0.0f, std::memory_order_relaxed);
-        prePeak_.store (0.0f, std::memory_order_relaxed);
+        peak_.store (0.0f, std::memory_order_release);
+        prePeak_.store (0.0f, std::memory_order_release);
     }
 
     // Tone 0-6, 0 = bypass. Out-of-range values clamp. Arms the 10ms
@@ -248,20 +248,28 @@ struct ProcessorChain
     }
 
     // Oversample factor for the ColorStage path (1, 2, or 4; anything else
-    // clamps to the nearest). Arms the 5ms equal-power xfade from the
+    // clamps to the nearest valid factor, ties (3) round up — explicit, no
+    // silent fall-through). Arms the 5ms equal-power xfade from the
     // previous target; a no-op when already targeted. Called once per block
     // by the processor (never mid-block). Retarget mid-blend defers like
     // setTone (latest wins, cancels on set-back, arms at landing — the
     // mid-flight source swap stepped ~4.4x). Latency reporting follows the
-    // ARMED target (osTarget_), never the pending one, so the host never
-    // sees a double flip. A retarget before the blend consumes any sample
+    // LIVE path (osActive_), never the armed or pending one, so the host
+    // only compensates the delay the output actually carries: the report
+    // flips at blend landing, not at arm. A retarget before the blend consumes any sample
     // (osPos_ == 0) still re-arms immediately, same discontinuity-free
     // reasoning as setTone above. The FIR states are NOT wiped here
     // (see note above); they are zeroed on landing for every factor except
     // the landing target instead.
     void setOsFactor (int factor)
     {
-        const int target = (factor <= 1) ? 1 : (factor == 2) ? 2 : (factor < 4) ? 2 : 4;
+        int target;
+        if (factor <= 1)
+            target = 1;
+        else if (factor == 2)
+            target = 2;
+        else
+            target = 4; // 3 rounds up, >= 4 clamps to 4.
         if (target == osTarget_)
         {
             hasOsPending_ = false;
@@ -302,11 +310,14 @@ struct ProcessorChain
     bool isOversampled () const { return osTarget_ != 1; }
 
     // Latency to report to the DAW: 0 at 1x, the exact FIR group delay at
-    // 2x (40) or 4x (60). Follows the factor target immediately (the 5ms
-    // entry blend is transient; the steady path carries the full delay).
+    // 2x (40) or 4x (60). Follows the live path while blending (osActive_)
+    // and the target once settled (identical then): the 5ms entry blend is
+    // mostly the old path, so reporting the armed target early would have
+    // the host compensate a delay the output does not yet carry.
     int getLatencySamples () const
     {
-        return (osTarget_ == 4) ? kOsLatency4xSamples : (osTarget_ == 2) ? kOsLatencySamples : 0;
+        const int live = osBlending_ ? osActive_ : osTarget_;
+        return (live == 4) ? kOsLatency4xSamples : (live == 2) ? kOsLatencySamples : 0;
     }
 
     void setTrimDb (float trimDb)
@@ -415,23 +426,23 @@ struct ProcessorChain
         // (never instead of) the legacy post-trim peak below, so existing
         // peak-tracker behavior is unchanged.
         const float preMag = std::fabs (cut);
-        if (preMag > prePeak_.load (std::memory_order_relaxed))
-            prePeak_.store (preMag, std::memory_order_relaxed);
+        if (preMag > prePeak_.load (std::memory_order_acquire))
+            prePeak_.store (preMag, std::memory_order_release);
 
         const float mag = std::fabs (voiced);
-        if (mag > peak_.load (std::memory_order_relaxed))
-            peak_.store (mag, std::memory_order_relaxed);
+        if (mag > peak_.load (std::memory_order_acquire))
+            peak_.store (mag, std::memory_order_release);
         return voiced;
     }
 
     // Max |post-trim| since the last call; resets to 0 on read. Legacy tap,
     // kept for the unit-tested peak-tracker behavior; the editor SIGNAL LED
     // reads getLastPreTrimPeak() instead (drained here alongside).
-    float getLastPeak () const { return peak_.exchange (0.0f, std::memory_order_relaxed); }
+    float getLastPeak () const { return peak_.exchange (0.0f, std::memory_order_acq_rel); }
 
     // Max |pre-trim| (post-HighCut, pre-trim-gain) since the last call;
     // resets to 0 on read. This is the SIGNAL LED tap in normal operation.
-    float getLastPreTrimPeak () const { return prePeak_.exchange (0.0f, std::memory_order_relaxed); }
+    float getLastPreTrimPeak () const { return prePeak_.exchange (0.0f, std::memory_order_acq_rel); }
 
 private:
     // Color section with the hot-factor path. Steady state runs exactly one

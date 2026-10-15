@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
 #include <vector>
 
 namespace
@@ -29,6 +30,12 @@ int gFailures = 0;
             ++gFailures;                                                                                               \
         }                                                                                                              \
     } while (0)
+
+// Staging-gain precision pin (bug-4 fix): toneGainDb feeds the double gain
+// path (gainLin_, cook(), magnitudeAt()), so its return type must be double
+// — a float return would reintroduce the mixed float/double pow.
+static_assert (std::is_same_v<decltype (ToneBank::toneGainDb (0)), double>,
+               "toneGainDb must return double for the all-double gain path");
 
 #if !defined(TONE_CSV_PATH)
 #define TONE_CSV_PATH "../analysis/u5_tone_curves_from_claude.csv"
