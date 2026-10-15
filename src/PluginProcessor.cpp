@@ -492,9 +492,9 @@ void AbaloneW5AudioProcessor::trackBypassPeak (const juce::AudioBuffer<float>& b
     // Benign race (monotonic max within the interval, reset-on-read on the
     // message thread): a lost update only dims one 30Hz LED poll; the atomic
     // keeps the realtime thread lock-free (no mutexes).
-    const float cur = bypassPeak_.load (std::memory_order_relaxed);
+    const float cur = bypassPeak_.load (std::memory_order_acquire);
     if (m > cur)
-        bypassPeak_.store (m, std::memory_order_relaxed);
+        bypassPeak_.store (m, std::memory_order_release);
 }
 
 void AbaloneW5AudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -591,7 +591,7 @@ float AbaloneW5AudioProcessor::getSignalPeak ()
     // Bypassed intervals contribute the input peak; engaged intervals the
     // pre-trim chain peak. The legacy post-trim tracker is drained (not
     // used) so no stale maximum survives across reads.
-    float peak = bypassPeak_.exchange (0.0f, std::memory_order_relaxed);
+    float peak = bypassPeak_.exchange (0.0f, std::memory_order_acq_rel);
     // Frozen chains' peaks are history, not signal: drain them as always
     // (reset-on-read) but never COUNT them while bypassed — otherwise the
     // LED flashes once on stale engaged-era level after every toggle off,
@@ -669,7 +669,7 @@ void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID,
     // sets replay every parameter independently — see checkBypassSync).
     if (parameterID == "bypass")
     {
-        mirrorPending_.store (false, std::memory_order_relaxed);
+        mirrorPending_.store (false, std::memory_order_release);
         return;
     }
     if (parameterID != "active" || loadingState_)
@@ -684,21 +684,21 @@ void AbaloneW5AudioProcessor::parameterChanged (const juce::String& parameterID,
     if (mm != nullptr && !mm->isThisTheMessageThread())
     {
         mirrorValue_.store (newValue, std::memory_order_relaxed);
-        mirrorPending_.store (true, std::memory_order_relaxed);
+        mirrorPending_.store (true, std::memory_order_release); // release: publishes the value store above.
         triggerAsyncUpdate();
         return;
     }
-    mirrorPending_.store (false, std::memory_order_relaxed);
+    mirrorPending_.store (false, std::memory_order_release);
     mirrorActive (newValue);
 }
 
 void AbaloneW5AudioProcessor::handleAsyncUpdate ()
 {
-    if (!mirrorPending_.exchange (false, std::memory_order_relaxed))
+    if (!mirrorPending_.exchange (false, std::memory_order_acquire)) // acquire: pairs with the release above.
         return;
     if (loadingState_)
         return;
-    mirrorActive (mirrorValue_.load (std::memory_order_relaxed));
+    mirrorActive (mirrorValue_.load (std::memory_order_acquire));
 }
 
 void AbaloneW5AudioProcessor::mirrorActive (float newValue)

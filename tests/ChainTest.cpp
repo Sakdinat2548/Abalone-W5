@@ -539,7 +539,14 @@ void checkOsPrepareOrdering ()
             ProcessorChain chain; // rate, then push param.
             chain.setSampleRate (rates[r]);
             chain.setOversampled (true);
-            std::printf ("os prepare rate-then-push @ %.0fHz: latency %d (expect %d)\n", rates[r],
+            // Active-path latency: the 5ms entry blend is still all-1x, so
+            // the report stays 0 until the blend lands (then 40).
+            std::printf ("os prepare rate-then-push @ %.0fHz: latency %d (expect 0 pre-landing)\n", rates[r],
+                         chain.getLatencySamples());
+            assert (chain.getLatencySamples() == 0);
+            for (int n = 0; n < 4096; ++n)
+                chain.processSample (0.0f);
+            std::printf ("os prepare rate-then-push @ %.0fHz: latency %d (expect %d post-landing)\n", rates[r],
                          chain.getLatencySamples(), ProcessorChain::kOsLatencySamples);
             assert (chain.getLatencySamples() == ProcessorChain::kOsLatencySamples);
         }
@@ -729,7 +736,14 @@ void checkOs4xPrepareOrdering ()
             ProcessorChain chain; // rate, then push param.
             chain.setSampleRate (rates[r]);
             chain.setOsFactor (4);
-            std::printf ("os4 prepare rate-then-push @ %.0fHz: latency %d (expect %d)\n", rates[r],
+            // Active-path latency: the 5ms entry blend is still all-1x, so
+            // the report stays 0 until the blend lands (then 60).
+            std::printf ("os4 prepare rate-then-push @ %.0fHz: latency %d (expect 0 pre-landing)\n", rates[r],
+                         chain.getLatencySamples());
+            assert (chain.getLatencySamples() == 0);
+            for (int n = 0; n < 4096; ++n)
+                chain.processSample (0.0f);
+            std::printf ("os4 prepare rate-then-push @ %.0fHz: latency %d (expect %d post-landing)\n", rates[r],
                          chain.getLatencySamples(), ProcessorChain::kOsLatency4xSamples);
             assert (chain.getLatencySamples() == ProcessorChain::kOsLatency4xSamples);
         }
@@ -1080,8 +1094,8 @@ void checkOsRetargetDefers ()
         step();
     assert (chain.getOsFactor() == 2); // armed 2x, nothing pending yet.
     chain.setOsFactor (4);
-    assert (chain.getOsFactor() == 2);        // still armed: 4x parks pending.
-    assert (chain.getLatencySamples() == 40); // reporting follows armed, not pending.
+    assert (chain.getOsFactor() == 2);       // still armed: 4x parks pending.
+    assert (chain.getLatencySamples() == 0); // reporting follows the live (1x) path, not armed/pending.
     for (int k = 0; k < 1200; ++k)
         step();
     std::printf ("os retarget: lands %dx, worst %.5f vs single %.5f (expect 4x, < 1.1x)\n", chain.getOsFactor(), worst,
@@ -1442,6 +1456,27 @@ void checkOsExcursionSettlesClean ()
     assert (worst < 5.0e-4f);
 }
 
+// Explicit 1/2/4 mapping: out-of-range factors clamp to the nearest valid
+// factor, ties (3) round up — never a silent fall-through to 2.
+void checkOsFactorExplicitMapping ()
+{
+    struct Case
+    {
+        int in;
+        int expect;
+    };
+    const Case cases[] = {{-7, 1}, {0, 1}, {1, 1}, {2, 2}, {3, 4}, {4, 4}, {5, 4}, {99, 4}};
+    for (const auto& c : cases)
+    {
+        ProcessorChain chain;
+        chain.setSampleRate (48000.0);
+        chain.setOsFactor (c.in);
+        std::printf ("os mapping %d -> %d (expect %d)\n", c.in, chain.getOsFactor(), c.expect);
+        std::fflush (stdout);
+        assert (chain.getOsFactor() == c.expect);
+    }
+}
+
 } // namespace
 
 int main ()
@@ -1475,6 +1510,7 @@ int main ()
     checkTrimStepNoClick();
     checkOsLegsAreIndependent();
     checkOsExcursionSettlesClean();
+    checkOsFactorExplicitMapping();
     std::puts ("ChainTest: all checks passed");
     return 0;
 }
