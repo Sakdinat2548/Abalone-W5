@@ -213,6 +213,7 @@ struct ColorStage
         // transient out of the DFT window.
         const float savedRel = kEnvRel_;
         const float savedAtk = kEnvAtk_;
+        const float savedEnv = env_;
         setSampleRate (48000.0);
         reset();
         for (int n = 0; n < 4800; ++n)
@@ -242,6 +243,7 @@ struct ColorStage
         }
         kEnvRel_ = savedRel;
         kEnvAtk_ = savedAtk;
+        env_ = savedEnv;
 
         if (!(magSq[1] > 0.0))
             return 0.0f;

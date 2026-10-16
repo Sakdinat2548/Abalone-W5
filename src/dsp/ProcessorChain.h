@@ -102,7 +102,7 @@ struct ProcessorChain
 
     void setSampleRate (double sampleRate)
     {
-        if (!(sampleRate > 0.0))
+        if (!(sampleRate > 0.0 && std::isfinite (sampleRate)))
             sampleRate = 48000.0;
 
         sampleRate_ = sampleRate;

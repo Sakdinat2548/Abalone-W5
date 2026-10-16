@@ -65,45 +65,6 @@ juce::Rectangle<float> scaledRectF (const std::map<juce::String, juce::Rectangle
                                    r.getWidth() * fw, r.getHeight() * fh);
 }
 
-// Measured width of the tracked-out header string (shared by the paint
-// routines and the click hit-test so the rect always matches the art).
-float headerTextWidth (const juce::Font& font, const juce::String& text, float trackingPx)
-{
-    float total = 0.0f;
-    for (int i = 0; i < text.length(); ++i)
-        total += juce::GlyphArrangement::getStringWidth (font, text.substring (i, i + 1));
-    total += trackingPx * static_cast<float> (juce::jmax (0, text.length() - 1));
-    return total;
-}
-
-// Engraved-plate lettering (two-pass: pale groove highlight below, dark face
-// on top) for the in-code ABALONE wordmark. The face is Cinzel Black 900
-// (OFL Trajan-class serif, vendored via BinaryData — stroke-matched to the
-// hardware AVALON badge at matched cap-height); the caller passes the
-// editor's true horizontal center so the wordmark is optically centered
-// across the full panel via the measured text width (no hardcoded x that
-// can drift with letterforms).
-void drawEngravedCentred (juce::Graphics& g, const juce::Font& font, const juce::String& text, float cx, float cyMid,
-                          float trackingPx)
-{
-    const float fontSize = font.getHeight();
-    const float total = headerTextWidth (font, text, trackingPx);
-
-    float x = cx - total * 0.5f;
-    g.setFont (font);
-    for (int i = 0; i < text.length(); ++i)
-    {
-        const juce::String ch = text.substring (i, i + 1);
-        const float w = juce::GlyphArrangement::getStringWidth (font, ch);
-        const juce::Rectangle<float> r (x, cyMid - fontSize * 0.5f, w, fontSize);
-        g.setColour (juce::Colour (0x8cf4f6f8));
-        g.drawText (ch, r.translated (0.0f, 1.0f), juce::Justification::centred, false);
-        g.setColour (juce::Colour (0xff2e3234));
-        g.drawText (ch, r, juce::Justification::centred, false);
-        x += w + trackingPx;
-    }
-}
-
 } // namespace
 
 // Unbounded-drag knobs: absolute mapping (the original feel — position maps
@@ -416,8 +377,8 @@ AbaloneW5AudioProcessorEditor::AbaloneW5AudioProcessorEditor (AbaloneW5AudioProc
         c->setFixedAspectRatio (static_cast<double> (kEditorWidth) / static_cast<double> (kEditorHeight));
 
     // Masthead SVG (BinaryData drawable, parsed once here on the message
-    // thread); the engraved in-code fallback in paint() covers a parse
-    // failure so the header is never blank.
+    // thread). paint() draws it with no fallback: the embedded SVG cannot
+    // realistically fail to parse, so a missing drawable paints nothing.
     if (auto svg =
             juce::XmlDocument::parse (juce::String::fromUTF8 (BinaryData::abalone_svg, BinaryData::abalone_svgSize)))
         mastheadDrawable = juce::Drawable::createFromSVG (*svg);

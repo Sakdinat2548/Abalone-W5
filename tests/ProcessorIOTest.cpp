@@ -113,7 +113,8 @@ float maxStepJump (const float* data, int n, int blockIdx)
 }
 
 // Flat reference voice: boost step 1 (+3dB), tone bypass, highcut off,
-// trim 0dB — mirrors setFlatParams() below.
+// trim 0dB — mirrors setFlatParams() below. Ends settled (reset after the
+// pushes) so it matches a prepare-pushed processor first-block.
 void makeFlatReference (ProcessorChain& chain)
 {
     chain.setSampleRate (kSampleRate);
@@ -121,6 +122,7 @@ void makeFlatReference (ProcessorChain& chain)
     chain.setTone (0);
     chain.setHighcut (false);
     chain.setTrimDb (0.0f);
+    chain.reset();
 }
 
 void setFlatParams (AbaloneW5AudioProcessor& proc)
@@ -149,8 +151,8 @@ void checkMonoInStereoOut ()
     AbaloneW5AudioProcessor proc;
     CHECK (setLayout (proc, juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo()));
     CHECK (proc.getMainBusNumInputChannels() == 1);
-    proc.prepareToPlay (kSampleRate, kBlock);
     setFlatParams (proc);
+    proc.prepareToPlay (kSampleRate, kBlock);
 
     juce::AudioBuffer<float> buffer (2, kBlock);
     fillSine (buffer, 0, 1000.0, 0.5f);
@@ -185,8 +187,8 @@ void checkStereoIndependent ()
 {
     AbaloneW5AudioProcessor proc; // default stereo-in/stereo-out buses.
     CHECK (proc.getMainBusNumInputChannels() == 2);
-    proc.prepareToPlay (kSampleRate, kBlock);
     setFlatParams (proc);
+    proc.prepareToPlay (kSampleRate, kBlock);
 
     juce::AudioBuffer<float> buffer (2, kBlock);
     fillSine (buffer, 0, 1000.0, 0.5f);
@@ -228,8 +230,8 @@ void checkMonoInMonoOut ()
 {
     AbaloneW5AudioProcessor proc;
     CHECK (setLayout (proc, juce::AudioChannelSet::mono(), juce::AudioChannelSet::mono()));
-    proc.prepareToPlay (kSampleRate, kBlock);
     setFlatParams (proc);
+    proc.prepareToPlay (kSampleRate, kBlock);
 
     juce::AudioBuffer<float> buffer (1, kBlock);
     fillSine (buffer, 0, 1000.0, 0.5f);
@@ -733,10 +735,10 @@ void checkTrimRangeAndDefault ()
     }
     {
         AbaloneW5AudioProcessor proc;
-        proc.prepareToPlay (kSampleRate, kBlock);
         setFlatParams (proc);
         auto* output = proc.getApvts().getParameter ("output");
         output->setValueNotifyingHost (1.0f); // top of range
+        proc.prepareToPlay (kSampleRate, kBlock);
         CHECK (std::fabs (*proc.getApvts().getRawParameterValue ("output") - 6.0f) < 1e-6f);
         juce::AudioBuffer<float> buffer (2, kBlock);
         fillSine (buffer, 0, 1000.0, 0.5f);
@@ -750,6 +752,7 @@ void checkTrimRangeAndDefault ()
         ProcessorChain ref;
         makeFlatReference (ref);
         ref.setTrimDb (6.0f); // same trim inside: like-with-like, no post-scaling
+        ref.reset();          // settle the trim move, like prepare does.
         static float expected[kBlock];
         for (int i = 0; i < kBlock; ++i)
             expected[i] = ref.processSample (input0[i]);
@@ -1073,6 +1076,7 @@ void checkPrepareStartsSettled ()
         ref.setHighcut (false);
         ref.setTrimDb (0.0f);
         ref.setOsFactor (2);
+        ref.reset(); // settle the pushes, like prepare does.
 
         juce::AudioBuffer<float> buffer (2, kBlock);
         fillSine (buffer, 0, 220.0, 0.5f);
@@ -1112,6 +1116,108 @@ void checkPrepareStartsSettled ()
     }
 }
 
+// (n) prepareToPlay pushes ALL chain params before reset: fresh processor at
+// defaults (trim -3dB), one engaged block must match a reference chain with
+// trim -3dB pushed pre-reset — not the 0dB chain-ctor default (pre-fix only
+// osfactor was pushed, so the first blocks ran up to 3dB hot while the
+// trim follower slewed down).
+void checkPreparePushesAllParams ()
+{
+    AbaloneW5AudioProcessor proc; // defaults: boost step 1, tone 3, trim -3dB, 1x, engaged.
+    proc.prepareToPlay (kSampleRate, kBlock);
+
+    ProcessorChain ref;
+    ref.setSampleRate (kSampleRate);
+    ref.setBoostStep (1);
+    ref.setTone (3);
+    ref.setHighcut (false);
+    ref.setTrimDb (-3.0f);
+    ref.setOsFactor (1);
+    ref.reset();
+
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    fillSine (buffer, 0, 1000.0, 0.5f);
+    fillSine (buffer, 1, 1000.0, 0.5f);
+    static float input0[kBlock];
+    std::memcpy (input0, buffer.getReadPointer (0), sizeof (input0));
+
+    juce::MidiBuffer midi;
+    proc.processBlock (buffer, midi);
+    static float expected[kBlock];
+    for (int i = 0; i < kBlock; ++i)
+        expected[i] = ref.processSample (input0[i]);
+    const float err = maxAbsDiff (buffer.getReadPointer (0), expected, kBlock);
+    std::printf ("prepare pushes all params: max|proc-ref| = %.9f (expect < %.0e)\n", err, static_cast<double> (kTol));
+    CHECK (err < kTol);
+}
+
+// (o) Same-block ACTIVE-off + OS-factor change must not step the dry tap:
+// engaged 1x steady, then ONE block flips both. The OS blend only lands
+// ~240 samples later, so the dry side must keep the old tap (or blend)
+// through the landing — pre-fix the landing adopted the new tap while the
+// block audio used the old one, stepping up to ~0.5 on the next block.
+void checkActiveOffWithOsFlipNoStep ()
+{
+    AbaloneW5AudioProcessor proc; // stereo default
+    proc.prepareToPlay (kSampleRate, kBlock);
+    setFlatParams (proc); // engaged 1x
+    juce::AudioBuffer<float> buffer (2, kBlock);
+    juce::MidiBuffer midi;
+    int phase0 = 488;
+    int phase1 = 488;
+    for (int b = 0; b < 20; ++b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+    }
+    *proc.getApvts().getRawParameterValue ("active") = 0.0f;
+    *proc.getApvts().getRawParameterValue ("osfactor") = 1.0f; // 2x, same block.
+    float prevLast = buffer.getReadPointer (0)[kBlock - 1];
+    float worstEdge = 0.0f;
+    float worstIntra = 0.0f;
+    int worstBlk = -1;
+    int worstIdx = -1;
+    auto measureBlock = [&] (int b)
+    {
+        fillSineCont (buffer, 0, 220.0, 0.5f, phase0);
+        fillSineCont (buffer, 1, 220.0, 0.5f, phase1);
+        proc.processBlock (buffer, midi);
+        const float* ch0 = buffer.getReadPointer (0);
+        worstEdge = juce::jmax (worstEdge, std::fabs (ch0[0] - prevLast));
+        for (int i = 1; i < kBlock; ++i)
+        {
+            const float d = std::fabs (ch0[i] - ch0[i - 1]);
+            if (d > worstIntra)
+            {
+                worstIntra = d;
+                worstBlk = b;
+                worstIdx = i;
+            }
+        }
+        prevLast = ch0[kBlock - 1];
+    };
+    measureBlock (0); // toggle block: OS blend arms, dry tap must NOT adopt yet.
+    // Mechanism gate: landing bypassed with a changed live tap and no blend
+    // running must ARM the dry blend (old tap stays live), not adopt the new
+    // tap while the block audio used the old one (pre-fix: silent adopt).
+    std::printf ("active-off + osflip landing: blending %d tap %d (expect 1/0)\n",
+                 static_cast<int> (proc.isDryBlendingForTest()), proc.dryLatencyForTest());
+    CHECK (proc.isDryBlendingForTest());
+    CHECK (proc.dryLatencyForTest() == 0);
+    for (int b = 1; b < 4; ++b)
+        measureBlock (b);
+    const float worst = juce::jmax (worstEdge, worstIntra);
+    // Behavioral bound: below the suite's accepted OS-transient level
+    // (ChainTest 0.3xRMS ~= 0.14) yet far below the 0.47 dry-tap step this
+    // fix removes. Residual is the pre-existing cold-2x-entry step (new leg
+    // silent ~40 samples then full — separate bug, out of scope), not the
+    // dry tap: block edges stay at sine slope (see edge print).
+    std::printf ("active-off + osflip same block: edge %.5f intra %.5f @blk %d idx %d (expect < 0.15)\n", worstEdge,
+                 worstIntra, worstBlk, worstIdx);
+    CHECK (worst < 0.15f);
+}
+
 int main ()
 {
     checkMonoInStereoOut();
@@ -1131,6 +1237,8 @@ int main ()
     checkParamMappingRounds();
     checkStateRestoreGestures();
     checkPrepareStartsSettled();
+    checkPreparePushesAllParams();
+    checkActiveOffWithOsFlipNoStep();
 
     if (failures == 0)
     {

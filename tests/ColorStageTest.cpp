@@ -563,6 +563,25 @@ void checkThdAtIgnoresPriorState ()
     assert (a == b);
 }
 
+void checkThdAtRestoresEnvelope ()
+{
+    // thdAt() must leave the gate envelope as it found it: after a +10dB
+    // measurement the stage must process a quiet sine exactly like a fresh
+    // stage (pre-fix env_ stayed ~3.16 hot, holding the gate open ~100ms).
+    ColorStage measured;
+    measured.setEnabled (true);
+    measured.thdAt (1000.0f, 10.0f);
+    ColorStage fresh;
+    fresh.setEnabled (true);
+    for (int n = 0; n < 64; ++n)
+    {
+        const float x =
+            0.01f * static_cast<float> (std::sin (2.0 * kPi * 1000.0 * static_cast<double> (n) / kSampleRate));
+        assert (measured.processSample (x) == fresh.processSample (x));
+    }
+    std::puts ("thdAt restores envelope: post-measurement output identical to fresh");
+}
+
 void checkThdAtIgnoresSampleRate ()
 {
     // Bugfix 2026-10-14: thdAt() synth runs at fixed 48k but used the
@@ -659,6 +678,7 @@ int main ()
     checkNanRecovery();
     checkExtremeMagnitudeFinite();
     checkThdAtIgnoresPriorState();
+    checkThdAtRestoresEnvelope();
     checkThdAtIgnoresSampleRate();
     checkSetSampleRateRejectsNonFinite();
     checkTinyInputSnapsEnvelope();
