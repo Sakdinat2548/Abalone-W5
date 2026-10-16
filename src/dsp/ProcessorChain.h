@@ -198,6 +198,8 @@ struct ProcessorChain
         osActive_ = osTarget_;
         osPos_ = 0;
         hasOsPending_ = false;
+        osPrePos_ = 0;
+        osPreCount_ = 0;
         peak_.store (0.0f, std::memory_order_release);
         prePeak_.store (0.0f, std::memory_order_release);
     }
@@ -260,7 +262,8 @@ struct ProcessorChain
     // (osPos_ == 0) still re-arms immediately, same discontinuity-free
     // reasoning as setTone above. The FIR states are NOT wiped here
     // (see note above); they are zeroed on landing for every factor except
-    // the landing target instead.
+    // the landing target instead, and the next arm pre-rolls the target leg
+    // from shaped history.
     void setOsFactor (int factor)
     {
         int target;
@@ -386,6 +389,11 @@ struct ProcessorChain
         {
             shaped = banks_[active_].processSample (boosted);
         }
+
+        osPreHist_[osPrePos_] = shaped;
+        osPrePos_ = (osPrePos_ + 1) % 64;
+        if (osPreCount_ < 64)
+            ++osPreCount_;
 
         const float colored = colorWithOsBlend (shaped);
         // Post-color DC-block: kills the ColorStage `a*x^2` rectification
@@ -620,6 +628,16 @@ private:
         osTarget_ = target;
         osPos_ = 0;
         osBlending_ = true;
+        // Pre-roll the target leg from shaped history (oldest to newest,
+        // outputs discarded). FIR lines become exact-as-if-always-run once
+        // >= 41 history samples exist; color envelopes (IIR) only
+        // approximately re-warm, residual smoothed by the 5ms blend; the 1x
+        // target has no FIR but its envelope re-warms identically.
+        for (int i = 0; i < osPreCount_; ++i)
+        {
+            float h = osPreHist_[(osPrePos_ - osPreCount_ + i + 128) % 64];
+            processFactor (target, h);
+        }
         // No color retune here: each factor owns a permanently hot-tuned
         // instance (see setSampleRate), so both blend legs run correct taus
         // for the whole blend. The old shared-instance retune stranded the
@@ -634,8 +652,9 @@ private:
     // including its blend leg — runs its own envelope at its own hot-rate
     // taus, so the 1x leg does 1 update/sample at 1x timing while the 2x leg
     // does 2 at 2x timing, never churning shared state. Instances off the
-    // live path sit out (their envelopes go stale, not wrong); the 5ms entry
-    // blend covers the entry transient either way, same as the FIR lines.
+    // live path sit out until the next arm pre-rolls them from shaped
+    // history (FIR lines exact, envelopes approximate; the 5ms blend smooths
+    // the residual).
     // Only the existing ColorStage interface is used (ctor/reset/
     // processSample/setSampleRate/setEnabled) — no new API.
     ColorStage color1x_;
@@ -739,6 +758,11 @@ private:
     std::array<float, kOsTaps> os4Up2D_ = {};
     std::array<float, kOsTaps> os4Dn2D_ = {};
     std::array<float, kOsTaps> os4Dn1D_ = {};
+    // Shaped-history ring for OS pre-roll: 64 covers the 41 samples needed
+    // for an exact FIR fill plus margin.
+    std::array<float, 64> osPreHist_ = {};
+    int osPrePos_ = 0;
+    int osPreCount_ = 0;
     int osTarget_ = 1;
     int osActive_ = 1;
     bool osBlending_ = false;
