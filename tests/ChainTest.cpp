@@ -471,6 +471,64 @@ void checkOsToggleNoClick ()
     checkOsToggleOneFlip (false);
 }
 
+// (h2) Chain-level absolute no-click gate for the 1x->2x cold entry: flat
+// voice (boost step 1, tone 0, highcut off, trim 0), 220Hz sine at 0.5 peak
+// with unbroken phase, 8 flip phases spanning one sine period at both
+// rates, 50ms window each tracking the worst sample-to-sample jump
+// including the flip edge. Absolute bound 0.04: scratch worst is 0.0212
+// @48k / 0.0226 @44.1k post-fix (normal 220Hz slope) vs 0.1596 @48k /
+// 0.1728 @44.1k pre-fix, so 0.04 is 1.77x above post-fix worst and 4.0x
+// below pre-fix worst. The existing relative gate (h) stays untouched.
+void checkOsColdEntryNoStep ()
+{
+    const double rates[2] = {48000.0, 44100.0};
+    constexpr float kBound = 0.04f;
+    float worstAll = 0.0f;
+    double worstRate = rates[0];
+    int worstPhase = 0;
+    for (int r = 0; r < 2; ++r)
+    {
+        const double sampleRate = rates[r];
+        const int base = static_cast<int> (sampleRate);
+        const double period = sampleRate / 220.0;
+        const int window = static_cast<int> (0.05 * sampleRate + 0.5);
+        for (int ph = 0; ph < 8; ++ph)
+        {
+            const int settle = base + static_cast<int> (std::llround (ph * period / 8.0));
+            ProcessorChain chain;
+            chain.setSampleRate (sampleRate);
+            chain.setBoostStep (1);
+            chain.setTone (0);
+            chain.setHighcut (false);
+            chain.setTrimDb (0.0f);
+            for (int i = 0; i < settle; ++i)
+                chain.processSample (
+                    0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (i) / sampleRate)));
+            float prev = chain.processSample (
+                0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (settle) / sampleRate)));
+            chain.setOsFactor (2);
+            for (int i = 0; i < window; ++i)
+            {
+                const float x = 0.5f * static_cast<float> (std::sin (
+                                           2.0 * kPi * 220.0 * static_cast<double> (settle + 1 + i) / sampleRate));
+                const float y = chain.processSample (x);
+                const float jump = std::fabs (y - prev);
+                if (jump > worstAll)
+                {
+                    worstAll = jump;
+                    worstRate = sampleRate;
+                    worstPhase = ph;
+                }
+                prev = y;
+            }
+        }
+    }
+    std::printf ("os-cold-entry 1x->2x flat: worst %0.5f phase %d @ %.0fHz (bound %0.3f)\n", worstAll, worstPhase,
+                 worstRate, kBound);
+    std::fflush (stdout);
+    assert (worstAll < kBound);
+}
+
 // (i) Oversample top-octave transparency: 1x-vs-2x fundamental at 15kHz and
 // 20kHz, both rates, same +10dB-at-color drive as (f). The 33-tap/0.23
 // prototype drooped -3.2dB@20k/48k and -10.2dB@20k/44.1k (measured linear
@@ -1576,6 +1634,7 @@ int main ()
     checkOsEquivalence();
     checkOsLatencyTruth();
     checkOsToggleNoClick();
+    checkOsColdEntryNoStep();
     checkOsTopOctave();
     checkOsPrepareOrdering();
     checkOs4xEquivalence();
