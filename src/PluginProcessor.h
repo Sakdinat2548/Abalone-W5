@@ -73,6 +73,13 @@ public:
     // atomics are lock-free.
     float getSignalPeak ();
 
+    // Test taps for the bypass/OS regression gates (see ProcessorIOTest):
+    // dry-tap blend state after a block. Post-B2-fix a bypassed landing
+    // with a changed live tap arms the blend (old tap stays live) instead
+    // of adopting the new tap under audible audio.
+    bool isDryBlendingForTest () const { return dryBlending_; }
+    int dryLatencyForTest () const { return dryLatency_; }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout ();
 
@@ -129,8 +136,9 @@ private:
     float bypassMix_ = 0.0f;
     bool firstAudioBlock_ = true;
     // Latch set by processBlockBypassed, consumed by processBlock.
-    // Default false = normal processBlock path.
-    bool wasBypassedCall_ = false;
+    // Default false = normal processBlock path. Atomic: audio-to-message
+    // handoff — also read by getSignalPeak on the message-thread LED timer.
+    std::atomic<bool> wasBypassedCall_{false};
 
     // Dry-path alignment delay: the engaged path delays by the hot FIR group
     // delay (0/40/60 at 1x/2x/4x, reported to the host), so the dry path

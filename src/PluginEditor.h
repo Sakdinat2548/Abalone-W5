@@ -33,8 +33,8 @@ class AbaloneW5AudioProcessor;
 //   DSP, chain states frozen, buffer untouched; a brief relay-style settle
 //   transient is possible on re-engage. Old states load as active. The
 //   v110 plate bakes SPEAKER + POWER in the ON look — code owns no part for
-//   them. ACTIVE off veils the panel (DimOverlay); the SIGNAL LED follows
-//   the input peak while bypassed.
+//   them. ACTIVE off veils the panel (DimOverlay); the SIGNAL LED stays dark
+//   while bypassed (it follows the effect, not the thru).
 // - Knob bodies live in the baked v110 plate (never drawn/rotated by code):
 //   value is shown by the needle PNGs (V110big/small_pointer, straight up at
 //   12 o'clock) drawn at natural art size, tip at the face rim, rotating
@@ -227,9 +227,8 @@ private:
     DimOverlay dimOverlay; // lights-off veil, visible only while ACTIVE is off.
 
     // Masthead: the user-supplied ui/abalone.svg (BinaryData drawable),
-    // drawn centered in the header slot; the in-code engraved Cinzel
-    // fallback paints only if the SVG ever fails to parse. The masthead is
-    // static black in every OS state — the Task-18 click-toggle + red
+    // drawn centered in the header slot with no fallback (see paint()).
+    // The masthead is static black in every OS state — the Task-18 click-toggle + red
     // engaged state is gone (replaced by the `osfactor` mini-knob).
     std::unique_ptr<juce::Drawable> mastheadDrawable;
     juce::Font readoutFont;

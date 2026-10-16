@@ -1477,6 +1477,93 @@ void checkOsFactorExplicitMapping ()
     }
 }
 
+// (p2) setSampleRate rejects non-finite rates in every stage: +Inf/NaN/0 and
+// negatives must fall back to 48k (ColorStage already did — see
+// checkSetSampleRateRejectsNonFinite in ColorStageTest; the other four
+// accepted +Inf since Inf > 0.0 passes the old guard: zeroed smoother
+// coeffs, hung blend counters). Each bad rate must behave bit-identically
+// to an explicit-48k instance.
+void checkStagesRejectNonFiniteRate ()
+{
+    const double bad[4] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN(), 0.0,
+                           -44100.0};
+    for (int r = 0; r < 4; ++r)
+    {
+        // GainStage: 1s of DC must block exactly like a 48k instance
+        // (pre-fix Inf zeroed hpCoeff_, passing DC at full gain).
+        {
+            GainStage inf, ref;
+            inf.setSampleRate (bad[r]);
+            ref.setSampleRate (48000.0);
+            inf.setStep (1);
+            ref.setStep (1);
+            float yInf = 0.0f, yRef = 0.0f;
+            for (int n = 0; n < 48000; ++n)
+            {
+                yInf = inf.processSample (1.0f);
+                yRef = ref.processSample (1.0f);
+            }
+            std::printf ("gainstage rate %g: dc-out %.3e vs 48k %.3e (expect identical)\n", bad[r], yInf, yRef);
+            assert (yInf == yRef);
+        }
+        // HighCut: enabled 100Hz sine, every sample identical to 48k
+        // (pre-fix Inf zeroed coeff_, silencing the stage).
+        {
+            HighCut inf, ref;
+            inf.setSampleRate (bad[r]);
+            ref.setSampleRate (48000.0);
+            inf.setEnabled (true);
+            ref.setEnabled (true);
+            for (int n = 0; n < 4800; ++n)
+            {
+                const float x =
+                    0.5f * static_cast<float> (std::sin (2.0 * kPi * 100.0 * static_cast<double> (n) / 48000.0));
+                assert (inf.processSample (x) == ref.processSample (x));
+            }
+            std::puts ("highcut non-finite rate: identical to 48k");
+        }
+        // ToneBank: theoretical response identical to 48k at three probes
+        // (pre-fix Inf degenerated every biquad to w0 = 0 coefficients).
+        {
+            ToneBank inf, ref;
+            inf.setSampleRate (bad[r]);
+            ref.setSampleRate (48000.0);
+            inf.setTone (3);
+            ref.setTone (3);
+            const float probes[3] = {100.0f, 1000.0f, 10000.0f};
+            for (float f : probes)
+                assert (inf.magnitudeAt (f) == ref.magnitudeAt (f));
+            std::puts ("tonebank non-finite rate: identical to 48k");
+        }
+        // ProcessorChain: full voice, every sample identical to 48k
+        // (pre-fix Inf froze the gain follower at 0dB and killed both
+        // DC-blockers, so levels and DC differed).
+        {
+            ProcessorChain inf, ref;
+            inf.setSampleRate (bad[r]);
+            ref.setSampleRate (48000.0);
+            for (int k = 0; k < 2; ++k)
+            {
+                ProcessorChain& c = (k == 0) ? inf : ref;
+                c.setBoostStep (1);
+                c.setTone (0);
+                c.setHighcut (false);
+                c.setTrimDb (0.0f);
+                c.setOsFactor (1);
+                c.reset();
+            }
+            for (int n = 0; n < 512; ++n)
+            {
+                const float x =
+                    0.5f * static_cast<float> (std::sin (2.0 * kPi * 220.0 * static_cast<double> (n) / 48000.0));
+                assert (inf.processSample (x) == ref.processSample (x));
+            }
+            std::puts ("chain non-finite rate: identical to 48k");
+        }
+    }
+    std::puts ("stages reject non-finite rates: Inf/NaN/0/negative all 48k-identical");
+}
+
 } // namespace
 
 int main ()
@@ -1501,6 +1588,7 @@ int main ()
     audit10HzAnchors();
     checkHotSineDc();
     checkNonFiniteRecovery();
+    checkStagesRejectNonFiniteRate();
     checkColorTimingAcrossReprepare();
     checkEnabledIdempotent();
     checkOsRetargetDefers();

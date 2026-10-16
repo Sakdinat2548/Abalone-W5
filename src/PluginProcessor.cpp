@@ -115,8 +115,18 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
     // setPlayConfigDetails and reads 0 headless — never use getSampleRate()
     // for DSP math; see the bypass-fade note in processBlock).
     preparedSampleRate_ = (sampleRate > 0.0) ? sampleRate : 48000.0;
+    // Params are pushed into the chains BEFORE reset (see
+    // ProcessorChain::reset contract) so the chain starts settled:
+    // trim/gain followers snap to target, no fade-in. Reads mirror
+    // processBlock exactly (boostStep = round(boost)+1; toneIn gates tone).
+    const int boostStep = static_cast<int> (std::round (apvts.getRawParameterValue ("boost")->load())) + 1;
+    const int toneParam = static_cast<int> (std::round (apvts.getRawParameterValue ("tone")->load()));
+    const bool toneIn = apvts.getRawParameterValue ("toneIn")->load() > 0.5f;
+    const int tone = toneIn ? toneParam : 0;
+    const bool highcut = apvts.getRawParameterValue ("highcut")->load() > 0.5f;
+    const float trimDb = apvts.getRawParameterValue ("output")->load();
     // Restored oversampled sessions must report the hot-path delay from the
-    // start: push the param into the chains BEFORE reading
+    // start: push the factor into the chains BEFORE reading
     // getLatencySamples, or a session saved hot reports 0 until the first
     // processBlock push flips it (DAW compensates late -> early audio runs
     // uncompensated). setOsFactor on an already-matching target is a no-op,
@@ -128,10 +138,16 @@ void AbaloneW5AudioProcessor::prepareToPlay (double sampleRate, int)
     for (auto& chain : chains)
     {
         chain.setSampleRate (sampleRate);
+        chain.setBoostStep (boostStep);
+        chain.setTone (tone);
+        chain.setHighcut (highcut);
+        chain.setTrimDb (trimDb);
         chain.setOsFactor (osFactor);
         // Settle AFTER the push (see ProcessorChain::reset contract):
         // same-rate transport restarts must not leak prior-take tail, and a
         // factor change at prepare must not leave an OS entry blend behind.
+        // setTone may arm the 10ms xfade on a fresh chain; reset()
+        // re-hard-selects the target so the result is settled.
         chain.reset();
     }
     // Re-report after every rate change (the 1x/2x/4x latency is
@@ -390,9 +406,24 @@ void AbaloneW5AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         // before that simply resumes it.
         if (bypassMix_ == bypassTarget)
         {
-            if (!dryBlending_ || dryBlendPos_ >= dryBlendLen_ || bypassTarget <= 0.0f)
+            const int liveTap = chains[0].getLatencySamples();
+            const bool finishing = dryBlending_ && dryBlendPos_ < dryBlendLen_;
+            if (bypassTarget > 0.0f && liveTap != dryLatency_ && !dryBlending_)
             {
-                dryLatency_ = chains[0].getLatencySamples();
+                // Same-block ACTIVE-off + OS-factor change: the fade-start arm
+                // read the pre-flip tap and the OS blend lands later, so no
+                // dry blend is running — but the block audio used the old tap.
+                // Adopting here would step the dry path on the next block (up
+                // to ~0.5 on test material). Arm the blend instead and let
+                // the bypassed steady path finish it continuously; engaged
+                // landings still adopt directly (dry silent there).
+                dryFrom_ = dryLatency_;
+                dryBlendPos_ = 0;
+                dryBlending_ = true;
+            }
+            else if (!finishing || bypassTarget <= 0.0f)
+            {
+                dryLatency_ = liveTap;
                 dryBlending_ = false;
             }
         }
@@ -597,7 +628,7 @@ float AbaloneW5AudioProcessor::getSignalPeak ()
     // LED flashes once on stale engaged-era level after every toggle off,
     // even into silence.
     const bool engaged = apvts.getRawParameterValue ("active")->load() > 0.5f &&
-                         apvts.getRawParameterValue ("bypass")->load() <= 0.5f && !wasBypassedCall_;
+                         apvts.getRawParameterValue ("bypass")->load() <= 0.5f && !wasBypassedCall_.load();
     for (auto& chain : chains)
     {
         static_cast<void> (chain.getLastPeak());
