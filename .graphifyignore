@@ -1,0 +1,7 @@
+# Binary art + hardware photos are excluded from the knowledge graph: vision
+# extraction costs one subagent call per image and adds little to codebase
+# navigation. Delete these lines to include them in a build.
+*.png
+*.jpg
+*.jpeg
+*.svg

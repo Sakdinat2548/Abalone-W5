@@ -19,3 +19,8 @@ analysis/zoom_ref/
 __pycache__/
 # Werner dissertation (large reference PDF, local-only)
 docs/refs/KurtJamesWernerDissertation-augmented.pdf
+
+# graphify knowledge graph (generated; `graphify update .` rebuilds it)
+graphify-out/
+# Per-machine agent tooling (graphify hook etc.), same rationale as .superpowers/
+.opencode/
