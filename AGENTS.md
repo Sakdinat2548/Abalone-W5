@@ -107,14 +107,20 @@ U5-flavored clean DI VST3 + AU (Logic). JUCE 8 biquads/gain only. No WDF. 1x/2x/
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+Local knowledge graph at `graphify-out/` (gitignored build artifact; `graphify update .`
+rebuilds it — AST-only, no API cost). OPTIONAL: it is a map, not a substitute for reading
+the source, and it is not a required first step for codebase questions.
 
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+Use it for cross-file questions that grep handles badly — reach across `analysis/` (46
+scripts) and tests↔src references:
 
-Rules:
-- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- `graphify-out/` is gitignored, so the graph is a local build artifact — never stage it or suggest committing it.
+- `graphify query "<question>"` — scoped subgraph (BFS; `--dfs` traces one path)
+- `graphify path "A" "B"` — shortest path between two concepts
+- `graphify explain "X"` — one node plus its neighbours
+
+Prefer plain grep/read for anything inside a single file or within `src/` (9 files; the
+chain order is already documented in `AGENTS.md` and `docs/01-07`). `GRAPH_REPORT.md` is
+for broad architecture review only. Caveat: the doc half of the graph is LLM-extracted and
+has ~365 dangling edges, so verify any doc-derived claim against the file.
+
+When the user types `/graphify`, load the installed graphify skill.
