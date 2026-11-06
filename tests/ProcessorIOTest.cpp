@@ -1123,32 +1123,44 @@ void checkPrepareStartsSettled ()
 // trim follower slewed down).
 void checkPreparePushesAllParams ()
 {
-    AbaloneW5AudioProcessor proc; // defaults: boost step 1, tone 3, trim -3dB, 1x, engaged.
-    proc.prepareToPlay (kSampleRate, kBlock);
+    for (bool adjacentTrim : {false, true})
+    {
+        AbaloneW5AudioProcessor proc; // defaults: boost step 1, tone 3, trim -3dB, 1x, engaged.
+        auto* output = proc.getApvts().getRawParameterValue ("output");
+        // Exercise the one-ULP default-trim difference seen with Clang's fused
+        // range conversion, even on hosts whose default is exactly -3.0f.
+        if (adjacentTrim)
+            output->store (std::nextafter (-3.0f, 0.0f));
+        const float trimDb = output->load();
+        proc.prepareToPlay (kSampleRate, kBlock);
 
-    ProcessorChain ref;
-    ref.setSampleRate (kSampleRate);
-    ref.setBoostStep (1);
-    ref.setTone (3);
-    ref.setHighcut (false);
-    ref.setTrimDb (-3.0f);
-    ref.setOsFactor (1);
-    ref.reset();
+        ProcessorChain ref;
+        ref.setSampleRate (kSampleRate);
+        ref.setBoostStep (1);
+        ref.setTone (3);
+        ref.setHighcut (false);
+        // Compare like-for-like: range conversion may put the nominal -3dB
+        // default one ULP away, amplified by the float voicing state.
+        ref.setTrimDb (trimDb);
+        ref.setOsFactor (1);
+        ref.reset();
 
-    juce::AudioBuffer<float> buffer (2, kBlock);
-    fillSine (buffer, 0, 1000.0, 0.5f);
-    fillSine (buffer, 1, 1000.0, 0.5f);
-    static float input0[kBlock];
-    std::memcpy (input0, buffer.getReadPointer (0), sizeof (input0));
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        fillSine (buffer, 0, 1000.0, 0.5f);
+        fillSine (buffer, 1, 1000.0, 0.5f);
+        static float input0[kBlock];
+        std::memcpy (input0, buffer.getReadPointer (0), sizeof (input0));
 
-    juce::MidiBuffer midi;
-    proc.processBlock (buffer, midi);
-    static float expected[kBlock];
-    for (int i = 0; i < kBlock; ++i)
-        expected[i] = ref.processSample (input0[i]);
-    const float err = maxAbsDiff (buffer.getReadPointer (0), expected, kBlock);
-    std::printf ("prepare pushes all params: max|proc-ref| = %.9f (expect < %.0e)\n", err, static_cast<double> (kTol));
-    CHECK (err < kTol);
+        juce::MidiBuffer midi;
+        proc.processBlock (buffer, midi);
+        static float expected[kBlock];
+        for (int i = 0; i < kBlock; ++i)
+            expected[i] = ref.processSample (input0[i]);
+        const float err = maxAbsDiff (buffer.getReadPointer (0), expected, kBlock);
+        std::printf ("prepare pushes all params (%s trim): max|proc-ref| = %.9f (expect < %.0e)\n",
+                     adjacentTrim ? "adjacent" : "default", err, static_cast<double> (kTol));
+        CHECK (err < kTol);
+    }
 }
 
 // (o) Same-block ACTIVE-off + OS-factor change must not step the dry tap:
