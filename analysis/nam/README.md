@@ -41,6 +41,39 @@ Nothing here ships in the plugin; the gated evidence lives in `tests/`.
   `nulltest.py` (Reaper-render null validation).
 - `harm.csv`, `dyn.csv` — probe data.
 
+## ColorStage remap / refit line (Oct 2026 — open research, no DSP change yet)
+
+Question: does the shipped ColorStage (k, a, gated odd/even bumps) close the
+capture harmonic ladders, and is the gate earning its 2 params?
+
+- `color_remap.py` — numpy-inference captures (B3/B7/DI/T2 from
+  `analysis/ir_local/`) vs a float64 mirror of `src/dsp/ColorStage.h`; coherent
+  H1..H8 per (freq, level). Writes `remap.csv` (196 rows, derived numbers only).
+- `fit_v2.py` — refit of the current architecture on "responding" B3/DI rows
+  (gated vs static). `fit_v3.py` — nested M0/M1/M2 + BIC, hinge-scored on all
+  B3/DI rows so floor-selection bias is visible.
+- `t2_calcheck.py` / `t2_frlevels.py` — is the T2 residual tilt explained by
+  Tone->Color ordering, and is T2's linear FR level-dependent?
+- Gateway (Plugalyzer-driven, `Slim:1.00` full submodel) — supersedes the
+  numpy rows because renders are settled:
+  `run_gw_sweeps.py` (grid -> `gw_sweeps_all.csv`), `fit_settled.py` (M0/M1/
+  M1+per-capture-offset/M2 + BIC on that CSV), `fr_cal.py` (low-drive FR per
+  capture: B3/B7/DI are within ±0.4 dB 55 Hz-5 kHz, so input FR does not tilt
+  drive), `hysteresis_probe.py` + `hysteresis_ctrl.py` (rising vs falling
+  history at matched level; ctrl validates the protocol on our own gate and
+  uses an asymmetric triangle to separate slope artifacts from memory),
+  `shootout.py` (waveform overlay: our VST3 vs DI capture).
+
+Status: `gw_sweeps_all.csv` / `fit_settled_results.txt` lived in the
+machine-local temp dir and were not kept — rerun `run_gw_sweeps.py` then
+`fit_settled.py` to regenerate. No model change is adopted from this line yet;
+the shipped constants are unchanged.
+
+Gateway scripts need Plugalyzer at `~/Code/Plugalyzer/build/...`, Gateway.vst3
+installed, and `U5-*.vstpreset` files under
+`~/Documents/VST3 Presets/Atkinson Advanced Modeling, LLC/Gateway/` (paths
+resolve from `~`; outputs go to `~/AppData/Local/Temp/opencode/`).
+
 ## Captures (NEVER commit — licensed, machine-local)
 
 `C:/Users/<you>/Downloads/Avalon U5 *.nam` (Boost3/Boost7 MicOut No EQ,
